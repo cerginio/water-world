@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { compileTileSource, fetchTileSource } from './tilecraftLoader.js';
 import { collectTileRest } from './tileRest.js';
+import { TileSim } from './TileSim.js';
+import { patchTileMaterial } from './TileMaterial.js';
 
 const MIN_DEPTH = 5;   // open water under the whole field (spec.md §6.5)
 
-// A live Tilecraft model on the water (spec.md §5). T0: the rest pose drawn statically
-// on y=0 with the props' material; the GPU simulation arrives in T1/T2.
+// A live Tilecraft model on the water (spec.md §5).
 export class TileField {
-  constructor({ scene, patchMaterial, heightAt }) {
+  constructor({ scene, renderer, surface, patchMaterial, heightAt }) {
+    this.renderer = renderer;
+    this.surface = surface;
     this.patchMaterial = patchMaterial;
     this.heightAt = heightAt;
     this.group = new THREE.Group();
@@ -24,6 +27,7 @@ export class TileField {
     this.radius = 45;      // circumscribed circle: the open-water test in place()
     this.center = new THREE.Vector3();
     this.epoch = 0;
+    this.cpuMs = 0;
   }
 
   get loaded() { return this.rest !== null; }
@@ -72,8 +76,11 @@ export class TileField {
   }
 
   build(rest) {
+    if (!rest.tiles.count) return;
+    this.sim = new TileSim(this.renderer, this.surface, rest.tiles);
     for (const part of rest.polygon) {
       const material = this.material(part, false);
+      patchTileMaterial(material, this.sim.uniforms, part.tile[0]);
       const mesh = new THREE.InstancedMesh(part.geometry, material, part.count);
       mesh.instanceMatrix.array.set(part.matrices);
       if (part.colors) mesh.instanceColor = new THREE.InstancedBufferAttribute(part.colors, 3);
@@ -82,8 +89,10 @@ export class TileField {
       this.group.add(mesh);
     }
     for (const part of rest.polyline) {
+      part.geometry.setAttribute('aTile', new THREE.Float32BufferAttribute(part.aTile, 1));
+      part.geometry.setAttribute('aOffset', new THREE.Float32BufferAttribute(part.aOffset, 3));
       const mesh = new THREE.Mesh(part.geometry, this.material(part, true));
-      mesh.position.y = part.baseY;
+      patchTileMaterial(mesh.material, this.sim.uniforms);
       mesh.name = `tiles-polyline-${part.layerIndex}-f${part.frameId}`;
       this.group.add(mesh);
     }
@@ -122,6 +131,8 @@ export class TileField {
   }
 
   clear() {
+    this.sim?.dispose();
+    this.sim = null;
     for (const mesh of [...this.group.children]) {
       mesh.geometry.dispose();
       mesh.material.dispose();
@@ -131,5 +142,11 @@ export class TileField {
     this.rest = null;
   }
 
-  update() {}
+  update() {
+    if (!this.sim) return;
+    const start = performance.now();
+    this.group.updateWorldMatrix(true, false);
+    this.sim.update(this.group.matrixWorld);
+    this.cpuMs += (performance.now() - start - this.cpuMs) * 0.05;
+  }
 }

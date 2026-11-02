@@ -1,11 +1,15 @@
 # Handoff: tile-floaters — плавучі тайли Tilecraft
 
-Стан на 2026-11-02. Гілка `master`, T0 закомічена (завантажувач + статичне поле).
+Стан на 2026-11-02. Гілка `master`, T0–T1 закриті; цей handoff входить у коміт T1.
 
 Спека: [spec.md](spec.md). Tilecraft (`D:/work/js-games/ua-dream/tilecraft`) у цій
 темі **лише читається** — жодних змін у ньому (spec.md §1).
 
-> **Далі:** фаза T1 — матеріал стану і кінематика.
+> **Далі:** фаза T2 — динаміка вертикалі й режим anchored; почати з `src/tiles/TileSim.js` і spec.md §6.1–§6.3.
+
+Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`.
+За прямою вимогою власника стенд піднімати й залишати запущеним, у тому числі
+після рев’ю та коміту; повне правило — `AGENTS.md` → «Локальний стенд».
 
 ## Що зроблено і працює
 
@@ -13,10 +17,13 @@
 |---|---|
 | `vite.config.js` | порт 5199, `dedupe: ['three']`, `fs.allow` на `TILECRAFT_ROOT`, плагін `tilecraft-asset-urls` (П3), `__TILECRAFT_ROOT__` ('' у build) |
 | `src/tiles/tilecraftLoader.js` | динамічний імпорт Tilecraft через `/@fs/`, ланцюжок §3.4, `sameThree` (П4) |
-| `src/tiles/tileRest.js` | `collectTileRest(compiled, { frame })` → `tiles` (x, z, yaw, radius, y0, thickness, runId, flags, g, f), `polygon[]` (матриці, кольори, прототип), `polyline[]` (геометрія + готові `aTile`/`aOffset` для T1), `runs[]` |
-| `src/tiles/TileField.js` | `load` / `rebuild` / `place` / `clear`; поле статичне, матеріал пропів; `update()` — порожній |
-| `src/main.js` | папка `Tiles` (source, frame, metersPerSourceUnit, fieldYaw, status), шот `Tiles`, `?tiles` відкриває стенд одразу на шоті `Tiles`, drag & drop JSON |
-| `QA.md` | сценарії QA-T0-1…5 |
+| `src/tiles/tileRest.js` | rest обох конвеєрів, `aTile`/`aOffset`, `runs[]`; дублікати стиків одного run мають спільний owner; opacity polyline збережено |
+| `src/tiles/TileSim.js` | rest RGBA32F 512×ceil(N/512), один MRT target з `uState0/1`; висота й нахил з `waterAt`, без інерції; ресурсів при `tiles=none` немає |
+| `src/tiles/TileMaterial.js` | патч поверх `terrain.patchProp`: polygon id = `uTileBase + gl_InstanceID`, polyline id = `aTile`; GPU-позиції й нормалі, включно зі світовими varyings туману/освітлення |
+| `src/tiles/TileField.js` | `load` / `rebuild` / `place` / `clear` / `update`; перебудова й dispose GPU-ресурсів, `cpuMs` — час подання проходу |
+| `src/main.js` | папка `Tiles`, шот `Tiles`, drag & drop JSON; GPU-оновлення після FFT і `surface.update`, таймер `tiles`, HUD `Tiles CPU submit` |
+| `scripts/probe-tiles.mjs` | відтворювана WebGL-проба; запуск та `PLAYWRIGHT_MODULE` — у QA.md |
+| `QA.md` | сценарії QA-T1-1…5 і QA-T0-1…5; T1 прийнята власником |
 
 Опора в наявному коді:
 
@@ -79,6 +86,34 @@
   прогонів). Структурно з `tiles=none` додано лише порожню `Group` у сцені й згорнуту
   папку GUI. Цифри README (RTX 3060) — перевірка власника.
 
+### Фаза T1 (2026-11-02), матеріал і кінематика
+
+- `uRest0/1` відповідають spec.md §5.1. Поки що один target з двома attachments:
+  `uState0 = (dy, 0, 0, 0)`, `uState1 = (tiltX, tiltZ, 0, 0)`; ping-pong,
+  `uState2/3`, інерція й reset — завдання T2, не готова фізика.
+- У T1 5 викликів `waterAt` на тайл: центр і центральні різниці по локальних
+  x/z на відстані `max(0.7·radius, 0.1 м)`. Світова точка враховує center і fieldYaw;
+  `Rz·Rx` повертає +Y у нормаль `normalize(-slopeX, 1, -slopeZ)`.
+  У T2 замінити вибірки на 4 точки з §6.1. Вершини воду не семплюють.
+- **Стики LCR:** первинні sourceOwners у дублікатів тієї самої вершини різні.
+  Пряме застосування П2 при вітрі 25 м/с дало розходження до 3.78 м.
+  `collectRoad` узгоджує owner за ключем `(runId, rest x/y/z)` один раз;
+  різні run не зшиваються. 218 196 пар стиків після цього мають розходження 0 м.
+  Це рішення фази; реєстру INVARIANTS у теми немає. Зберегти при T2–T3.
+- CPU не переписує instanceMatrix чи normal: проба перевіряє версії буферів.
+  Матеріал використовує rest instanceMatrix для масштабу/yaw і додає GPU-стан;
+  для кожного polygon record враховується глобальний зсув id `uTileBase`.
+- Eval на AMD 890M / headless Chromium, 1400×1000: build PASS; WebGL-проба PASS,
+  0 помилок, 46 861 скінченний стан. При fieldYaw=57 порівняння з WaterQuery
+  на 15 точках: похибка висоти ≤1.2e-7 м, нормалі ≤0.00016.
+- GPU `tiles` ≈0.33 мс, CPU submit ≈0.12 мс. Приріст CPU renderFrame проти
+  статичного матеріалу T0: +0.1625 і −0.0465 мс у двох прогонах (шум), обидва
+  ≤0.5 мс. Це не перевірка бюджету всього кадру T4 на RTX 3060.
+- Перебудови перевірені: кадр 2 — 3 978 тайлів, target 512×8; масштаб 0.1 —
+  ширина 169.77 м. `tiles=none`: sim відсутня, 0 мешів, немає запитів Tilecraft.
+- Власник прийняв T1 командою `handoff:next`. Тіні, reflection і ручні bounds
+  лишаються T4. Для повторного кадрування в GUI: `camera` → `Aerial` → `Tiles`.
+
 ## НЕЗАКРИТЕ — почни звідси
 
 Фази по порядку. Guard для всіх фаз: `npm run build` зелений; бенчмарк наявних
@@ -103,7 +138,7 @@
    факти); статус англійською, як увесь GUI (`46861 tiles · 2213 groups · polygon + polyline`).
    Бенчмарк ±0.05 мс від README на RTX 3060 не перевірено — лише шум AMD 890M.
 
-2. **T1 — матеріал стану і кінематика** (spec.md §4.2, §5.1, §7.1).
+~~2. **T1 — матеріал стану і кінематика** (spec.md §4.2, §5.1, §7.1).
    Контракт: rest-текстури, атрибути `aTile`/`aOffset` (мапа owner за П2 або
    fallback найближчого тайла); `TileMaterial` читає стан за `gl_InstanceID` / `aTile`;
    простий прохід пише висоту й нахил прямо з `waterAt` (без інерції). Обидва
@@ -114,7 +149,10 @@
    - **qa:inspect:** стрічки polyline і polygon-тайли на гребенях.
    - **qa:expected:** тайли піднімаються й нахиляються разом з хвилею; жодна
      polyline-стрічка не має розриву між сусідніми тайлами; Performance-панель
-     показує, що CPU-час кадру не зріс більше ніж на 0.5 мс.
+     показує, що CPU-час кадру не зріс більше ніж на 0.5 мс.~~ — ЗАКРИТО 2026-11-02.
+   Прийнято власником. Результати — «Фаза T1» вище і QA.md; CPU-час усього кадру
+   порівнює проба, HUD показує лише CPU submit. Guard-бенчмарк ±0.05 мс від README
+   на RTX 3060 лишається неперевіреним обмеженням із T0.
 
 3. **T2 — динаміка вертикалі й режим anchored** (spec.md §6.1–§6.3 anchored, §8 без `mode`/`windage`).
    Контракт: `TileSim` — ping-pong MRT (4 attachments), 4 вибірки на тайл, сили й

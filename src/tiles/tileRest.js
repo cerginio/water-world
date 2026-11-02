@@ -76,7 +76,7 @@ function collectRoad(record, layers, space, tiles, runs) {
 
   const idOf = new Map();   // layer tile index → field tile id
   const vertexTile = new Int32Array(sourceCount).fill(-1);
-  const stats = { vertices: sourceCount, ownerless: 0, foreign: 0, maxOffset: 0 };
+  const stats = { vertices: sourceCount, ownerless: 0, foreign: 0, seamOwners: 0, maxOffset: 0 };
   for (const range of record.runRanges) {
     const runId = runs.length;
     const members = range.sourceRef.tileIndices;
@@ -112,6 +112,18 @@ function collectRoad(record, layers, space, tiles, runs) {
     vertexTile[v] = nearest(pos[v * 3], pos[v * 3 + 2], all, tiles);
   }
 
+  // LCR duplicates joint vertices (faces/caps) with different sourceOwners.
+  // Independent rigid owner transforms would tear those coincident vertices apart.
+  // Give each rest joint ONE owner, within its run only; top and bottom still share it.
+  const joints = new Map();
+  for (let v = 0; v < sourceCount; v++) {
+    const id = vertexTile[v];
+    const key = `${tiles[id].runId}:${pos[v * 3]},${pos[v * 3 + 1]},${pos[v * 3 + 2]}`;
+    const owner = joints.get(key);
+    if (owner === undefined) joints.set(key, id);
+    else if (owner !== id) { vertexTile[v] = owner; stats.seamOwners++; }
+  }
+
   // per-vertex attributes for T1: owner tile id and rest offset from it (top vertex i+sourceCount
   // shares the owner of i)
   const count = sourceCount * 2;
@@ -128,6 +140,7 @@ function collectRoad(record, layers, space, tiles, runs) {
   return {
     layerIndex: record.layerIndex, frameId: record.frameId,
     geometry: geometry.clone(), baseY, aTile, aOffset, stats,
+    opacity: material.opacity,
     transparent: material.transparent, roughness: material.roughness ?? 0.9,
   };
 }

@@ -89,7 +89,7 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
-const tiles = new TileField({ scene, patchMaterial: terrain.patchProp, heightAt: islandHeight });
+const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight });
 let camWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
@@ -438,7 +438,6 @@ function renderFrame(dt) {
   if (query.resultCount > 0) camWater = query.result[0];
   floaters.ingest(query, 1);
   floaters.step(dt);
-  tiles.update(dt);
   timer.begin('floatShadow');
   floatShadow.update(renderer, floaters.scene, floaters.bodies, sky.sunDir);
   // water entries -> ripple rings + splash (ages on the floaters' clock)
@@ -452,6 +451,10 @@ function renderFrame(dt) {
   timer.begin('caustics');
   caustics.update(sky.sunDir);
   surface.update(camera, elapsed % 3600);
+  if (tiles.loaded) {
+    timer.begin('tiles');
+    tiles.update(dt);
+  }
   spray.update();
   timer.begin('query');
   const pts = floaters.collectPoints([camera.position]);
@@ -586,6 +589,7 @@ function updateHud(now) {
   graph.lineWidth = 3;
   graph.stroke();
   let text = '';
+  if (tiles.loaded) text += `Tiles CPU submit ${tiles.cpuMs.toFixed(3)} ms\n`;
   if (timer.available && timer.total > 0) {
     // at vsync the GPU downclocks, so these read high; uncapped or the benchmark measure at full clocks
     text += `GPU timers ${timer.total.toFixed(2)} ms${uncapped ? '' : ' (vsync-idle clocks)'}`;
