@@ -1,5 +1,92 @@
 # QA: tile-floaters — плавучі тайли Tilecraft
 
+## T4 — прийнято власником через `handoff:next` (2026-11-02)
+
+Фазу закрито після звіту реалізації й обмежень. Це owner acceptance, не новий
+browser/hardware PASS. Offline tests і build повторно PASS при закритті;
+невиміряні hardware-бюджети та відхилення нижче залишаються явними обмеженнями.
+
+### QA-T4-1. Offline contracts — PASS
+
+Команда: `node scripts/test-tiles-t4.mjs` (без браузера/GPU/зовнішніх фікстур).
+Фактичний stdout:
+
+```text
+PASS T4 offline: desktop/mobile, 2 mesh kinds, shared depth deformation, bounds (128 extremes), frustum, timer labels, no buffer rewrites, unload, shadow error restoration
+```
+
+Перевіряються обидва конвеєри, compile-time desktop 8/4 і mobile 2/2,
+відсутність mobile shadow-проксі, спільні uniform-об’єкти main/depth, reflection layer,
+road baseY, перехід drift→anchored зі збереженням envelope та reset до compact,
+128 крайніх displacement/rotation bounds, offscreen frustum reject, незмінні версії
+position/instanceMatrix, clear/dispose структур і відновлення RT/override при помилці.
+Renderer тут stub: це структурний доказ, не GPU-вимір і не повний lifecycle stress.
+
+### QA-T4-2. Мала GLSL/depth/reflection проба — PASS
+
+```sh
+PLAYWRIGHT_MODULE='D:/work/js-games/ua-dream/tilecraft/node_modules/playwright/index.mjs' node scripts/probe-tiles-t4.mjs
+```
+
+Tilecraft використано лише для читання вже встановленого Playwright; жодних install
+або записів у нього. Реальний GPU не навантажувався: renderer
+`ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)`.
+Окрема порожня HTML-сторінка, canvas 32×32, 2 синтетичні тайли (polygon + road),
+по 3 update на профіль; замість FFT — аналітичний `waterAt(q)=vec3(0,0.1*q.x,0)`.
+Перехоплення модуля враховує Vite `?t=`; асерт різних знаків dy доводить, що
+аналітичний оракул справді використано, а не лише що шейдер скомпілювався.
+Фактичний підсумок `PASS T4 tiny software-GPU smoke`:
+
+| профіль | dy tile 0 / tile 1 після 3 update, м | depth pixels | centroid до→після, px | reflection pixels | glError |
+|---|---|---|---|---|---|
+| desktop | −0.0081187934 / +0.0089514628 | 8 | 15.5→19.5 | 72 | 0 |
+| mobile | −0.0023730323 / +0.0026163980 | 8 | 15.5→19.5 | 72 | 0 |
+
+Depth читається через depth-texture staging pass. GPU-state XZ-зсув 1 м рухає
+силует на 4 px; desktop depth-проксі та основна геометрія збігаються за coverage/
+centroid. Mobile depth перевіряється основним матеріалом, shadow-проксі там немає.
+PlanarReflection рендерить поле після GPU-підйому на 1 м. Page/console errors=[];
+це перевірка реального linking/draw, але НЕ фотометрія тіні на воді або повна сцена.
+
+### QA-T4-3. Build / локальний стенд — PASS
+
+`npm run build`: **40 modules transformed**, PASS; наявне попередження chunk >500 kB.
+`curl -I --max-time 5 http://localhost:5199/`: HTTP **200 OK**. Наявний сервер
+використано й залишено запущеним, нових серверів не запускали. Git diff-check —
+без whitespace errors; попередження LF→CRLF стосуються Windows checkout.
+
+### QA-T4-4. Відхилення та ручна owner QA — НЕ ВИКОНАНО
+
+- Bounds консервативні для **відображеної**, не необмеженої симуляційної геометрії:
+  спільний main/depth/reflection чанк насичує dy на ±64 м від rest, XZ на 8 м до
+  першого drift, потім driftRadius+64 м; drift envelope тримається до reset/rebuild.
+  Це явний safety fallback замість недоказової оцінки максимальної FFT-амплітуди/
+  soft-wall overshoot. Немає контакту із дном; при дуже довгому зануренні видимий
+  тайл перестає падати на render-межі, state продовжує рух. Для frame-drag/контакту
+  envelope треба переглянути, не вважати ±64 м моделлю terrain support.
+- Mobile має max dt 2/240 с, тому при 60 fps фізичний час відстає від хвиль;
+  з двома семплами нахил лише вздовж одного rim. Оцінити вигляд/відставання на Nord 4.
+- Відкрити `?tiles=story-8-frames-hibrid`, camera→Tiles→Golden hour; перевірити тіні
+  обох конвеєрів на воді/сусідах і reflection на хвилях; повторити drift, anchored,
+  reset, yaw=57°, frame/scale rebuild та source=none. Повільно відводити камеру,
+  повертати її: немає зникнення на rest-frustum, коли видимі GPU-позиції ще в кадрі.
+- 1024² спільна shadow-карта при великому drift envelope втрачає дрібні деталі
+  поля та пропів. Візуальну достатність НЕ підтверджено; окремий target не додано
+  без реальних hardware-вимірів. Bounds навмисно широкі, culling менш ефективний.
+- RTX 3060: §10 симуляція ≤0.4 мс, runs ≤0.05, opaque +≤1, shadow +≤0.3,
+  Tiles frame ≤6; `tiles=none` ±0.05 мс; Nord 4 polygon 60 fps — **не виміряно**.
+  Ніяких повних benchmark, довгих T2/T3 проб або broad E2E під час T4 не запускали
+  через BSOD-історію. Попередні AMD-виміри не є доказом цих бюджетів.
+- Інструмент доступний лише в консолі: `runBenchmark(frames, {shot:'Tiles', warmup})`,
+  1..300 frames / 0..20 warmup, без GUI-кнопок. Повертає pass means, viewport,
+  quality, source/count/runs/profile, CPU-submit EMA, compileMs. `tileRuns` окремо від
+  `tiles`; `floatShadow` спільний, для приросту потрібні порівнювані A/B-умови.
+  API розширено, але бенчмарк НЕ запускався навіть на 1 кадр; лише за новим явним
+  дозволом власника. Немає p50/p95 або заяви про повний CPU frame із CPU-submit EMA.
+
+T4 закрито рішенням власника `handoff:next`; блокування frame-drag знято.
+Розділ QA-T4-4 фіксує неперевірені сценарії та обмеження, а не результати PASS.
+
 ## Закриття T3 — 2026-11-02
 
 Власник: «T3 прийнято. закрий як положено handoff:next T3 і одразу починай T4».

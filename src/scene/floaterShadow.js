@@ -33,24 +33,26 @@ export class FloaterShadow {
   }
 
   // root: a Scene holding only the floaters; bodies: [{ pos, radius }]; sunDir: towards the sun
-  update(renderer, root, bodies, sunDir) {
+  update(renderer, root, bodies, sunDir, field = null) {
     const u = this.uniforms;
     // the depth texture gets its compare mode when first rendered; until then any
     // shadow sampler bound to it fails the draw
     if (!this.ready) { this.clear(renderer); this.ready = true; }
-    if (!bodies.length || sunDir.y <= 0.01) { u.uFloatShadowBias.value = 0; return; }
+    const tileBody = field?.castsShadow ? field.syncShadow() : null;
+    const casters = tileBody ? [...bodies, tileBody] : bodies;
+    if (!casters.length || sunDir.y <= 0.01) { u.uFloatShadowBias.value = 0; return; }
     _c.set(0, 0, 0);
-    for (const b of bodies) _c.add(b.pos);
-    _c.divideScalar(bodies.length);
+    for (const b of casters) _c.add(b.pos);
+    _c.divideScalar(casters.length);
     let r = 1;
-    for (const b of bodies) r = Math.max(r, b.pos.distanceTo(_c) + b.radius);
+    for (const b of casters) r = Math.max(r, b.pos.distanceTo(_c) + b.radius);
     // receivers lie along the light rays behind the casters, so the xy footprint is just
     // the casters'; depth runs far past them for the seabed under a low sun
     const cam = this.camera;
     cam.left = cam.bottom = -r;
     cam.right = cam.top = r;
     cam.near = 1;
-    cam.far = r + 3000;
+    cam.far = Math.max(r + 3000, 2 * r + 40);
     cam.position.copy(_c).addScaledVector(sunDir, r + 20);
     cam.lookAt(_c);
     cam.updateProjectionMatrix();
@@ -60,12 +62,18 @@ export class FloaterShadow {
     u.uFloatShadowBias.value = 0.03 / (cam.far - cam.near);
 
     const prev = renderer.getRenderTarget();
-    root.overrideMaterial = this.material;
-    renderer.setRenderTarget(this.target);
-    renderer.clear(false, true, false);
-    renderer.render(root, cam);
-    root.overrideMaterial = null;
-    renderer.setRenderTarget(prev);
+    const override = root.overrideMaterial;
+    try {
+      root.overrideMaterial = this.material;
+      renderer.setRenderTarget(this.target);
+      renderer.clear(false, true, false);
+      renderer.render(root, cam);
+      // No override on this scene: tile depth proxies use the shared GPU deformation.
+      if (tileBody) renderer.render(field.shadowScene, cam);
+    } finally {
+      root.overrideMaterial = override;
+      renderer.setRenderTarget(prev);
+    }
   }
 
   clear(renderer) {

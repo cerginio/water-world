@@ -24,6 +24,10 @@ vec2 horizontalAcceleration(vec2 p, vec2 v, vec2 rest, vec2 waterVelocity) {
 // Exponent-bit classification also catches poisoned textures on ANGLE/D3D.
 bool bad(vec4 v) { return any(equal(floatBitsToUint(v) & uvec4(0x7f800000u), uvec4(0x7f800000u))); }
 `;
+export const TILE_PROFILES = Object.freeze({
+  desktop: Object.freeze({ maxSteps: 8, waterSamples: 4, fieldShadow: true }),
+  mobile: Object.freeze({ maxSteps: 2, waterSamples: 2, fieldShadow: false }),
+});
 const FRAG = /* glsl */`
 precision highp float;
 precision highp int;
@@ -63,16 +67,16 @@ void main() {
   float radius = max(r.w, 0.15), thickness = max(r1.y, 0.001);
   vec2 rim[4]; float heights[4];
   rim[0] = vec2(0.0); heights[0] = disp.y;
-  for (int i = 1; i < 4; i++) {
+  for (int i = 1; i < TILE_WATER_SAMPLES; i++) {
     float a = r.z + float(i - 1) * 2.0943951024;
     rim[i] = 0.7 * radius * vec2(cos(a), sin(a));
     heights[i] = waterAt(q + worldXZ * rim[i], vec3(0.0)).y;
   }
   vec2 surfaceTilt = vec2(0.0);
-  for (int i = 1; i < 4; i++) {
+  for (int i = 1; i < TILE_WATER_SAMPLES; i++) {
     surfaceTilt += vec2(-rim[i].y, rim[i].x) * (heights[i] - heights[0]);
   }
-  surfaceTilt /= 0.735 * radius * radius;
+  surfaceTilt /= (TILE_WATER_SAMPLES == 2 ? 0.49 : 0.735) * radius * radius;
   float surfaceAngle = length(surfaceTilt);
   if (surfaceAngle > 0.34906585) surfaceTilt *= 0.34906585 / surfaceAngle;
   float displacedFraction = uDensity / max(1025.0 * uBuoyancy, 0.001);
@@ -90,9 +94,9 @@ void main() {
       velocity -= localWaterVelocity * uOrbit;
     }
   }
-  int steps = min(8, max(1, int(ceil(uDt * 240.0))));
+  int steps = min(TILE_MAX_STEPS, max(1, int(ceil(uDt * 240.0))));
   float dt = uDt / float(steps);
-  for (int step = 0; step < 8; step++) {
+  for (int step = 0; step < TILE_MAX_STEPS; step++) {
     if (step >= steps) break;
     if (displacedFraction < 1.0) {
       // Hydrostatic draft with exact critically damped relaxation, for both
@@ -106,12 +110,12 @@ void main() {
     } else {
       // Preserve sinking when buoyancy cannot support the tile's weight.
       float ay = -9.81;
-      for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < TILE_WATER_SAMPLES; i++) {
         vec2 lever = vec2(-rim[i].y, rim[i].x);
         float y = r1.x + s0.x + dot(lever, s1.xy);
         float pointVelocity = s0.y + dot(lever, s1.zw);
         float sub = clamp((heights[i] - y) / thickness + 0.5, 0.0, 1.0);
-        ay += 0.25 * sub * (1025.0 * 9.81 / uDensity * uBuoyancy
+        ay += (1.0 / float(TILE_WATER_SAMPLES)) * sub * (1025.0 * 9.81 / uDensity * uBuoyancy
           - 1.5 * uDrag * (pointVelocity - waterVelocity.y));
       }
       s0.y = clamp(s0.y + ay * dt, -10.0, 10.0);
@@ -174,9 +178,9 @@ void main() {
   vec2 q = r + s.xy + transpose(worldXZ) * prev.xy * prev.z;
   vec2 disp = waterAt((uFieldMatrix * vec4(q.x, 0.0, q.y, 1.0)).xz, vec3(0.0)).xz;
   vec2 waterVelocity = prev.w > 0.5 ? transpose(worldXZ) * clamp((disp - prev.xy) / uSampleDt, vec2(-3.0), vec2(3.0)) : vec2(0.0);
-  int steps = min(8, max(1, int(ceil(uDt * 240.0))));
+  int steps = min(TILE_MAX_STEPS, max(1, int(ceil(uDt * 240.0))));
   float dt = uDt / float(steps);
-  for (int step = 0; step < 8; step++) {
+  for (int step = 0; step < TILE_MAX_STEPS; step++) {
     if (step >= steps) break;
     s.zw += horizontalAcceleration(s.xy, s.zw, r, waterVelocity) * dt;
     s.xy += s.zw * dt;
@@ -194,7 +198,9 @@ function restTexture(data, height) {
 
 // Run-centroid pass then tile MRT; no CPU readback or per-tile work after load.
 export class TileSim {
-  constructor(renderer, surface, tiles, runs = []) {
+  constructor(renderer, surface, tiles, runs = [], profile = 'desktop') {
+    this.profile = TILE_PROFILES[profile];
+    if (!this.profile) throw new Error(`Unknown tile profile: ${profile}`);
     this.renderer = renderer;
     this.surface = surface;
     this.height = Math.max(1, Math.ceil(tiles.count / WIDTH));
@@ -243,6 +249,9 @@ export class TileSim {
       uRunRest: { value: this.runRest }, uRunCount: { value: runs.length },
       uRunHistory: { value: this.runTarget.textures[1] },
     })) : null;
+    for (const quad of [this.quad, this.runQuad]) if (quad) {
+      quad.material.defines = { TILE_MAX_STEPS: this.profile.maxSteps, TILE_WATER_SAMPLES: this.profile.waterSamples };
+    }
     this.reset();
   }
 
@@ -274,12 +283,12 @@ export class TileSim {
     finally { this.quad.material.uniforms.uReset.value = false; }
   }
 
-  update(matrix, dt, params) {
+  update(matrix, dt, params, timer) {
     if (!(dt > 0) || !Number.isFinite(dt)) return;
     const u = this.quad.material.uniforms;
     u.uFieldMatrix.value.copy(matrix);
-    // At most eight 1/240 s steps, even after a suspended tab or a long frame.
-    u.uDt.value = Math.min(dt, 8 / 240);
+    // Mobile deliberately advances less simulation time on long frames.
+    u.uDt.value = Math.min(dt, this.profile.maxSteps / 240);
     u.uSampleDt.value = Math.max(dt, 1e-4);
     for (const name of ['density', 'buoyancy', 'drag', 'angularDrag', 'orbit', 'anchorPeriod', 'windage', 'driftRadius']) {
       u[`u${name[0].toUpperCase()}${name.slice(1)}`].value = params[name];
@@ -288,7 +297,8 @@ export class TileSim {
     const wind = this.surface?.sim?.params;
     const angle = (wind?.windDirection ?? 0) * Math.PI / 180;
     u.uWindVelocity.value.set(Math.cos(angle), Math.sin(angle)).multiplyScalar(wind?.windSpeed ?? 0);
-    this.runPass();
+    if (this.runQuad) { timer?.begin('tileRuns'); this.runPass(); }
+    timer?.begin('tiles');
     this.pass();
   }
 

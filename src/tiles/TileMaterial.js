@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { TILE_VERTICAL_LIMIT } from './tileBounds.js';
 
 const PARS = /* glsl */`
 uniform sampler2D uRest0, uRest1, uState0, uState1;
 uniform int uTileBase;
+uniform float uTileMotionLimit;
 attribute float aSurfaceOffset;
 #ifndef USE_INSTANCING
 attribute float aTile;
@@ -23,6 +25,8 @@ const INIT = /* glsl */`
   vec4 tileRest = texelFetch(uRest0, tileUV, 0);
   vec4 tileRest1 = texelFetch(uRest1, tileUV, 0);
   vec4 tileState = texelFetch(uState0, tileUV, 0);
+  tileState.x = clamp(tileState.x, -${TILE_VERTICAL_LIMIT.toFixed(1)}, ${TILE_VERTICAL_LIMIT.toFixed(1)});
+  tileState.zw *= min(1.0, uTileMotionLimit / max(length(tileState.zw), 0.00001));
   mat3 tileRotation = tileTilt(texelFetch(uState1, tileUV, 0).xy);
 #ifdef USE_INSTANCING
   mat4 tileMatrix = mat4(tileRotation) * instanceMatrix;
@@ -37,7 +41,7 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
   const previousKey = material.customProgramCacheKey();
   material.onBeforeCompile = (shader, renderer) => {
     previous.call(material, shader, renderer);
-    Object.assign(shader.uniforms, uniforms, { uTileBase: { value: tileBase } });
+    Object.assign(shader.uniforms, { uTileMotionLimit: { value: 1e20 } }, uniforms, { uTileBase: { value: tileBase } });
     let vertex = shader.vertexShader;
     for (const chunk of ['defaultnormal_vertex', 'project_vertex', 'worldpos_vertex']) {
       vertex = vertex.replace(`#include <${chunk}>`, THREE.ShaderChunk[chunk]);
@@ -59,5 +63,5 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
 #endif`);
     shader.vertexShader = vertex;
   };
-  material.customProgramCacheKey = () => `${previousKey}-tile-state-v2`;
+  material.customProgramCacheKey = () => `${previousKey}-tile-state-v3`;
 }

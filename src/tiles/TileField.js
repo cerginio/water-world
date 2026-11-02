@@ -3,12 +3,19 @@ import { compileTileSource, fetchTileSource } from './tilecraftLoader.js';
 import { collectTileRest } from './tileRest.js';
 import { TileSim } from './TileSim.js';
 import { patchTileMaterial } from './TileMaterial.js';
+import { tileMotionLimit, tileBounds, applyTileBounds, fieldShadowBody } from './tileBounds.js';
 
 const MIN_DEPTH = 5;   // open water under the whole field (spec.md §6.5)
 
 // A live Tilecraft model on the water (spec.md §5).
 export class TileField {
-  constructor({ scene, renderer, surface, patchMaterial, heightAt }) {
+  constructor({ scene, renderer, surface, patchMaterial, heightAt, mobile = false }) {
+    this.profile = mobile ? 'mobile' : 'desktop';
+    this.shadowScene = new THREE.Scene();
+    this.shadowGroup = new THREE.Group();
+    this.shadowScene.add(this.shadowGroup);
+    this.shadowBody = { pos: new THREE.Vector3(), radius: 1 };
+    this.boundsEntries = [];
     this.renderer = renderer;
     this.surface = surface;
     this.patchMaterial = patchMaterial;
@@ -80,7 +87,8 @@ export class TileField {
 
   build(rest) {
     if (!rest.tiles.count) return;
-    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs);
+    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs, this.profile);
+    this.sim.uniforms.uTileMotionLimit = { value: tileMotionLimit(this.params.driftRadius) };
     for (const part of rest.polygon) {
       part.geometry.setAttribute('aSurfaceOffset', new THREE.InstancedBufferAttribute(
         Float32Array.from(part.tile, id => rest.tiles.surfaceOffset[id]), 1));
@@ -92,6 +100,7 @@ export class TileField {
       mesh.computeBoundingSphere();
       mesh.name = `tiles-polygon-${part.layerIndex}-f${part.frameId}`;
       this.group.add(mesh);
+      this.prepareMesh(mesh, part);
     }
     for (const part of rest.polyline) {
       part.geometry.setAttribute('aTile', new THREE.Float32BufferAttribute(part.aTile, 1));
@@ -102,10 +111,66 @@ export class TileField {
       patchTileMaterial(mesh.material, this.sim.uniforms);
       mesh.name = `tiles-polyline-${part.layerIndex}-f${part.frameId}`;
       this.group.add(mesh);
+      this.prepareMesh(mesh, part);
     }
     const b = rest.bounds;
     this.extent.set(b.max.x - b.min.x, b.max.y - b.min.y);
     this.radius = Math.max(this.extent.length() / 2, 1);
+    this.updateBounds();
+  }
+
+  prepareMesh(mesh, part) {
+    mesh.layers.enable(1); // same GPU material in planar reflection
+    if (!mesh.isInstancedMesh) mesh.geometry.computeBoundingSphere();
+    const restSphere = (mesh.isInstancedMesh ? mesh.boundingSphere : mesh.geometry.boundingSphere).clone();
+    // Road source positions omit the layer's object-space elevation. The GPU
+    // reconstructs it via y0 + aOffset; include that translation in CPU bounds.
+    if (!mesh.isInstancedMesh) restSphere.center.y += part.baseY ?? 0;
+    let maxOffset = 0, surfaceOffset = 0;
+    if (mesh.isInstancedMesh) {
+      const proto = mesh.geometry.boundingSphere;
+      const matrix = new THREE.Matrix4(), center = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
+      for (let i = 0; i < mesh.count; i++) {
+        matrix.fromArray(part.matrices, i * 16).decompose(center, rotation, scale);
+        maxOffset = Math.max(maxOffset, (proto.radius + proto.center.length()) * Math.max(Math.abs(scale.x), Math.abs(scale.y), Math.abs(scale.z)));
+      }
+    } else {
+      for (let i = 0; i < part.aOffset.length; i += 3) maxOffset = Math.max(maxOffset, Math.hypot(part.aOffset[i], part.aOffset[i + 1], part.aOffset[i + 2]));
+    }
+    for (const v of mesh.geometry.getAttribute('aSurfaceOffset').array) surfaceOffset = Math.max(surfaceOffset, Math.abs(v));
+    const entry = { mesh, restSphere, maxOffset, surfaceOffset };
+    if (this.sim.profile.fieldShadow) {
+      // Shared buffers + uniform objects; only the depth material is owned here.
+      const proxy = mesh.clone();
+      proxy.material = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+      patchTileMaterial(proxy.material, this.sim.uniforms, part.tile?.[0] ?? 0);
+      entry.proxy = proxy;
+      this.shadowGroup.add(proxy);
+    }
+    this.boundsEntries.push(entry);
+  }
+
+  updateBounds() {
+    // Retain the drift envelope during anchored recovery; reset starts compact.
+    this.hasDrift ||= this.params.mode === 'drift';
+    const limit = tileMotionLimit(this.params.driftRadius, this.hasDrift);
+    if (this.boundsLimit === limit) return;
+    this.boundsLimit = limit;
+    this.sim.uniforms.uTileMotionLimit.value = limit;
+    for (const e of this.boundsEntries) {
+      const sphere = tileBounds(e.restSphere, limit, e.maxOffset, e.surfaceOffset);
+      applyTileBounds(e.mesh, sphere);
+      if (e.proxy) applyTileBounds(e.proxy, sphere.clone());
+    }
+  }
+
+  get castsShadow() { return !!this.sim?.profile.fieldShadow; }
+
+  syncShadow() {
+    this.shadowGroup.matrixAutoUpdate = false;
+    this.shadowGroup.matrix.copy(this.group.matrixWorld);
+    this.shadowGroup.matrixWorldNeedsUpdate = true;
+    return fieldShadowBody(this.group, this.group.children, this.shadowBody);
   }
 
   // the props' path (spec.md §7.1): atmosphere, underwater fog and the floater shadow
@@ -138,6 +203,15 @@ export class TileField {
   }
 
   clear() {
+    for (const proxy of [...this.shadowGroup.children]) {
+      proxy.material.dispose();
+      proxy.dispose?.();
+      this.shadowGroup.remove(proxy);
+    }
+    this.boundsEntries = [];
+    this.boundsLimit = undefined;
+    this.hasDrift = false;
+    this.cpuMs = 0;
     this.sim?.dispose();
     this.sim = null;
     for (const mesh of [...this.group.children]) {
@@ -149,18 +223,23 @@ export class TileField {
     this.rest = null;
   }
 
-  reset() { this.sim?.reset(); }
+  reset() {
+    this.sim?.reset();
+    this.hasDrift = false;
+    if (this.sim) this.updateBounds();
+  }
 
   setMode(mode) {
     if (mode !== 'anchored' && mode !== 'drift') throw new Error(`Unknown tiles mode: ${mode}`);
     this.params.mode = mode;
   }
 
-  update(dt = 1 / 60) {
+  update(dt = 1 / 60, timer) {
     if (!this.sim) return;
     const start = performance.now();
     this.group.updateWorldMatrix(true, false);
-    this.sim.update(this.group.matrixWorld, dt, this.params);
+    this.updateBounds();
+    this.sim.update(this.group.matrixWorld, dt, this.params, timer);
     this.cpuMs += (performance.now() - start - this.cpuMs) * 0.05;
   }
 }

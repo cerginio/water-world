@@ -1,13 +1,13 @@
 # Handoff: tile-floaters — плавучі тайли Tilecraft
 
-Стан на 2026-11-02. Гілка `master`, T0–T3 закриті. Власник прийняв T3
-командою «T3 прийнято. handoff:next T3»; дозволено одразу почати T4.
-Приймання — ручне рішення власника, не новий автоматичний browser PASS.
+Стан на 2026-11-02. Гілка `master`, T0–T4 закриті. Власник прийняв T4
+командою `handoff:next` після звіту реалізації та її обмежень.
+Приймання — рішення власника, не новий автоматичний browser/hardware PASS.
 
 Спека: [spec.md](spec.md). Tilecraft (`D:/work/js-games/ua-dream/tilecraft`) у цій
 темі **лише читається** — жодних змін у ньому (spec.md §1).
 
-> **Далі:** T4 — тіні, reflection, bounds, продуктивність і телефонний профіль. T3 прийнято; повторно не реалізовувати.
+> **Далі:** frame-drag / FD1 за погодженим власником порядком після T4. T5 відкладено; його жест ще не визначений. T4 прийнято командою `handoff:next`; неперевірені hardware-бюджети та обмеження нижче збережено, не позначено PASS.
 
 Закриття T3: код у `c87e6b6` і `94137c2`; closing guard `npm run build` PASS.
 QA-T3-1…8 прийнято власником як фазу загалом; окремих нових browser-вимірів немає.
@@ -16,6 +16,48 @@ QA-T3-1…8 прийнято власником як фазу загалом; о
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`.
 За прямою вимогою власника стенд піднімати й залишати запущеним, у тому числі
 після рев’ю та коміту; повне правило — `AGENTS.md` → «Локальний стенд».
+
+## T4 — ЗАКРИТО власником через `handoff:next` (2026-11-02)
+
+Closing guard: offline T4 tests і build PASS; агентський diff-review виконано.
+Приймання не є доказом окремої ручної QA чи виконання hardware-бюджетів.
+
+- `TileField` вмикає reflection layer 1 для обох конвеєрів. Desktop depth-проксі
+  використовують той самий `patchTileMaterial`, `aSurfaceOffset` і поточні uniform-об’єкти
+  ping-pong стану; геометрія спільна, instance-буфер копіюється лише при build.
+  `FloaterShadow` малює їх другим root без `overrideMaterial`, у ту саму карту;
+  поле передає одне bounding-body. Shadow виконується після поточного TileSim.
+- Ручні sphere-bounds враховують rest, висоту road `baseY`, owner-offset/поворот,
+  декоративний bias та render-envelope; `frustumCulled=true`. CPU не симулює тайли,
+  не читає GPU й не переписує геометрію щокадру. Перерахунок bounds — лише при зміні envelope.
+- **Явне прагматичне відхилення §7.3:** soft wall і нескінченне занурення T3 не
+  мають скінченної глобальної межі. Для доказово консервативних bounds спільний
+  render-чанк обмежує `dy` до ±64 м від rest та довжину XZ-зсуву: 8 м до першого
+  drift, потім `driftRadius + 64 м`. Великий envelope зберігається при поверненні
+  в anchored до reset/rebuild; симуляційні текстури НЕ клампляться. За межами
+  envelope відображення насичується — це НЕ контакт із дном і не нова фізика T3.
+  Frame-drag мусить переглянути ці межі під контакт/pose, перш ніж їх успадковувати.
+- Mobile: compile-time ≤2 підкроки, 2 `waterAt`/тайл (центр + один rim, одна вісь
+  нахилу), 1 вибірка/run, жодних depth-проксі поля. Фізичний dt ≤2/240 с:
+  на 60 fps симуляційний час відстає від хвиль; це свідомий консервативний профіль,
+  не підтвердження точності/60 fps Nord 4.
+- Окремі GPU labels `tileRuns` / `tiles`; existing `floatShadow`, `reflection`,
+  `opaque` збережені. Developer API `runBenchmark(frames, {shot, warmup})` повертає
+  viewport/quality/source/count/profile/CPU-submit/compile metadata, перевіряє межі,
+  звільняє benchmark-прапорці у finally та має timeout fence. Кнопок benchmark немає.
+- **Докази:** `node scripts/test-tiles-t4.mjs` PASS; `npm run build` PASS,
+  40 modules, наявне chunk >500 kB warning. Коротка SwiftShader-проба
+  `scripts/probe-tiles-t4.mjs` PASS: два синтетичні тайли, desktop/mobile, по 3 update;
+  depth centroid 15.5→19.5 px після GPU XZ-зсуву 1 м, depth/main однакові,
+  reflection 72 pixels, glError=0. Повний океан/фікстура/FFT не запускалися.
+- **Не доведено:** якість тіні повного hybrid і дрібних тайлів, самозатінення,
+  рухомі хвилі в повній сцені, RTX 3060 ≤6 мс / Nord 4 60 fps, pass-бюджети,
+  `tiles=none` ±0.05 мс. У drift велика спільна 1024² карта розмиває/втрачає дрібні
+  тіні й погіршує деталізацію тіней пропів; окрему карту свідомо не додано без вимірів.
+  Усі performance targets лишаються owner QA, не агентським PASS.
+- `http://localhost:5199/` відповідав HTTP 200; наявний сервер використано,
+  не перезапускали/не зупиняли. Tilecraft лише читався. Бенчмарків, довгих проб,
+  broad E2E чи hardware-GPU навантаження не запускали. Деталі — QA-T4 нижче у QA.md.
 
 ## Що зроблено і працює
 
@@ -269,12 +311,12 @@ QA-T3-1…8 прийнято власником як фазу загалом; о
    - **qa:expected:** за 2 хв polygon-тайли розійшлись, стрічки цілі (розрив ≤ 1
      діаметр); після перемикання малюнок повертається за ≤ 12 с (3 × 4 с) без стрибка.
 
-5. **T4 — тіні, відбиття, bounds, продуктивність** (spec.md §7.2, §7.3, §10).
+5. **T4 — ЗАКРИТО власником; тіні, відбиття, bounds, продуктивність** (spec.md §7.2, §7.3, §10).
    Контракт: поле у floater shadow (depth-матеріал з чанком стану), planar reflection,
    ручні bounds; бенчмарк шоту `Tiles`; телефонний профіль.
    Probe (критерії 7 і 8):
    - **qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid`
-   - **qa:action:** camera → `Tiles`, потім `Golden hour`; `Run benchmark`.
+   - **qa:action:** camera → `Tiles`, потім `Golden hour`; ручна перевірка. Кнопок benchmark немає; developer `runBenchmark` запускати лише за окремим дозволом власника після BSOD.
    - **qa:inspect:** тінь тайлів на воді, відбиття, рядок бенчмарку.
    - **qa:expected:** тайли відкидають тінь і видні у відбитті; кадр шоту `Tiles`
      ≤ 6.0 мс, прохід симуляції ≤ 0.4 мс; `?mobile` на Nord 4 — 60 fps.

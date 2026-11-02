@@ -90,7 +90,7 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
-const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight });
+const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, mobile });
 let camWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
@@ -458,8 +458,7 @@ function renderFrame(dt) {
   if (query.resultCount > 0) camWater = query.result[0];
   floaters.ingest(query, 1);
   floaters.step(dt);
-  timer.begin('floatShadow');
-  floatShadow.update(renderer, floaters.scene, floaters.bodies, sky.sunDir);
+
   // water entries -> ripple rings + splash (ages on the floaters' clock)
   for (let i = 0; i < 8; i++) {
     const e = floaters.impacts[i], age = e ? floaters.time - e.t : 1e9;
@@ -472,9 +471,10 @@ function renderFrame(dt) {
   caustics.update(sky.sunDir);
   surface.update(camera, elapsed % 3600);
   if (tiles.loaded) {
-    timer.begin('tiles');
-    tiles.update(dt);
+    tiles.update(dt, timer);
   }
+  timer.begin('floatShadow');
+  floatShadow.update(renderer, floaters.scene, floaters.bodies, sky.sunDir, tiles);
   spray.update();
   timer.begin('query');
   const pts = floaters.collectPoints([camera.position]);
@@ -529,18 +529,30 @@ function clampCamera() {
 async function gpuFence() {
   const s = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   gl.flush();
-  while (gl.clientWaitSync(s, 0, 0) === gl.TIMEOUT_EXPIRED) await new Promise((r) => setTimeout(r, 1));
-  gl.deleteSync(s);
+  const deadline = performance.now() + 10000;
+  try {
+    let status;
+    while ((status = gl.clientWaitSync(s, 0, 0)) === gl.TIMEOUT_EXPIRED) {
+      if (performance.now() > deadline || gl.isContextLost()) throw new Error('GPU fence timeout/context lost');
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    if (status === gl.WAIT_FAILED) throw new Error('GPU fence failed');
+  } finally { gl.deleteSync(s); }
 }
 
 // frames back-to-back (render loop paused), timed to GPU completion; also returns the
 // per-pass GPU times measured at full clocks
 let benchmarking = false;
-async function runBenchmark(frames = 300) {
+async function runBenchmark(frames = 300, { shot, warmup = 20 } = {}) {
+  if (!Number.isInteger(frames) || frames < 1 || frames > 300 || !Number.isInteger(warmup) || warmup < 0 || warmup > 20) throw new Error('Benchmark limits: frames 1..300, warmup 0..20');
+  if (shot && !Object.hasOwn(views, shot)) throw new Error(`Unknown shot: ${shot}`);
   if (benchmarking) return null;
+  if (shot === 'Tiles' && !tiles.loaded) throw new Error('Load tiles before the Tiles benchmark');
+  if (shot) { ui.view = shot; views[shot](); controls.update(); viewController.updateDisplay(); }
   benchmarking = true;
+  try {
   timer.drain();
-  for (let i = 0; i < 20; i++) renderFrame(1 / 200);
+  for (let i = 0; i < warmup; i++) renderFrame(1 / 200);
   await gpuFence();
   timer.drain();
   timer.keep = true;
@@ -557,7 +569,12 @@ async function runBenchmark(frames = 300) {
     + Object.entries(passes).map(([k, v]) => `
   ${k.padEnd(12)} ${v.toFixed(3)} ms`).join('');
   console.log(`${size.x}×${size.y} ${bench}`);
-  return { ms, gpu, passes };
+  return { ms, gpu: timer.available ? gpu : null, passes, frames, warmup, shot: ui.view,
+    viewport: { width: size.x, height: size.y }, quality: { ...quality },
+    tiles: { source: tiles.source, count: tiles.rest?.tiles.count ?? 0, runs: tiles.sim?.runCount ?? 0,
+      profile: tiles.profile, limits: tiles.sim?.profile ?? null, cpuSubmitMs: tiles.cpuMs,
+      compileMs: tiles.compiled?.compileMs ?? null } };
+  } finally { timer.keep = false; benchmarking = false; }
 }
 window.runBenchmark = runBenchmark;
 window.app = {
