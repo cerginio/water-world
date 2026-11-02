@@ -20,6 +20,8 @@ import { Floaters } from './scene/floaters.js';
 import { FLOATER_KINDS } from './scene/floaterMeshes.js';
 import { FloaterShadow } from './scene/floaterShadow.js';
 import { WaveCaustics } from './water/Caustics.js';
+import { TileField } from './tiles/TileField.js';
+import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 
 const REFLECT_LAYER = 1;
 
@@ -87,6 +89,7 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
+const tiles = new TileField({ scene, patchMaterial: terrain.patchProp, heightAt: islandHeight });
 let camWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
@@ -216,6 +219,16 @@ const views = {
     controls.target.set(c.x + out.x * 53.5 - side.x * 8, 0, c.y + out.y * 53.5 - side.y * 8);
     floaters.spawn(camera.position, controls.target.clone().sub(camera.position));
   },
+  'Tiles': () => {
+    setSun(40, 205);
+    // 35° off the vertical, from the field's +z side: source x reads right and y down, as in Tilecraft
+    const c = placeTiles(), yaw = tiles.params.fieldYaw * Math.PI / 180;
+    const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const d = Math.max(tiles.extent.x / 2 / (half * camera.aspect), tiles.extent.y / 2 / half) * 1.4;   // margin: the perf panel and the GUI cover the sides
+    const tilt = THREE.MathUtils.degToRad(35);
+    camera.position.set(c.x + Math.sin(yaw) * d * Math.sin(tilt), d * Math.cos(tilt), c.z + Math.cos(yaw) * d * Math.sin(tilt));
+    controls.target.copy(c);
+  },
   'Underwater': () => {
     setSun(48, 205);
     // on the lee of the island, looking back up the reef slope into the sun (shafts)
@@ -229,12 +242,25 @@ const views = {
   },
 };
 
+// tiles go on open water off the Flotsam coast (spec.md §6.5): from that shot's target
+// outwards until the bed under the whole field is deep enough. The bearing is taken once,
+// so moving the sun later doesn't move the field.
+let tilesAnchor = null;
+function placeTiles() {
+  if (!tilesAnchor) {
+    const b = sunBearing() + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
+    const out = new THREE.Vector2(Math.cos(b), Math.sin(b));
+    tilesAnchor = { start: c.clone().addScaledVector(out, 45), out };
+  }
+  return tiles.place(tilesAnchor.start, tilesAnchor.out);
+}
+
 let fSun = null;
 // --- GUI -----------------------------------------------------------------------
 const gui = new GUI({ title: 'Gelatin Water' });
 if (mobile) gui.close();   // on phones the open panel covers most of the screen
 const ui = { view: 'Lagoon', benchmark: () => benchButton.click(), exposure: 1 };
-gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
+const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 gui.add(ui, 'benchmark').name('benchmark (uncapped)');
 
 fSun = gui.addFolder('Sun & sky');
@@ -346,6 +372,41 @@ fFloat.add(underwater.params, 'shaftRange', 5, 120, 1);
 fFloat.add(underwater.params, 'meniscus', 0, 1, 0.01);
 fFloat.add(look, 'underwater', 0.2, 2, 0.01).name('underwater exposure');
 
+// Tilecraft models on the water (spec.md §8); ?tiles=<fixture> picks one, bare ?tiles the hibrid
+const fTiles = gui.addFolder('Tiles');
+const fileInput = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json' });
+const tilesUi = {
+  source: args.has('tiles') ? args.get('tiles') || TILE_SOURCES[0] : 'none',
+  get status() { return tiles.status; },
+};
+let frameController = null;
+async function loadTiles(source) {
+  await tiles.load(source);
+  frameController = frameController.options(['all', ...tiles.frames]).onChange(rebuildTiles);
+  if (tiles.loaded) placeTiles();
+}
+async function rebuildTiles() {
+  await tiles.rebuild();
+  if (tiles.loaded) placeTiles();
+}
+fileInput.onchange = () => fileInput.files[0] && loadTiles(fileInput.files[0]);
+const sourceController = fTiles.add(tilesUi, 'source', ['none', ...TILE_SOURCES, 'file…']).onChange((v) => {
+  if (v === 'file…') fileInput.click();
+  else loadTiles(v);
+});
+if (!tilecraftAvailable) sourceController.disable();
+frameController = fTiles.add(tiles.params, 'frame', ['all']).onChange(rebuildTiles);
+fTiles.add(tiles.params, 'metersPerSourceUnit', 0.01, 0.5, 0.005).onFinishChange(rebuildTiles);
+fTiles.add(tiles.params, 'fieldYaw', -180, 180, 1).onChange(() => tiles.loaded && placeTiles());
+fTiles.add(tilesUi, 'status').disable().listen();
+if (!args.has('tiles')) fTiles.close();
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && tilecraftAvailable) loadTiles(file);
+});
+
 const fPost = gui.addFolder('Post');
 fPost.add(ui, 'exposure', 0.25, 4, 0.01).name('exposure comp');
 fPost.add(post.params, 'autoExposure');
@@ -377,6 +438,7 @@ function renderFrame(dt) {
   if (query.resultCount > 0) camWater = query.result[0];
   floaters.ingest(query, 1);
   floaters.step(dt);
+  tiles.update(dt);
   timer.begin('floatShadow');
   floatShadow.update(renderer, floaters.scene, floaters.bodies, sky.sunDir);
   // water entries -> ripple rings + splash (ages on the floaters' clock)
@@ -476,7 +538,7 @@ async function runBenchmark(frames = 300) {
 }
 window.runBenchmark = runBenchmark;
 window.app = {
-  camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow,
+  camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
   camWater: () => camWater, markSun: () => (sunDirty = true),
 };
 
@@ -606,4 +668,6 @@ resize();
 applySun();
 views[ui.view]();
 controls.update();
+// a link with ?tiles opens on the field once it has loaded and been placed
+if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
 requestAnimationFrame(loop);
