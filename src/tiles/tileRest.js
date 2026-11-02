@@ -76,7 +76,7 @@ function collectRoad(record, layers, space, tiles, runs) {
 
   const idOf = new Map();   // layer tile index → field tile id
   const vertexTile = new Int32Array(sourceCount).fill(-1);
-  const stats = { vertices: sourceCount, ownerless: 0, foreign: 0, seamOwners: 0, maxOffset: 0 };
+  const stats = { vertices: sourceCount, ownerless: 0, foreign: 0, nearestOwners: 0, seamOwners: 0, maxOffset: 0 };
   for (const range of record.runRanges) {
     const runId = runs.length;
     const members = range.sourceRef.tileIndices;
@@ -94,13 +94,16 @@ function collectRoad(record, layers, space, tiles, runs) {
         y0: runY, thickness, runId, flags: FLAG_POLYLINE, g: tile.g ?? -1, f: tile.f ?? -1,
       });
     }
-    // owner → field tile; an owner outside this run (or -1) falls back to the run's nearest tile
+    // LCR's source owner identifies the generating segment, which can be metres
+    // away from a tessellated joint. Use the nearest member for deformation even
+    // when the source owner is valid, so tiny joint edges don't span distant bodies.
     const memberSet = new Set(members);
     for (let v = range.firstVertex; v < range.firstVertex + range.vertexCount; v++) {
       const o = owners ? owners[v] : -1;
-      if (o >= 0 && memberSet.has(o)) { vertexTile[v] = idOf.get(o); continue; }
-      if (o < 0) stats.ownerless++; else stats.foreign++;
       vertexTile[v] = nearest(pos[v * 3], pos[v * 3 + 2], runs[runId].tiles, tiles);
+      if (o < 0) stats.ownerless++;
+      else if (!memberSet.has(o)) stats.foreign++;
+      else if (vertexTile[v] !== idOf.get(o)) stats.nearestOwners++;
     }
   }
 

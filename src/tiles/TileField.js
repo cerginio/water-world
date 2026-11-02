@@ -17,7 +17,8 @@ export class TileField {
     this.group.name = 'tile-field';
     scene.add(this.group);
     this.params = { metersPerSourceUnit: 0.05, frame: 'all', fieldYaw: 0,
-      density: 500, buoyancy: 1, drag: 1.6, angularDrag: 0.8, orbit: 1, anchorPeriod: 4 };
+      density: 500, buoyancy: 1, drag: 1.6, angularDrag: 0.8, orbit: 1, anchorPeriod: 4,
+      mode: 'anchored', windage: 0.02, driftRadius: 400 };
     this.source = 'none';
     this.status = '—';
     this.payload = null;   // fetched source, kept so frame / scale changes rebuild without a refetch
@@ -47,6 +48,7 @@ export class TileField {
       if (epoch !== this.epoch) return;
       this.payload = payload;
       this.frames = (payload.model.frames ?? []).map((f) => f.id);
+      this.params.frame = this.frames.find((id) => String(id) === String(this.params.frame)) ?? 'all';
       await this.rebuild(epoch);
     } catch (e) {
       if (epoch !== this.epoch) return;
@@ -78,7 +80,7 @@ export class TileField {
 
   build(rest) {
     if (!rest.tiles.count) return;
-    this.sim = new TileSim(this.renderer, this.surface, rest.tiles);
+    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs);
     for (const part of rest.polygon) {
       const material = this.material(part, false);
       patchTileMaterial(material, this.sim.uniforms, part.tile[0]);
@@ -144,6 +146,11 @@ export class TileField {
   }
 
   reset() { this.sim?.reset(); }
+
+  setMode(mode) {
+    if (mode !== 'anchored' && mode !== 'drift') throw new Error(`Unknown tiles mode: ${mode}`);
+    this.params.mode = mode;
+  }
 
   update(dt = 1 / 60) {
     if (!this.sim) return;

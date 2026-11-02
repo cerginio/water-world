@@ -1,11 +1,12 @@
 # Handoff: tile-floaters — плавучі тайли Tilecraft
 
-Стан на 2026-11-02. Гілка `master`, T0–T2 закриті; цей handoff входить у коміт T2.
+Стан на 2026-11-02. Гілка `master`, T0–T2 закриті; T3 реалізована й закомічена
+за запитом власника, остаточне візуальне рев’ю T3 ще не зафіксоване.
 
 Спека: [spec.md](spec.md). Tilecraft (`D:/work/js-games/ua-dream/tilecraft`) у цій
 темі **лише читається** — жодних змін у ньому (spec.md §1).
 
-> **Далі:** фаза T3 — drift і перемикання; почати з `src/tiles/TileSim.js`, `src/tiles/TileField.js` і spec.md §6.3–§6.4, §8.
+> **Далі:** завершити рев’ю T3 за QA-T3-1…7 у QA.md; після прийняття перейти до T4. T3 повторно не реалізовувати.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`.
 За прямою вимогою власника стенд піднімати й залишати запущеним, у тому числі
@@ -18,13 +19,41 @@
 | `vite.config.js` | порт 5199, `dedupe: ['three']`, `fs.allow` на `TILECRAFT_ROOT`, плагін `tilecraft-asset-urls` (П3), `__TILECRAFT_ROOT__` ('' у build) |
 | `src/tiles/tilecraftLoader.js` | динамічний імпорт Tilecraft через `/@fs/`, ланцюжок §3.4, `sameThree` (П4) |
 | `src/tiles/tileRest.js` | rest обох конвеєрів, `aTile`/`aOffset`, `runs[]`; дублікати стиків одного run мають спільний owner; opacity polyline збережено |
-| `src/tiles/TileSim.js` | rest RGBA32F 512×ceil(N/512), ping-pong MRT з 4 attachments; сили плавучості, інерція, нахил, anchored-пружина й орбіта, reset та NaN/Infinity → rest; при `tiles=none` ресурсів немає |
+| `src/tiles/TileSim.js` | MRT стану тайлів і run-ів, drift/anchored з плавним перемиканням; критично затухаюче слідування поверхні обох типів, осадка від density/buoyancy, нахил ≤20°, занурення за недостатньої плавучості; reset, NaN/Infinity → rest |
 | `src/tiles/TileMaterial.js` | патч поверх `terrain.patchProp`: polygon id = `uTileBase + gl_InstanceID`, polyline id = `aTile`; GPU-позиції й нормалі, включно зі світовими varyings туману/освітлення |
 | `src/tiles/TileField.js` | `load` / `rebuild` / `place` / `clear` / `update(dt)` / `reset`; параметри фізики, перебудова й dispose GPU-ресурсів, `cpuMs` — час подання проходу |
 | `src/main.js` | папка `Tiles`, шот `Tiles`, drag & drop JSON; GUI фізики й reset; GPU-оновлення після FFT і `surface.update`, таймер `tiles`, HUD `Tiles CPU submit` |
 | `scripts/probe-tiles.mjs` | WebGL-проба: стан, стики, WaterQuery, аналітична осадка, пружина, reset/NaN, GUI, перебудови, CPU та `tiles=none`; запуск — QA.md |
 | `scripts/probe-tiles-anchored.mjs` | 300 с інтегрованого часу на polygon-полі; перевірка скінченності, клампів і орбітального зміщення |
-| `QA.md` | сценарії QA-T2-1…5, QA-T1-1…5 і QA-T0-1…5; T2 прийнята власником |
+| `src/tiles/tileUrl.js` | обмеження й нормалізація tiles* URL; збереження сторонніх параметрів/hash |
+| `scripts/probe-tiles-drift.mjs` | незалежні оракули горизонтального руху, перемикання, 120 с hybrid, URL |
+| `scripts/probe-tiles-strip.mjs` | програмний GPU: polygon/strip, рухомі хвилі, зміни density, реальні LCR-ребра та стики |
+| `QA.md` | QA-T3-1…7 і попередні фази; результати до/після стабілізації розділено |
+
+### Контрольна точка T3 перед комітом (2026-11-02)
+
+- Реалізовано спільний горизонтальний дрейф run-ів, окремий дрейф polygon,
+  windage, м’яку стінку driftRadius, плавне перемикання та URL-стан.
+- Після рев’ю обидва типи слідують хвилям із критичним затуханням, включно
+  з drag=0. Це свідома зміна моделі T2: незалежних балістичних підскоків немає.
+  За недостатньої плавучості збережено інтегратор занурення.
+- Власник LCR-вершини тепер найближчий тайл того самого run: вихідний sourceOwner
+  міг лежати за кілька метрів від вершини. Дублікати стиків і верх/низ узгоджені.
+- Остання проба polygon/strip PASS на SwiftShader: 36 с хвиль зі змінами
+  параметрів; polygon max похибка висоти 0.370 м проти 4.696 м до виправлення,
+  max нахил 19.78°, пласка осадка похибка ≤6e-7 м; reset/занурення PASS.
+  Hybrid: 46 861 тайл, 1 105 run-ів, 2 380 452 ребра; max подовження 0.332 м,
+  maxSeam=0. Build і smoke справжнього WATER_GLSL PASS, glError=0.
+- Повна 120-секундна проба дрейфу пройшла до стабілізації вертикалі; нова проба
+  підтверджує незмінність горизонтальних позицій на контрольних хвилях.
+  Старі виміри AMD у QA.md не є вимірами швидкодії остаточного шейдера.
+- Після BSOD власник згадав випадковий запуск benchmark. Обидві кнопки
+  benchmark прибрано з HUD/GUI, developer window.runBenchmark лишився.
+  Причина BSOD не доведена: minidump — 0xA у nt!RtlpxVirtualUnwind після
+  збою відновлення CPU-контексту; Chrome активний процес, витік RAM не підтверджений.
+  Діагностичні файли в %TEMP%/water-3d-crash-debug, поза Git.
+- RTX 3060/mobile бюджети, тіні/reflection/bounds — відкриті для T4.
+  Остаточний вигляд повного океану перевірити вручну за QA-T3-6/7.
 
 Опора в наявному коді:
 

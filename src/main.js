@@ -21,6 +21,7 @@ import { FLOATER_KINDS } from './scene/floaterMeshes.js';
 import { FloaterShadow } from './scene/floaterShadow.js';
 import { WaveCaustics } from './water/Caustics.js';
 import { TileField } from './tiles/TileField.js';
+import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 
 const REFLECT_LAYER = 1;
@@ -259,9 +260,8 @@ let fSun = null;
 // --- GUI -----------------------------------------------------------------------
 const gui = new GUI({ title: 'Gelatin Water' });
 if (mobile) gui.close();   // on phones the open panel covers most of the screen
-const ui = { view: 'Lagoon', benchmark: () => benchButton.click(), exposure: 1 };
+const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
-gui.add(ui, 'benchmark').name('benchmark (uncapped)');
 
 fSun = gui.addFolder('Sun & sky');
 fSun.add(sky.params, 'elevation', -2, 70, 0.1).onChange(() => (sunDirty = true));
@@ -374,6 +374,9 @@ fFloat.add(look, 'underwater', 0.2, 2, 0.01).name('underwater exposure');
 
 // Tilecraft models on the water (spec.md §8); ?tiles=<fixture> picks one, bare ?tiles the hibrid
 const fTiles = gui.addFolder('Tiles');
+readTileUrl(args, tiles.params);
+let tilesUrlSource = args.has('tiles') ? args.get('tiles') || TILE_SOURCES[0] : 'none';
+const saveTilesUrl = () => writeTileUrl(tilesUrlSource, tiles.params);
 const fileInput = Object.assign(document.createElement('input'), { type: 'file', accept: '.json,application/json' });
 const tilesUi = {
   source: args.has('tiles') ? args.get('tiles') || TILE_SOURCES[0] : 'none',
@@ -381,13 +384,19 @@ const tilesUi = {
 };
 let frameController = null;
 async function loadTiles(source) {
+  tilesUrlSource = source;
+  tilesUi.source = source instanceof File ? 'file…' : source;
+  sourceController.updateDisplay();
   await tiles.load(source);
   frameController = frameController.options(['all', ...tiles.frames]).onChange(rebuildTiles);
+  frameController.updateDisplay();
   if (tiles.loaded) placeTiles();
+  saveTilesUrl();
 }
 async function rebuildTiles() {
   await tiles.rebuild();
   if (tiles.loaded) placeTiles();
+  saveTilesUrl();
 }
 fileInput.onchange = () => fileInput.files[0] && loadTiles(fileInput.files[0]);
 const sourceController = fTiles.add(tilesUi, 'source', ['none', ...TILE_SOURCES, 'file…']).onChange((v) => {
@@ -395,7 +404,8 @@ const sourceController = fTiles.add(tilesUi, 'source', ['none', ...TILE_SOURCES,
   else loadTiles(v);
 });
 if (!tilecraftAvailable) sourceController.disable();
-frameController = fTiles.add(tiles.params, 'frame', ['all']).onChange(rebuildTiles);
+frameController = fTiles.add(tiles.params, 'frame', [...new Set(['all', tiles.params.frame])]).onChange(rebuildTiles);
+fTiles.add(tiles.params, 'mode', ['anchored', 'drift']).onChange((mode) => tiles.setMode(mode));
 fTiles.add(tiles.params, 'metersPerSourceUnit', 0.01, 0.5, 0.005).onFinishChange(rebuildTiles);
 fTiles.add(tiles.params, 'fieldYaw', -180, 180, 1).onChange(() => tiles.loaded && placeTiles());
 fTiles.add(tiles.params, 'density', 100, 1000, 10);
@@ -404,6 +414,9 @@ fTiles.add(tiles.params, 'drag', 0, 10, 0.1);
 fTiles.add(tiles.params, 'angularDrag', 0, 5, 0.1);
 fTiles.add(tiles.params, 'orbit', 0, 1, 0.01);
 fTiles.add(tiles.params, 'anchorPeriod', 0.5, 20, 0.1);
+fTiles.add(tiles.params, 'windage', 0, 0.1, 0.001);
+fTiles.add(tiles.params, 'driftRadius', 50, 1000, 10);
+fTiles.onFinishChange(saveTilesUrl);
 fTiles.add({ reset: () => tiles.reset() }, 'reset');
 fTiles.add(tilesUi, 'status').disable().listen();
 if (!args.has('tiles')) fTiles.close();
@@ -567,18 +580,6 @@ uncapButton.onclick = () => {
   uncapButton.classList.toggle('on', uncapped);
   fpsHistory.length = 0;
 };
-// on request only: it freezes the screen for its 320 frames, which read as a hitch on load
-const benchButton = $('pBench');
-benchButton.onclick = async () => {
-  if (benchButton.disabled) return;
-  benchButton.disabled = true;
-  benchButton.textContent = 'Benchmarking…';
-  await new Promise((r) => requestAnimationFrame(() => setTimeout(r)));   // let the label paint first
-  await runBenchmark();
-  benchButton.disabled = false;
-  benchButton.textContent = 'Run benchmark';
-};
-
 function updateHud(now) {
   const fps = (frames * 1000) / (now - lastHud);
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
