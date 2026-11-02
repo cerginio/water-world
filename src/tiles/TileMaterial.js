@@ -3,6 +3,7 @@ import * as THREE from 'three';
 const PARS = /* glsl */`
 uniform sampler2D uRest0, uRest1, uState0, uState1;
 uniform int uTileBase;
+attribute float aSurfaceOffset;
 #ifndef USE_INSTANCING
 attribute float aTile;
 attribute vec3 aOffset;
@@ -25,7 +26,7 @@ const INIT = /* glsl */`
   mat3 tileRotation = tileTilt(texelFetch(uState1, tileUV, 0).xy);
 #ifdef USE_INSTANCING
   mat4 tileMatrix = mat4(tileRotation) * instanceMatrix;
-  tileMatrix[3] = vec4(tileRest.x + tileState.z, tileRest1.x + tileState.x, tileRest.y + tileState.w, 1.0);
+  tileMatrix[3] = vec4(tileRest.x + tileState.z, tileRest1.x + tileState.x + aSurfaceOffset, tileRest.y + tileState.w, 1.0);
 #endif
 `;
 
@@ -54,8 +55,9 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 #ifndef USE_INSTANCING
   transformed = vec3(tileRest.x + tileState.z, tileRest1.x + tileState.x, tileRest.y + tileState.w) + tileRotation * aOffset;
+  transformed.y += aSurfaceOffset;
 #endif`);
     shader.vertexShader = vertex;
   };
-  material.customProgramCacheKey = () => `${previousKey}-tile-state-v1`;
+  material.customProgramCacheKey = () => `${previousKey}-tile-state-v2`;
 }

@@ -170,7 +170,8 @@ try {
         const offset = new THREE.Vector3().fromArray(road.aOffset, v * 3);
         offset.applyMatrix4(new THREE.Matrix4().makeRotationX(b[k]));
         offset.applyMatrix4(new THREE.Matrix4().makeRotationZ(b[k + 1]));
-        const point = offset.add(new THREE.Vector3(t.x[id] + a[k + 2], t.y0[id] + a[k], t.z[id] + a[k + 3]));
+        const point = offset.add(new THREE.Vector3(t.x[id] + a[k + 2],
+          t.y0[id] + a[k] + t.surfaceOffset[id], t.z[id] + a[k + 3]));
         points.push(point);
         const key = `${t.runId[id]}:${positions.getX(v)},${positions.getY(v)},${positions.getZ(v)}`;
         if (joints.has(key)) maxSeam = Math.max(maxSeam, point.distanceTo(joints.get(key)));

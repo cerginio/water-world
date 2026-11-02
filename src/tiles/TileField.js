@@ -82,6 +82,8 @@ export class TileField {
     if (!rest.tiles.count) return;
     this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs);
     for (const part of rest.polygon) {
+      part.geometry.setAttribute('aSurfaceOffset', new THREE.InstancedBufferAttribute(
+        Float32Array.from(part.tile, id => rest.tiles.surfaceOffset[id]), 1));
       const material = this.material(part, false);
       patchTileMaterial(material, this.sim.uniforms, part.tile[0]);
       const mesh = new THREE.InstancedMesh(part.geometry, material, part.count);
@@ -94,6 +96,8 @@ export class TileField {
     for (const part of rest.polyline) {
       part.geometry.setAttribute('aTile', new THREE.Float32BufferAttribute(part.aTile, 1));
       part.geometry.setAttribute('aOffset', new THREE.Float32BufferAttribute(part.aOffset, 3));
+      part.geometry.setAttribute('aSurfaceOffset', new THREE.Float32BufferAttribute(
+        Float32Array.from(part.aTile, id => rest.tiles.surfaceOffset[id]), 1));
       const mesh = new THREE.Mesh(part.geometry, this.material(part, true));
       patchTileMaterial(mesh.material, this.sim.uniforms);
       mesh.name = `tiles-polyline-${part.layerIndex}-f${part.frameId}`;

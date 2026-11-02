@@ -34,6 +34,23 @@ export function collectTileRest(compiled, { frame = 'all' } = {}) {
   };
   tiles.forEach((t, i) => { for (const k of Object.keys(t)) rest[k][i] = t[k]; });
 
+  // Buoyancy removes y0 from the simulated equilibrium. Retain the source's
+  // layer/group ordering for rendering, plus a tiny order within each group:
+  // overlapping polygon instances in ONE group also have coplanar top faces.
+  // Keep this separate from physical draft and constant across waveScale changes.
+  rest.surfaceOffset = new Float32Array(n);
+  const members = new Map();
+  let base = Infinity;
+  for (let i = 0; i < n; i++) {
+    const bottom = rest.y0[i] - rest.thickness[i] / 2;
+    base = Math.min(base, bottom);
+    const key = `${rest.f[i]}:${rest.g[i]}:${bottom}`;
+    const ordinal = members.get(key) ?? 0;
+    members.set(key, ordinal + 1);
+    rest.surfaceOffset[i] = bottom + ordinal * 0.0001;
+  }
+  for (let i = 0; i < n; i++) rest.surfaceOffset[i] -= base;
+
   const box = new THREE.Box2();
   for (let i = 0; i < n; i++) box.expandByPoint(new THREE.Vector2(rest.x[i], rest.z[i]));
   const groups = new Set(rest.g).size;
