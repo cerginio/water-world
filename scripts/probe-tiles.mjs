@@ -39,9 +39,9 @@ try {
       const id = part.aTile[v], i = id * 4, o = part.aOffset;
       const x = o[v * 3], y = o[v * 3 + 1], z = o[v * 3 + 2];
       const cx = Math.cos(a[i]), sx = Math.sin(a[i]), cz = Math.cos(a[i + 1]), sz = Math.sin(a[i + 1]);
-      return [t.rest.tiles.x[id] + cz*x - sz*cx*y + sz*sx*z,
+      return [t.rest.tiles.x[id] + h[i+2] + cz*x - sz*cx*y + sz*sx*z,
         t.rest.tiles.y0[id] + h[i] + sz*x + cz*cx*y - cz*sx*z,
-        t.rest.tiles.z[id] + sx*y + cx*z];
+        t.rest.tiles.z[id] + h[i+3] + sx*y + cx*z];
     };
     for (const part of t.rest.polyline) {
       const p = part.geometry.attributes.position, joints = new Map();
@@ -77,54 +77,168 @@ try {
   assert.ok(report.motion.changed.polygon > 0 && report.motion.changed.polyline > 0);
   assert.deepEqual(report.motion.versions, report.motion.before);
   delete report.motion.versions; delete report.motion.before;
-  await page.screenshot({ path: join(tmpdir(), 'tile-t1-field.png') });
+  await page.screenshot({ path: join(tmpdir(), 'tile-t2-field.png') });
 
-  // A rotated field must query WORLD coordinates, with normals in field axes.
+  // WaterQuery is independent of TileSim's state/history implementation. Freeze
+  // tile updates and compare the sampled centre at the actual displaced position.
   const yaw = page.getByLabel('fieldYaw', { exact: true });
   await yaw.fill('57'); await yaw.press('Enter'); await yaw.blur();
   await page.getByLabel('camera', { exact: true }).selectOption({ label: 'Aerial' });
   await page.getByLabel('camera', { exact: true }).selectOption({ label: 'Tiles' });
   report.worldQuery = await page.evaluate(async () => {
     const { WaterQuery } = await import('/src/water/WaterQuery.js');
-    const t = app.tiles;
-    app.controls.update();
-    t.update();
-    const ids = [0, 200, t.rest.tiles.count - 1], pts = new Float32Array(ids.length * 10);
-    const matrix = t.group.matrixWorld.elements;
-    ids.forEach((id, k) => {
-      const x = t.rest.tiles.x[id], z = t.rest.tiles.z[id];
-      const e = Math.max(0.7 * t.rest.tiles.radius[id], 0.1);
-      const offsets = [[0,0], [e,0], [-e,0], [0,e], [0,-e]];
-      offsets.forEach(([dx,dz], j) => {
-        pts[k*10+j*2] = matrix[0]*(x+dx) + matrix[8]*(z+dz) + matrix[12];
-        pts[k*10+j*2+1] = matrix[2]*(x+dx) + matrix[10]*(z+dz) + matrix[14];
+    const t = app.tiles, update = t.update;
+    t.update = () => {};
+    try {
+      const ids = [0, 200, t.rest.tiles.count - 1];
+      const read = (attachment) => {
+        const a = new Float32Array(512 * t.sim.height * 4);
+        app.renderer.readRenderTargetPixels(t.sim.target, 0, 0, 512, t.sim.height, a, 0, attachment);
+        return a;
+      };
+      const before = read(0), matrix = t.group.matrixWorld.elements;
+      const pts = new Float32Array(ids.length * 2);
+      ids.forEach((id, k) => {
+        const x = t.rest.tiles.x[id] + before[id*4+2], z = t.rest.tiles.z[id] + before[id*4+3];
+        pts[k*2] = matrix[0]*x + matrix[8]*z + matrix[12];
+        pts[k*2+1] = matrix[2]*x + matrix[10]*z + matrix[14];
       });
-    });
-    const state = new Float32Array(512 * t.sim.height * 4);
-    app.renderer.readRenderTargetPixels(t.sim.target, 0, 0, 512, t.sim.height, state);
-    const angles = new Float32Array(state.length);
-    app.renderer.readRenderTargetPixels(t.sim.target, 0, 0, 512, t.sim.height, angles, 0, 1);
-    const query = new WaterQuery(app.renderer, app.surface, ids.length * 5);
-    const target = app.renderer.getRenderTarget();
-    query.submit(pts, ids.length * 5, 0, 0);
-    app.renderer.setRenderTarget(target);
-    const deadline = performance.now() + 10000;
-    while (query.inFlight && performance.now() < deadline) await new Promise((r) => setTimeout(r, 10));
-    const maxError = Math.max(...ids.map((id, k) => Math.abs(state[id * 4] - query.result[k * 20])));
-    const maxNormalError = Math.max(...ids.map((id, k) => {
-      const q = query.result, e = Math.max(0.7 * t.rest.tiles.radius[id], 0.1), i = k * 20;
-      const sx = (q[i+4] - q[i+8]) / (2*e), sz = (q[i+12] - q[i+16]) / (2*e);
-      const normal = [-sx, 1, -sz], length = Math.hypot(...normal);
-      const tx = angles[id*4], tz = angles[id*4+1];
-      const actual = [-Math.sin(tz)*Math.cos(tx), Math.cos(tz)*Math.cos(tx), Math.sin(tx)];
-      return Math.hypot(...actual.map((v,j) => v - normal[j]/length));
-    }));
-    query.input.dispose(); query.target.dispose(); query.quad.material.dispose();
-    return { samples: query.resultCount, maxError, maxNormalError };
+      update.call(t, 1/60);
+      const state2 = read(2), state3 = read(3);
+      const query = new WaterQuery(app.renderer, app.surface, ids.length);
+      try {
+        const target = app.renderer.getRenderTarget();
+        query.submit(pts, ids.length, 0, 0);
+        app.renderer.setRenderTarget(target);
+        while (query.inFlight) await new Promise((r) => setTimeout(r, 10));
+        return { samples: query.resultCount, maxError: Math.max(...ids.flatMap((id,k) => [
+          Math.abs(state3[id*4] - query.result[k*4]),
+          Math.abs(state2[id*4+2] - query.result[k*4+1]),
+          Math.abs(state2[id*4+3] - query.result[k*4+2]),
+        ])) };
+      } finally { query.input.dispose(); query.target.dispose(); query.quad.material.dispose(); }
+    } finally { t.update = update; }
   });
-  assert.equal(report.worldQuery.samples, 15);
+  assert.equal(report.worldQuery.samples, 3);
   assert.ok(report.worldQuery.maxError < 0.002);
-  assert.ok(report.worldQuery.maxNormalError < 0.005);
+
+  report.physics = await page.evaluate(async () => {
+    const source = await (await fetch('/src/tiles/TileSim.js')).text();
+    const THREE = await import(source.match(/import \* as THREE from ["']([^"']+)["']/)[1]);
+    const { TileSim } = await import('/src/tiles/TileSim.js');
+    // A controlled flat surface uses the real waterAt and GPU integration, with
+    // zero FFT displacement, no shore wave and no impacts. Analytic oracle:
+    // centre height = h * (1/2 - density / (rhoWater * buoyancy)).
+    const zero = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
+    zero.needsUpdate = true;
+    const uniforms = { ...app.surface.uniforms };
+    for (const name of ['uDisp0', 'uDisp1', 'uDisp2']) uniforms[name] = { value: zero };
+    uniforms.uShoreWave = { value: new THREE.Vector4() };
+    uniforms.uImpact = { value: Array.from({ length: 8 }, () => new THREE.Vector4(0,0,1e9,0)) };
+    const tiles = { count: 4, x: [0,1,2,3], z: [0,0,0,0], yaw: [0,0.4,1,2],
+      radius: [0.4,0.1,0,0.01], y0: [0,0.08,-0.1,0], thickness: [0.3,0.1,0.01,0.002],
+      runId: [-1,-1,-1,-1], flags: [0,0,0,0] };
+    const sim = new TileSim(app.renderer, { uniforms }, tiles);
+    const matrix = new THREE.Matrix4().makeTranslation(app.tiles.center.x, 0, app.tiles.center.z);
+    const p = { ...app.tiles.params, orbit: 0 };
+    const read = (attachment, target = sim.target) => {
+      const a = new Float32Array(512*4);
+      app.renderer.readRenderTargetPixels(target, 0, 0, 512, 1, a, 0, attachment);
+      return Array.from(a.slice(0, tiles.count*4));
+    };
+    const settle = (density, dt) => {
+      p.density = density; sim.reset();
+      for (let i = 0; i < Math.ceil(48/Math.min(dt, 8/240)); i++) sim.update(matrix, dt, p);
+      const state = read(0);
+      return tiles.thickness.map((h,i) => ({ y: state[i*4] + tiles.y0[i],
+        expected: h*(0.5-density/(1025*p.buoyancy)), vy: state[i*4+1] }));
+    };
+    try {
+      const dense = settle(900, 1/60), light = settle(200, 1/60);
+      const slowFrame = settle(500, 0.5);
+      p.buoyancy = 1.5;
+      const boosted = settle(500, 1/60);
+      p.buoyancy = 1;
+      // A displaced anchor must return, rather than merely clamp its position.
+      sim.reset();
+      const seedData = new Float32Array(512*4);
+      for (let i = 0; i < tiles.count; i++) seedData.set([0,0,3,4], i*4);
+      const seed = new THREE.DataTexture(seedData, 512, 1, THREE.RGBAFormat, THREE.FloatType);
+      seed.needsUpdate = true;
+      const springPeriods = [];
+      for (const period of [0.5, 4, 20]) {
+        sim.reset(); sim.uniforms.uState0.value = seed; p.anchorPeriod = period;
+        for (let i = 0; i < Math.ceil(3*period*60); i++) sim.update(matrix, 1/60, p);
+        const state = read(0);
+        springPeriods.push({ period, remaining: Math.hypot(state[2],state[3]) });
+      }
+      seed.dispose(); p.anchorPeriod = 4;
+      // Reset zeros all four attachments in BOTH targets, immediately.
+      sim.reset();
+      const resetMax = Math.max(...sim.targets.flatMap((t) => [0,1,2,3].flatMap((i) => read(i,t))).map(Math.abs));
+      // A first sample with non-zero constant displacement has zero water velocity.
+      zero.image.data.set([0, 2, 0, 0]); zero.needsUpdate = true;
+      sim.update(matrix, 1/240, p);
+      const first = read(0)[1];
+      const expectedFirstVy = (1025/500-1)*9.81/240;
+      // Poison one input attachment, recover to rest, then restart with fresh history.
+      const poisonedData = new Float32Array(512*4).fill(NaN);
+      poisonedData[0] = Infinity;
+      const poison = new THREE.DataTexture(poisonedData, 512, 1, THREE.RGBAFormat, THREE.FloatType);
+      poison.needsUpdate = true;
+      sim.uniforms.uState1.value = poison;
+      sim.update(matrix, 1/60, p);
+      const recoveryMax = Math.max(...[0,1,2,3].flatMap((i) => read(i)).map(Math.abs));
+      poison.dispose();
+      sim.update(matrix, 1/60, p);
+      const recoveredFinite = [0,1,2,3].flatMap((i) => read(i)).every(Number.isFinite);
+      return { dense, light, slowFrame, boosted, springPeriods, resetMax, first, expectedFirstVy, recoveryMax, recoveredFinite };
+    } finally { sim.dispose(); zero.dispose(); }
+  });
+  for (const result of [report.physics.dense, report.physics.light, report.physics.slowFrame, report.physics.boosted]) {
+    for (const tile of result) {
+      assert.ok(Math.abs(tile.y - tile.expected) < 0.003, JSON.stringify(tile));
+      assert.ok(Math.abs(tile.vy) < 0.005, JSON.stringify(tile));
+    }
+  }
+  assert.equal(report.physics.resetMax, 0);
+  assert.equal(report.physics.recoveryMax, 0);
+  assert.equal(report.physics.recoveredFinite, true);
+  for (const spring of report.physics.springPeriods) assert.ok(spring.remaining < 0.001, JSON.stringify(spring));
+  assert.ok(Math.abs(report.physics.first - report.physics.expectedFirstVy) < 1e-5);
+
+  // Exercise the same visible controls as QA, in addition to the isolated fixture.
+  await page.evaluate(() => {
+    const t = app.tiles, reset = t.reset;
+    window.tileResetChecks = [];
+    t.reset = function () {
+      reset.call(this);
+      let max = 0;
+      for (const target of this.sim.targets) for (let i = 0; i < 4; i++) {
+        const data = new Float32Array(512*this.sim.height*4);
+        app.renderer.readRenderTargetPixels(target,0,0,512,this.sim.height,data,0,i);
+        for (const v of data) max = Math.max(max,Math.abs(v));
+      }
+      tileResetChecks.push(max);
+    };
+  });
+  for (let i = 0; i < 3; i++) {
+    await page.getByRole('button', { name: 'reset', exact: true }).click();
+    await page.waitForTimeout(1500);
+  }
+  assert.deepEqual(await page.evaluate(() => tileResetChecks), [0,0,0]);
+  const orbitControl = page.getByLabel('orbit', { exact: true });
+  await orbitControl.fill('0'); await orbitControl.press('Enter'); await orbitControl.blur();
+  await page.waitForTimeout(5000);
+  report.orbitOff = await page.evaluate(() => {
+    const t = app.tiles, data = new Float32Array(512*t.sim.height*4);
+    app.renderer.readRenderTargetPixels(t.sim.target,0,0,512,t.sim.height,data);
+    let max = 0;
+    for (let i = 0; i < t.rest.tiles.count; i++) max = Math.max(max,Math.hypot(data[i*4+2],data[i*4+3]));
+    return max;
+  });
+  assert.ok(report.orbitOff < 0.001);
+  await orbitControl.fill('1'); await orbitControl.press('Enter'); await orbitControl.blur();
 
   // Frame filtering goes through the same visible control as manual QA.
   const frame = page.getByLabel('frame', { exact: true });
@@ -144,7 +258,7 @@ try {
   await page.waitForFunction(() => app.tiles.sim && app.tiles.compiled.space.unit === 0.05);
   await page.getByLabel('camera', { exact: true }).selectOption({ label: 'Aerial' });
   await page.getByLabel('camera', { exact: true }).selectOption({ label: 'Tiles' });
-  await page.screenshot({ path: join(tmpdir(), 'tile-t1-rotated.png') });
+  await page.screenshot({ path: join(tmpdir(), 'tile-t2-rotated.png') });
 
   // Compare render submission on the same scene against the T0 static material
   // path, interleaving rounds. GPU fence wait is outside these CPU measurements.

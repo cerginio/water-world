@@ -1,11 +1,11 @@
 # Handoff: tile-floaters — плавучі тайли Tilecraft
 
-Стан на 2026-11-02. Гілка `master`, T0–T1 закриті; цей handoff входить у коміт T1.
+Стан на 2026-11-02. Гілка `master`, T0–T2 закриті; цей handoff входить у коміт T2.
 
 Спека: [spec.md](spec.md). Tilecraft (`D:/work/js-games/ua-dream/tilecraft`) у цій
 темі **лише читається** — жодних змін у ньому (spec.md §1).
 
-> **Далі:** фаза T2 — динаміка вертикалі й режим anchored; почати з `src/tiles/TileSim.js` і spec.md §6.1–§6.3.
+> **Далі:** фаза T3 — drift і перемикання; почати з `src/tiles/TileSim.js`, `src/tiles/TileField.js` і spec.md §6.3–§6.4, §8.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`.
 За прямою вимогою власника стенд піднімати й залишати запущеним, у тому числі
@@ -18,12 +18,13 @@
 | `vite.config.js` | порт 5199, `dedupe: ['three']`, `fs.allow` на `TILECRAFT_ROOT`, плагін `tilecraft-asset-urls` (П3), `__TILECRAFT_ROOT__` ('' у build) |
 | `src/tiles/tilecraftLoader.js` | динамічний імпорт Tilecraft через `/@fs/`, ланцюжок §3.4, `sameThree` (П4) |
 | `src/tiles/tileRest.js` | rest обох конвеєрів, `aTile`/`aOffset`, `runs[]`; дублікати стиків одного run мають спільний owner; opacity polyline збережено |
-| `src/tiles/TileSim.js` | rest RGBA32F 512×ceil(N/512), один MRT target з `uState0/1`; висота й нахил з `waterAt`, без інерції; ресурсів при `tiles=none` немає |
+| `src/tiles/TileSim.js` | rest RGBA32F 512×ceil(N/512), ping-pong MRT з 4 attachments; сили плавучості, інерція, нахил, anchored-пружина й орбіта, reset та NaN/Infinity → rest; при `tiles=none` ресурсів немає |
 | `src/tiles/TileMaterial.js` | патч поверх `terrain.patchProp`: polygon id = `uTileBase + gl_InstanceID`, polyline id = `aTile`; GPU-позиції й нормалі, включно зі світовими varyings туману/освітлення |
-| `src/tiles/TileField.js` | `load` / `rebuild` / `place` / `clear` / `update`; перебудова й dispose GPU-ресурсів, `cpuMs` — час подання проходу |
-| `src/main.js` | папка `Tiles`, шот `Tiles`, drag & drop JSON; GPU-оновлення після FFT і `surface.update`, таймер `tiles`, HUD `Tiles CPU submit` |
-| `scripts/probe-tiles.mjs` | відтворювана WebGL-проба; запуск та `PLAYWRIGHT_MODULE` — у QA.md |
-| `QA.md` | сценарії QA-T1-1…5 і QA-T0-1…5; T1 прийнята власником |
+| `src/tiles/TileField.js` | `load` / `rebuild` / `place` / `clear` / `update(dt)` / `reset`; параметри фізики, перебудова й dispose GPU-ресурсів, `cpuMs` — час подання проходу |
+| `src/main.js` | папка `Tiles`, шот `Tiles`, drag & drop JSON; GUI фізики й reset; GPU-оновлення після FFT і `surface.update`, таймер `tiles`, HUD `Tiles CPU submit` |
+| `scripts/probe-tiles.mjs` | WebGL-проба: стан, стики, WaterQuery, аналітична осадка, пружина, reset/NaN, GUI, перебудови, CPU та `tiles=none`; запуск — QA.md |
+| `scripts/probe-tiles-anchored.mjs` | 300 с інтегрованого часу на polygon-полі; перевірка скінченності, клампів і орбітального зміщення |
+| `QA.md` | сценарії QA-T2-1…5, QA-T1-1…5 і QA-T0-1…5; T2 прийнята власником |
 
 Опора в наявному коді:
 
@@ -114,6 +115,55 @@
 - Власник прийняв T1 командою `handoff:next`. Тіні, reflection і ручні bounds
   лишаються T4. Для повторного кадрування в GUI: `camera` → `Aerial` → `Tiles`.
 
+### Фаза T2 (2026-11-02), вертикальна динаміка й anchored
+
+- Два MRT-target-и по 4 RGBA32F attachments; `sim.target` — getter поточного
+  target-а. Uniform-об’єкти спільні з матеріалами й перемикаються після проходу.
+  Reset обнуляє обидва target-и. На кадр рівно 4 `waterAt`: центр і 3 точки
+  на колі 0.7·radius з rest yaw; усі вибірки до циклу підкроків.
+- Сили й моменти як у Floaters, поділені на масу аналітично; напівнеявний
+  Ейлер, критично демпфована пружина. Фізичний dt ≤1/30 с, до 8 підкроків
+  по ≤1/240 с; похідна зміщення води використовує фактичний dt кадру.
+  При <30 fps фізика відстає від годинника хвиль — врахувати в T4.
+- Осадка рахується від центра тайла (формула з +0.5, як у Floaters), не від
+  нижньої грані: на пласкій воді `y = h·(0.5 − density/(1025·buoyancy))`.
+  Мінімальні фізичні radius/thickness — 1 мм для вироджених кінців мазків.
+- Стан §5.1 з уточненнями: `uState0.zw` — повний локальний зсув
+  `orbital + spring`; `uState2.xy` — швидкість залишку пружини, `.zw` —
+  попередній **світовий** disp.xz; `uState3 = (prevH, prevOrbit, 0, valid)`.
+  Світовий disp переводиться в осі поля через transpose(worldXZ).
+  Для T3 врахувати різницю швидкостей орбіти й пружини при перемиканні;
+  `uRun` та спільного горизонтального стану run-ів ще немає.
+- GUI: density 100–1000 (типово 500), buoyancy 0–3 (1), drag 0–10 (1.6),
+  angularDrag 0–5 (0.8), orbit 0–1 (1), anchorPeriod 0.5–20 с (4), reset.
+  У URL ці параметри поки не пишуться. Режим завжди anchored.
+- **Захист стану:** у початковому варіанті sampler без highp + `isnan`
+  пропускав пошкоджені текстури на ANGLE/D3D. Тепер sampler-и highp,
+  NaN/Infinity визначаються за бітами експоненти; пошкоджений тайл → rest
+  зі скиданням історії. Перша швидкість води після load/reset/recovery — 0.
+  Це рішення фази; реєстру INVARIANTS тема не має.
+- Guard: `npm run build` PASS. Probe: обидві WebGL-проби PASS на AMD 890M /
+  headless Chromium, 1400×1000. Коротка: 46 861 скінченний стан, 218 196 пар
+  стиків з maxSeam=0; версії instanceMatrix/normal незмінні. При yaw=57
+  незалежний WaterQuery для 3 центрів: похибка збереженого disp ≤1.49e-8 м.
+  Прямого збігу висоти/нормалі з водою тепер не очікувати — є інерція.
+- Осадка density 900/200 на пласкій воді збігається з формулою з похибкою
+  <1e-6 м; перевірені buoyancy=1.5, тонкі й нульового радіуса тайли,
+  dt=0.5 с, NaN/Infinity recovery, три натискання reset, orbit=0 → зсув 0.
+  Початковий зсув 5 м після 3 періодів пружини: 0.5 с → 2.89e-6 м,
+  4 с → 8.54e-7 м, 20 с → 6.86e-7 м.
+- Тривала проба: density 900 → 200, 303.114 с інтегрованого часу,
+  13 890 кадрів, 46 861 polygon-тайл; nonfinite=0, помилок 0.
+  Максимальні зсув і орбіта — 2.8892 м, залишок пружини 0 м; нахил ≤60°,
+  |vy|≤10 м/с. Скриншоти `%TEMP%/tile-t2-*.png`, малюнок лишився на місці.
+- Остання коротка проба: CPU submit ≈0.230 мс, GPU tiles ≈0.477 мс,
+  приріст CPU renderFrame +0.2375 мс. Попередній прогін перетнувся зі
+  збіркою й дав +0.9347 мс; повтор без збірки вклався в бюджет +0.5 мс.
+  Тривала проба: GPU ≈0.503 мс. Бюджети RTX 3060 та guard-бенчмарк
+  `tiles=none` ±0.05 мс від README лишаються неперевіреними, як у T0.
+- Власник прийняв T2 командою `handoff:next`. Наступна T3 додає drift,
+  run-прохід, плавне перемикання й URL; тіні/reflection/bounds — T4.
+
 ## НЕЗАКРИТЕ — почни звідси
 
 Фази по порядку. Guard для всіх фаз: `npm run build` зелений; бенчмарк наявних
@@ -154,7 +204,7 @@
    порівнює проба, HUD показує лише CPU submit. Guard-бенчмарк ±0.05 мс від README
    на RTX 3060 лишається неперевіреним обмеженням із T0.
 
-3. **T2 — динаміка вертикалі й режим anchored** (spec.md §6.1–§6.3 anchored, §8 без `mode`/`windage`).
+~~3. **T2 — динаміка вертикалі й режим anchored** (spec.md §6.1–§6.3 anchored, §8 без `mode`/`windage`).
    Контракт: `TileSim` — ping-pong MRT (4 attachments), 4 вибірки на тайл, сили й
    момент як у `floaters.integrate`, підкроки ≤8, клампи, NaN → rest; anchored-пружина
    + орбіта; GUI `density`, `buoyancy`, `drag`, `angularDrag`, `orbit`, `anchorPeriod`,
@@ -164,7 +214,9 @@
    - **qa:action:** camera → `Tiles`; `density` 900, потім 200; залишити на 5 хв.
    - **qa:inspect:** осадка тайлів крізь воду; малюнок після 5 хв.
    - **qa:expected:** при 900 тайли занурені помітно глибше, ніж при 200; через 5 хв
-     малюнок читається, жоден тайл не відійшов від rest далі ніж на 2× орбіту.
+     малюнок читається, жоден тайл не відійшов від rest далі ніж на 2× орбіту.~~ — ЗАКРИТО 2026-11-02.
+   Прийнято власником. Результати й уточнення стану для T3 — «Фаза T2» вище;
+   сценарії — QA.md. Обмеження dt та неперевірені бюджети RTX 3060 збережені.
 
 4. **T3 — drift і перемикання** (spec.md §6.3 drift, §6.4, §8 `mode`/`windage`, URL-стан).
    Контракт: прохід run-ів (`uRun`), дрейф polygon-тайлів і run-ів, `windage`,

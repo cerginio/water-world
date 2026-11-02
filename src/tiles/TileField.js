@@ -16,7 +16,8 @@ export class TileField {
     this.group = new THREE.Group();
     this.group.name = 'tile-field';
     scene.add(this.group);
-    this.params = { metersPerSourceUnit: 0.05, frame: 'all', fieldYaw: 0 };
+    this.params = { metersPerSourceUnit: 0.05, frame: 'all', fieldYaw: 0,
+      density: 500, buoyancy: 1, drag: 1.6, angularDrag: 0.8, orbit: 1, anchorPeriod: 4 };
     this.source = 'none';
     this.status = '—';
     this.payload = null;   // fetched source, kept so frame / scale changes rebuild without a refetch
@@ -142,11 +143,13 @@ export class TileField {
     this.rest = null;
   }
 
-  update() {
+  reset() { this.sim?.reset(); }
+
+  update(dt = 1 / 60) {
     if (!this.sim) return;
     const start = performance.now();
     this.group.updateWorldMatrix(true, false);
-    this.sim.update(this.group.matrixWorld);
+    this.sim.update(this.group.matrixWorld, dt, this.params);
     this.cpuMs += (performance.now() - start - this.cpuMs) * 0.05;
   }
 }
