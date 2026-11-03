@@ -8,6 +8,7 @@ export const FLOAT_SHADOW_GLSL = /* glsl */`
 uniform highp sampler2DShadow uFloatShadow;
 uniform mat4 uFloatShadowMatrix;
 uniform float uFloatShadowBias;   // depth units; 0 = no casters this frame
+uniform float uFloatShadowTexel;  // world size of one texel (receiver normal offset)
 float floatShadow(vec3 p) {
   if (uFloatShadowBias <= 0.0) return 1.0;
   vec3 sc = (uFloatShadowMatrix * vec4(p, 1.0)).xyz;
@@ -29,7 +30,9 @@ export class FloaterShadow {
       uFloatShadow: { value: depth },
       uFloatShadowMatrix: { value: new THREE.Matrix4() },
       uFloatShadowBias: { value: 0 },
+      uFloatShadowTexel: { value: 0 },
     };
+    this.size = size;
   }
 
   // root: a Scene holding only the floaters; bodies: [{ pos, radius }]; sunDir: towards the sun
@@ -60,6 +63,7 @@ export class FloaterShadow {
     u.uFloatShadowMatrix.value.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
       .multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
     u.uFloatShadowBias.value = 0.03 / (cam.far - cam.near);
+    u.uFloatShadowTexel.value = 2 * r / this.size;
 
     const prev = renderer.getRenderTarget();
     const override = root.overrideMaterial;

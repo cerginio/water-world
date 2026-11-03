@@ -22,15 +22,21 @@ export function applyTileBounds(mesh, sphere) {
   mesh.frustumCulled = true;
 }
 
-export function fieldShadowBody(group, meshes, body) {
+// The float-shadow camera is fitted around its casters every frame, at 1024² texels.
+// Fitting it to the culling envelope (driftRadius + 64 m) made 1 m texels: blocky bed
+// shadows and every tile shadowing its own top (T5 owner QA). Fit the field at rest
+// plus this margin; tiles drifted further out simply cast no float shadow.
+export const TILE_SHADOW_MARGIN = 16;
+export function fieldShadowBody(entries, body) {
   const sphere = new THREE.Sphere();
   sphere.makeEmpty();
-  group.updateWorldMatrix(true, true);
-  for (const mesh of meshes) {
-    const local = mesh.isInstancedMesh ? mesh.boundingSphere : mesh.geometry.boundingSphere;
-    sphere.union(local.clone().applyMatrix4(mesh.matrixWorld));
+  for (const { mesh, restSphere, maxOffset, surfaceOffset } of entries) {
+    mesh.updateWorldMatrix(true, false);
+    const s = restSphere.clone().applyMatrix4(mesh.matrixWorld);
+    s.radius += 2 * maxOffset + surfaceOffset;
+    sphere.union(s);
   }
   body.pos.copy(sphere.center);
-  body.radius = Math.max(1, sphere.radius);
+  body.radius = Math.max(1, sphere.radius + TILE_SHADOW_MARGIN);
   return body;
 }

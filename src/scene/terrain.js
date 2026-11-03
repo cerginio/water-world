@@ -161,7 +161,9 @@ const UNDERWATER = /* glsl */`
 const SUN = /* glsl */`
     getDirectionalLightInfo( directionalLight, directLight );
     float under = smoothstep(0.05, -0.25, vWPos.y);
-    vec3 shadowAt = vWPos + vWNrm * 0.04;
+    // Normal offset of 2 texels: a horizontal top under a 40° sun spans ~1.2 texels of
+    // depth per texel, so thin tiles/props would otherwise shadow their own faces.
+    vec3 shadowAt = vWPos + vWNrm * max(0.04, 2.0 * uFloatShadowTexel);
     bool viaSurface = false;
     if (under > 0.0) {
       vec3 rsun = refract(-uSunDirT, vec3(0.0, 1.0, 0.0), 1.0 / 1.33);

@@ -170,7 +170,7 @@ export class TileField {
     this.shadowGroup.matrixAutoUpdate = false;
     this.shadowGroup.matrix.copy(this.group.matrixWorld);
     this.shadowGroup.matrixWorldNeedsUpdate = true;
-    return fieldShadowBody(this.group, this.group.children, this.shadowBody);
+    return fieldShadowBody(this.boundsEntries, this.shadowBody);
   }
 
   // the props' path (spec.md §7.1): atmosphere, underwater fog and the floater shadow

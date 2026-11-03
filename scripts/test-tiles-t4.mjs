@@ -6,6 +6,7 @@ const { TileField } = await import('../src/tiles/TileField.js');
 import { TILE_PROFILES } from '../src/tiles/TileSim.js';
 import { tileBounds, tileMotionLimit, TILE_VERTICAL_LIMIT } from '../src/tiles/tileBounds.js';
 import { FloaterShadow } from '../src/scene/floaterShadow.js';
+import { TILE_SHADOW_MARGIN } from '../src/tiles/tileBounds.js';
 
 function rendererStub() {
   return { target: null, calls: [], getRenderTarget() { return this.target; },
@@ -58,9 +59,14 @@ for (const mobile of [false, true]) {
   assert.equal(field.sim.uniforms.uTileMotionLimit.value, 1064);
   assert.deepEqual(meshes.map(m => [m.geometry.attributes.position.version, m.instanceMatrix?.version]), versions);
   field.group.position.set(100, 4, -200); field.group.rotation.y = 0.7;
+  // Shadow fit = field at rest + fixed margin, never the culling envelope (1 m texels).
   const body = field.syncShadow();
-  assert(body.radius > 1064);
+  assert(body.radius < 40, `shadow radius ${body.radius}`);
+  assert(body.radius >= TILE_SHADOW_MARGIN + 1);
   assert(body.pos.distanceTo(field.group.position) < 5);
+  field.params.driftRadius = 50; field.update(1 / 60);
+  assert.equal(field.syncShadow().radius, body.radius);
+  field.params.driftRadius = 1000; field.update(1 / 60);
   for (let i = 0; i < field.shadowGroup.children.length; i++) {
     const proxy = field.shadowGroup.children[i];
     assert.equal(proxy.geometry, meshes[i].geometry);
