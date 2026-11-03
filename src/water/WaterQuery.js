@@ -39,7 +39,7 @@ export class WaterQuery {
   // xz: Float32Array of x,z pairs. tag identifies the point layout (ignored results
   // from an old layout are the caller's job to detect).
   submit(xz, count, tag, time) {
-    if (this.inFlight >= 2 || count === 0) return;
+    if (this.disposed || this.inFlight >= 2 || count === 0) return;
     count = Math.min(count, this.capacity);
     const d = this.input.image.data;
     for (let i = 0; i < count; i++) { d[i * 4] = xz[i * 2]; d[i * 4 + 1] = xz[i * 2 + 1]; }
@@ -49,12 +49,17 @@ export class WaterQuery {
     const buf = new Float32Array(count * 4);
     this.renderer.readRenderTargetPixelsAsync(this.target, 0, 0, count, 1, buf)
       .then(() => {
+        if (this.disposed) return;
         this.result.set(buf);
         this.resultCount = count;
         this.resultTag = tag;
         this.resultTime = time;
       })
       .catch(() => {})
-      .finally(() => { this.inFlight--; });
+      .finally(() => { this.inFlight--; if (this.disposed && !this.inFlight) this.release(); });
   }
+
+  dispose() { this.disposed = true; if (!this.inFlight) this.release(); }
+
+  release() { this.input.dispose(); this.target.dispose(); this.quad.material.dispose(); }
 }

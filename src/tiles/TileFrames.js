@@ -31,7 +31,7 @@ export class TileFrames {
       const world = old?.world.clone() ?? pivot.clone().applyMatrix4(matrix);
       const offset = world.clone().applyMatrix4(inverse).sub(pivot).setY(0);
       const entry = { id, index: this.entries.length, pivot, world, offset,
-        mode: old?.mode ?? 'inherited', pose: new THREE.Vector4() };
+        mode: old?.mode ?? 'inherited', held: false, holdAge: 0, pose: new THREE.Vector4() };
       this.entries.push(entry);
       this.byId.set(id, entry);
     }
@@ -57,12 +57,13 @@ export class TileFrames {
     for (const entry of this.entries) {
       if (entry.mode === 'placed') entry.offset.copy(entry.world).applyMatrix4(inverse).sub(entry.pivot).setY(0);
       else entry.world.copy(entry.pivot).add(entry.offset).applyMatrix4(matrix);
-      entry.pose.set(entry.offset.x, entry.offset.z, entry.mode === 'placed' ? 1 : 0, 0);
+      entry.pose.set(entry.offset.x, entry.offset.z, entry.mode === 'placed' ? 1 : 0,
+        entry.held ? 1 + Math.min(entry.holdAge / 0.125, 1) : 0);
     }
   }
 
   reset(matrix) {
-    for (const entry of this.entries) { entry.mode = 'inherited'; entry.offset.set(0, 0, 0); }
+    for (const entry of this.entries) { entry.mode = 'inherited'; entry.held = false; entry.offset.set(0, 0, 0); }
     this.sync(matrix);
   }
 }

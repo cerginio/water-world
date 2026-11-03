@@ -3,6 +3,7 @@ import { compileTileSource, fetchTileSource } from './tilecraftLoader.js';
 import { collectTileRest } from './tileRest.js';
 import { TileSim } from './TileSim.js';
 import { TileFrames } from './TileFrames.js';
+import { TileInteraction } from './TileInteraction.js';
 import { TilePromotion, bindTilePromotion } from './TilePromotion.js';
 import { patchTileMaterial } from './TileMaterial.js';
 import { tileMotionLimit, tileBounds, applyTileBounds, fieldShadowBody } from './tileBounds.js';
@@ -11,7 +12,9 @@ const MIN_DEPTH = 5;   // open water under the whole field (spec.md §6.5)
 
 // A live Tilecraft model on the water (spec.md §5).
 export class TileField {
-  constructor({ scene, renderer, surface, patchMaterial, heightAt, mobile = false, floaters, camera }) {
+  constructor({ scene, renderer, surface, patchMaterial, heightAt, mobile = false, floaters, camera, controls }) {
+    this.scene = scene;
+    this.controls = controls;
     this.promotion = floaters ? new TilePromotion(this, floaters) : null;
     this.camera = camera;
     this.profile = mobile ? 'mobile' : 'desktop';
@@ -133,9 +136,11 @@ export class TileField {
     const b = rest.bounds;
     this.extent.set(b.max.x - b.min.x, b.max.y - b.min.y);
     this.radius = Math.max(this.extent.length() / 2, 1);
-    if (this.promotion && this.camera) this.unbindPromotion = bindTilePromotion(this.renderer.domElement, this, this.camera);
     this.updateBounds();
     this.syncFrames(true);
+    if (this.camera && this.controls) this.interaction = new TileInteraction(this, this.scene, this.camera, this.controls);
+    if (this.promotion && this.camera) this.unbindPromotion = bindTilePromotion(this.renderer.domElement, this, this.camera,
+      () => this.interaction?.canPromote() ?? true);
   }
 
   prepareMesh(mesh, part) {
@@ -206,6 +211,7 @@ export class TileField {
   // centre on open water: from `start` outwards along `out` in 5 m steps until the
   // bed under the centre and 8 points on the field's rim is deeper than MIN_DEPTH
   place(start, out) {
+    this.interaction?.cancel();
     const dir = new THREE.Vector2(out.x, out.y).normalize();
     for (let d = 0; d < 2000; d += 5) {
       const x = start.x + dir.x * d, z = start.y + dir.y * d;
@@ -225,6 +231,7 @@ export class TileField {
   syncFrames(force = false) {
     this.group.updateWorldMatrix(true, false);
     if (!force && this.frameMatrix.equals(this.group.matrixWorld)) return;
+    if (!force) this.interaction?.cancel();
     this.frameMatrix.copy(this.group.matrixWorld);
     this.frameRegistry.sync(this.group.matrixWorld);
     for (const e of this.boundsEntries) {
@@ -250,11 +257,14 @@ export class TileField {
     this.syncFrames();
     const frame = this.frameRegistry.get(frameId);
     frame.mode = 'inherited';
+    frame.held = false;
     this.syncFrames(true);
     return frame;
   }
 
   clear() {
+    this.interaction?.dispose();
+    this.interaction = null;
     this.unbindPromotion?.();
     this.unbindPromotion = null;
     this.promotion?.clear();
@@ -279,6 +289,8 @@ export class TileField {
   }
 
   reset() {
+    this.interaction?.cancel();
+    if (this.interaction) this.interaction.selected = null;
     this.promotion?.clear();
     this.group.updateWorldMatrix(true, false);
     this.frameRegistry.reset(this.group.matrixWorld);
@@ -298,6 +310,7 @@ export class TileField {
     const start = performance.now();
     this.syncFrames();
     this.updateBounds();
+    this.interaction?.update(dt);
     this.sim.update(this.group.matrixWorld, dt, this.params, timer);
     this.cpuMs += (performance.now() - start - this.cpuMs) * 0.05;
   }

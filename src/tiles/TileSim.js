@@ -71,7 +71,7 @@ void main() {
   vec3 disp = waterAt(q, vec3(0.0));
   vec2 orbit = transpose(worldXZ) * disp.xz * uOrbit;
   vec3 waterVelocity = vec3(0.0);
-  if (s3.w > 0.5) {
+  if (abs(s3.w) > 0.01) {
     waterVelocity = clamp((disp - vec3(s2.z, s3.x, s2.w)) / uSampleDt,
       vec3(-3.0, -0.8, -3.0), vec3(3.0, 0.8, 3.0));
   }
@@ -97,7 +97,7 @@ void main() {
   vec2 spring = s0.zw;
   vec2 velocity = s2.xy;
   vec2 localWaterVelocity = transpose(worldXZ) * waterVelocity.xz;
-  if (s3.w > 0.5 && !polyline) {
+  if (abs(s3.w) > 0.01 && !polyline) {
     if (s3.z < 0.5) spring -= transpose(worldXZ) * s2.zw * s3.y;
     if (drift && s3.z < 0.5) {
       // Preserve the previous total position and include its orbital velocity.
@@ -148,7 +148,7 @@ void main() {
       s1.xy = normal * 0.34906585;
       s1.zw -= normal * max(0.0, dot(s1.zw, normal));
     }
-    if (!polyline) {
+    if (!polyline && pose.w < 0.5) {
       velocity += horizontalAcceleration(spring, velocity, r.xy - framePivot(frameId), localWaterVelocity, drift) * dt;
       spring += velocity * dt;
     }
@@ -164,6 +164,27 @@ void main() {
   // y remembers orbital gain; z remembers the velocity convention (mode).
   // w is per-tile history validity, also cleared by the NaN recovery path.
   state3 = vec4(disp.y, uOrbit, drift ? 1.0 : 0.0, 1.0);
+  // A strip's individual frozen orbital offsets need to rejoin its shared run
+  // continuously when explicitly released. Negative history.w is the remaining
+  // transition time, and still denotes a valid water sample.
+  if (s3.w < 0.0 && pose.w < 0.5) {
+    if (polyline) state0.zw = mix(s0.zw, state0.zw, min(1.0, uDt / max(-s3.w, 0.001)));
+    state3.w = s3.w + uDt >= 0.0 ? 1.0 : s3.w + uDt;
+  }
+  // Capture the rendered total, including orbit, without a GPU snapshot. Fade
+  // only the incremental orbit for 125 ms, baking its captured contribution
+  // into the new anchor. No source-contour recovery or amplitude-removal jump.
+  // Keep the original velocity convention for cancellation / release to drift.
+  if (pose.w > 0.5) {
+    state0.zw = s0.zw;
+    if (polyline || s3.z < 0.5) {
+      vec2 previousOrbit = transpose(worldXZ) * s2.zw * s3.y;
+      state0.zw += (orbit - previousOrbit) * clamp(2.0 - pose.w, 0.0, 1.0);
+    }
+    state2.xy = s2.xy;
+    state3.z = s3.z;
+    state3.w = -0.125;
+  }
   if (bad(state0) || bad(state1) || bad(state2) || bad(state3)) rest();
 }`;
 
@@ -205,6 +226,7 @@ void main() {
   }
   if (bad(s)) return;
   runState = s;
+  if (pose.w > 0.5) runState = texelFetch(uRun, uv, 0);
   history = vec4(disp, uOrbit, 1.0);
 }`;
 
@@ -229,7 +251,7 @@ export class TileSim {
     const useTexture = count > this.frameUniformLimit;
     this.frameTexture = useTexture ? new THREE.DataTexture(new Float32Array(count * 8), 2, count, THREE.RGBAFormat, THREE.FloatType) : null;
     this.frameUniforms = useTexture ? { uFrames: { value: this.frameTexture } } : {
-      uFramePose: { value: Array.from({ length: count }, (_, i) => frames[i]?.pose ?? new THREE.Vector4()) },
+      uFramePose: { value: Array.from({ length: count }, (_, i) => frames[i]?.pose ?? new THREE.Vector4(0, 0, 0, 0)) },
       uFramePivot: { value: Array.from({ length: count }, (_, i) => new THREE.Vector2(frames[i]?.pivot.x ?? 0, frames[i]?.pivot.z ?? 0)) },
     };
     this.syncFrames();
@@ -292,7 +314,7 @@ export class TileSim {
     const data = this.frameTexture.image.data;
     let changed = this.frameTexture.version === 0;
     this.frames.forEach((frame, i) => {
-      const values = [frame.pose.x, frame.pose.y, frame.pose.z, 0, frame.pivot.x, frame.pivot.z, 0, 0];
+      const values = [frame.pose.x, frame.pose.y, frame.pose.z, frame.pose.w, frame.pivot.x, frame.pivot.z, 0, 0];
       values.forEach((value, k) => {
         const rounded = Math.fround(value);
         if (data[i * 8 + k] !== rounded) { data[i * 8 + k] = rounded; changed = true; }

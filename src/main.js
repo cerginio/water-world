@@ -90,7 +90,7 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
-const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, mobile, floaters, camera });
+const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, mobile, floaters, camera, controls });
 let camWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
@@ -418,6 +418,14 @@ fTiles.add(tiles.params, 'windage', 0, 0.1, 0.001);
 fTiles.add(tiles.params, 'driftRadius', 50, 1000, 10);
 fTiles.onFinishChange(saveTilesUrl);
 fTiles.add({ reset: () => tiles.reset() }, 'reset');
+fTiles.add({ get selectedFrame() {
+  const f = tiles.interaction?.selected;
+  return f ? `${String(f.id)} · ${f.mode}` : '—';
+} }, 'selectedFrame').disable().listen();
+fTiles.add({ releaseToDrift: () => {
+  const f = tiles.interaction?.selected;
+  if (f) { tiles.interaction.cancel(); tiles.releaseFrame(f.id); }
+} }, 'releaseToDrift').name('Відпустити у дрейф');
 fTiles.add(tilesUi, 'status').disable().listen();
 if (!args.has('tiles')) fTiles.close();
 addEventListener('dragover', (e) => e.preventDefault());

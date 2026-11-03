@@ -1,21 +1,32 @@
 # Handoff: frame-drag — перенесення фреймів по воді й рельєфу
 
-Стан на 2026-11-03. Гілка `master`. FD1 прийнято власником через
-`handoff:next`; код, перевірки й QA закриваються комітом цієї фази.
+Стан на 2026-11-03. Гілка `master`. FD1 закомічено як `6f54eab`.
+FD2 прийнято власником через `handoff:next`; код, перевірки й QA закриваються
+комітом цієї фази. Бюджети picking / CPU лишаються відкритими (див. нижче).
 Tile-floaters T0–T5 закриті (актуальний стан — у базовому HANDOFF).
 
 Спека: [FRAME-DRAG-SPEC.md](../../FRAME-DRAG-SPEC.md) (далі — «спека»). Базова тема:
 tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — її код
 (`src/tiles/`) ця тема розширює. Tilecraft лише читається (spec.md §1).
 
-> **Далі:** FD2 — picking і drag на воді. Спиратися на `TileFrames`, `moveFrame` / `releaseFrame` та спільну pose polygon/run з FD1. Заморожування drift-конфігурації, пригашення орбіти та арбітраж із dblclick T5 ще не реалізовані.
+> **Далі:** FD3 — контакт із землею для polygon (спека §7–§8). Додати `TerrainContact` за вершинами видимого island mesh і точний terrain-ray у `SurfaceCursor` (`src/tiles/TileInteraction.js`); опору й нахил рахувати в `TileSim`, зберігши FD2 hold/drift та спільну деформацію render/ID/контурів. Picking/CPU-бюджети з FD2 не вважати виконаними; повернутися до них у FD5.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`; правило
 стенду — `AGENTS.md` → «Локальний стенд».
 
 ## Що зроблено і працює
 
-FD1 прийнято 2026-11-03. Ручні сценарії: [QA.md](QA.md), QA-FD1-1…8.
+FD1 і FD2 прийнято 2026-11-03. Ручні сценарії: [QA.md](QA.md),
+QA-FD2-1…9 та QA-FD1-1…8. Прийняття FD2 не закриває бюджети продуктивності.
+
+| файл FD2 | контракт |
+|---|---|
+| `src/tiles/TilePicker.js` | ID+world-height у float target 13×13, спільний `patchTileMaterial`; sync down, async hover; opacity/vertex alpha <0.1 не дає hit; opaque terrain/props пишуть depth; CSS/DPR/viewport і nearest pixel |
+| `src/tiles/TileInteraction.js` | `TileInteraction` і water-only `SurfaceCursor`; capture-арбітр перед OrbitControls, пороги 5/10 CSS px, tau=50 мс, settling ≤150 мс, другий touch передає обидва pointers камері; системне скасування, контури та T5 gate |
+| `src/tiles/TileFrames.js`, `TileSim.js` | `held` / `holdAge`; `pose.w`=0 для вільного, 1…2 для hold із fade 125 мс; XZ і швидкості tile/run утримуються без snapshot; висота/нахил активні; negative `state3.w` — 125 мс повернення strip до run після release |
+| `src/tiles/TileField.js`, `src/main.js` | interaction lifecycle на build/clear/reset/place; GUI `selectedFrame`, «Відпустити у дрейф»; release знімає hold; scale/filter/source/yaw/place скасовують жест |
+| `src/water/WaterQuery.js` | owned query має `dispose`; late reads ігноруються, ресурси звільняються після завершення in-flight PBO |
+| `scripts/probe-frame-drag.mjs` | реальні mouse/touch DOM/CDP-жести, 60 с drift, обидва конвеєри всіх 8 фреймів, hold/release/blur, камера, dblclick, unload, desktop/mobile profile і CPU timings |
 
 | файл FD1 | контракт |
 |---|---|
@@ -25,11 +36,16 @@ FD1 прийнято 2026-11-03. Ручні сценарії: [QA.md](QA.md), QA
 | `src/tiles/TilePromotion.js`, `tilePromotionGeometry.js` | picking-проксі й CPU snapshot враховують трансляцію фрейму; групи розрізняються за frameIndex |
 | `scripts/test-frame-pose.mjs`, `scripts/probe-frame-pose.mjs` | offline-ідентичність/координати та WebGL/GUI, uniform boundary і texture fallback |
 
-Важливо для FD2: `moveFrame` зараз лише вмикає локальний anchored біля нової pose.
-Він не фіксує рознесену drift-конфігурацію й не заморожує горизонтальні стани;
-це робота FD2 за спекою §5. Перебудова filter/scale зберігає pose за id, але
-пересоздає TileSim і обнуляє його локальні стани. Зміна source обнуляє реєстр.
-URL не зберігає pose; reload відновлює layout.
+Жест FD2 вмикає hold при подоланні порога й після up лишає захоплену
+конфігурацію `placed`; reset або «Відпустити у дрейф» знімають hold.
+Сам програмний `moveFrame` без попереднього hold, як у FD1, лише вмикає
+локальний anchored біля нової pose. Перебудова filter/scale зберігає pose за id,
+але пересоздає TileSim і обнуляє локальні стани та hold. Зміна source обнуляє
+реєстр. URL не зберігає pose; reload відновлює layout.
+Для FD3: water-cursor утримує висоту реально захопленої поверхні відносно
+асинхронної water query; terrain intersection ще немає. Обмеження цілі зараз
+консервативне — `ISLAND_SIZE` з відступом загального `field.radius`; точна зайнята
+область і крутизна — FD4.
 
 Основа з tile-floaters:
 
@@ -43,6 +59,30 @@ URL не зберігає pose; reload відновлює layout.
 | `src/scene/terrainGeometry.js` | меш острова `PlaneGeometry(2400, 384×384)`, крок 6.25 м |
 
 ## Головні виміряні факти
+
+FD2, AMD Radeon 890M / Chromium WebGL, 2026-11-03:
+
+- Guard: build, `probe-tiles.mjs`, `probe-tiles-drift.mjs` — PASS;
+  offline FD1/T4/T5 — PASS. Drift guard: 121.35 с / 4267 кадрів,
+  nonfinite=0, 218196 стиків, maxSeam=0; recovery error=0.00000744 м.
+- Probe FD2: PASS після 60.00 с drift, polygon і polyline всіх 8 фреймів;
+  XZ hold тайлів=0, run-state change=0, camera movement=0;
+  grab error=2.885 CSS px. Release при dt=1e-7: max jump=0.00000197 м.
+  Right pan, empty-space orbit, другий палець/pinch, T5 dblclick, blur,
+  source=none під час drag та reset — PASS, `errors=[]`.
+- Desktop 1400×1000, 25 теплих pick-запитів: p50=6.50 / p95=14.40 мс.
+  CPU interaction за 57 кадрами drag/settling: p50=0.20 / p95=0.70 мс.
+  **Бюджети 8 мс pick і 0.5 мс/кадр CPU не виконані**, залишені для FD5;
+  погодження FD2 не змінює пороги й не є hardware-budget PASS.
+- Mobile-профіль на тому самому desktop GPU, CSS 480×850, DPR=2,
+  drawing width=576: pick p50=3.60 / p95=15.10 мс. Реальний телефон і холодний
+  перший pick не атестовані; mobile-бюджет 20 мс не підтверджений.
+- **Спростовано в FD2:** `2213 groups` у статусі — групи моделі, а не draw calls:
+  видимих tile-мешів 16. Спробу об'єднати ID до 8 мешів прибрано: вона додавала
+  47 547 136 байтів копії геометрії. Остаточні ID та контури мають 16 частин,
+  спільні geometry / instance attributes, додаткової копії геометрії немає.
+- Freeze не додає sampler-ів: користується `pose.w` наявного uniform/texture
+  шляху. Зберегти packed frameIndex і семантику `state3` під час FD3.
 
 Перевірено в FD1 на desktop WebGL 2026-11-03 (це не mobile/hardware-budget PASS):
 
@@ -82,6 +122,7 @@ $env:PLAYWRIGHT_MODULE = 'D:/work/js-games/ua-dream/tilecraft/node_modules/playw
 node scripts/probe-tiles.mjs
 node scripts/probe-tiles-drift.mjs
 node scripts/probe-frame-pose.mjs
+node scripts/probe-frame-drag.mjs
 ```
 
 ## НЕЗАКРИТЕ — почни звідси
@@ -106,7 +147,7 @@ node scripts/probe-frame-pose.mjs
    - **qa:expected:** переїхав лише третій фрейм, polygon і polyline разом, інші не зсунулися ні на см; після `fieldYaw` 45 його pivot у тій самій світовій точці (малюнок повернутий навколо pivot); reset повертає початкову розкладку й inherited.
    Нова проба: `scripts/probe-frame-pose.mjs` — переміщення одного фрейму, незмінність станів інших, fieldYaw, frame filter, reset.
 
-2. **FD2 — picking і drag на воді** (спека §2–§5; крок 2 §12).
+~~2. **FD2 — picking і drag на воді** (спека §2–§5; крок 2 §12).~~ — ЗАКРИТО власником через `handoff:next` 2026-11-03; бюджети продуктивності лишаються відкритими для FD5.
    Контракт: ID pass зі спільним чанком деформації; синхронний pick 13×13 на
    `pointerdown` у capture-фазі, hit → `stopImmediatePropagation`; async hover;
    SurfaceCursor на воді (площина висоти захоплення + `WaterQuery`); заморожування
@@ -161,9 +202,13 @@ node scripts/probe-frame-pose.mjs
 - **Жест T5 (tile-floaters), вирішено власником.** Одиночний клік по тайлу
   лишається за вибором/перенесенням фрейму; промоція групи в CPU-тіло (T5) переходить
   на **подвійний клік**, який власник явно погодив;
-  T5 не перехоплює click/pointerdown. FD2 має не починати drag на другому натисканні подвійного кліку; після справжнього drag споживати dblclick через preventDefault() або canPromote gate. Наявний guard T5 відкидає dblclick протягом 600 мс після руху >5 CSS px; це не готовий FD2-арбітр.
+  T5 не перехоплює click/pointerdown. FD2 вже віддає друге натискання подвійного
+  кліку T5, а після справжнього drag споживає dblclick і блокує `canPromote`
+  протягом 600 мс. Перевірено реальним DOM dblclick: одне CPU-тіло, drag не починається.
 - **Перетин FD5 з T4.** T4 закрито. FD1 синхронізує pose мешів/тіньових проксі
   та bounds через matrixWorld; перевірка контактів і візуальної тіні на суші ще FD5.
 - **Uniform і sampler-бюджет виміряно в FD1:** див. факти вище. Після додавання
   TerrainContact повторно перевірити linked samplers; вихідна оцінка 12 була занижена.
-- **Вимірювані пороги picking** (p95 ≤8 / ≤20 мс) — попередні, уточнити в FD2.
+- **Відкриті бюджети FD2 → FD5:** desktop pick p95=14.40 мс проти ≤8;
+  CPU interaction p95=0.70 мс проти ≤0.5. Mobile-профіль на desktop GPU
+  не замінює телефон; cold pick і справжній mobile p95 ще виміряти.
