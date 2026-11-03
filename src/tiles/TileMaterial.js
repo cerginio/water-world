@@ -61,7 +61,11 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
   transformed = vec3(tileRest.x + tileState.z, tileRest1.x + tileState.x, tileRest.y + tileState.w) + tileRotation * aOffset;
   transformed.y += aSurfaceOffset;
 #endif`);
+    // Render-only bit: hidden promotions keep their GPU simulation alive.
+    vertex = vertex.replace('#include <clipping_planes_vertex>', `
+      if ((int(tileRest1.w) & 2) != 0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      #include <clipping_planes_vertex>`);
     shader.vertexShader = vertex;
   };
-  material.customProgramCacheKey = () => `${previousKey}-tile-state-v3`;
+  material.customProgramCacheKey = () => `${previousKey}-tile-state-v4`;
 }

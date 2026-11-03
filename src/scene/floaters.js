@@ -45,6 +45,9 @@ class Body {
     this.quat.setFromAxisAngle(_v.set(0, 1, 0), yaw);
     this.water.fill(0);
     this.lastDisp.fill(NaN);
+    // Held still until WaterQuery delivers this body's heights: the zero placeholder
+    // can be metres off in a trough and would launch a light body (T5 QA).
+    this.ready = false;
     this.updateWorld();
   }
 
@@ -70,11 +73,19 @@ export class Floaters {
   }
 
   add(kind, pos, yaw = Math.random() * Math.PI * 2) {
+    return this.addDescriptor(makeFloater(kind, this.patchMaterial), pos, yaw);
+  }
+
+  // Custom tile descriptors use exactly the same dynamics, query and impacts.
+  addDescriptor(desc, pos, yaw = 0, onRemove) {
+    if (!desc.samples.length || (onRemove && desc.samples.length > 8)) throw new Error('Invalid tile samples');
+    // Existing props have at most 16 samples: 28 * 16 + camera < 512.
+    if (desc.samples.length > 16) throw new Error('Floater exceeds WaterQuery sample budget');
     if (this.bodies.length >= MAX_BODIES) {
-      const old = this.bodies.shift();
-      this.scene.remove(old.object);
+      this.remove(this.bodies.find(b => b.onRemove) ?? this.bodies[0]);
     }
-    const b = new Body(makeFloater(kind, this.patchMaterial));
+    const b = new Body(desc);
+    b.onRemove = onRemove;
     b.place(pos, yaw);
     this.scene.add(b.object);
     this.bodies.push(b);
@@ -82,10 +93,17 @@ export class Floaters {
     return b;
   }
 
-  clear() {
-    for (const b of this.bodies) this.scene.remove(b.object);
-    this.bodies.length = 0;
+  remove(b) {
+    const index = this.bodies.indexOf(b);
+    if (index < 0) return;
+    this.bodies.splice(index, 1);
+    this.scene.remove(b.object);
+    b.onRemove?.();
     this.layout++;
+  }
+
+  clear() {
+    for (const b of [...this.bodies]) this.remove(b);
   }
 
   // a small flotsam field in front of a viewpoint
@@ -132,6 +150,7 @@ export class Floaters {
         }
         ld[i * 3] = dx; ld[i * 3 + 1] = h; ld[i * 3 + 2] = dz;
       }
+      b.ready = true;
     }
   }
 
@@ -146,8 +165,96 @@ export class Floaters {
     }
   }
 
+  // Thin, light tile plates. The per-cell Archimedes spring in integrate() has no added
+  // mass or hydrodynamic damping: for a 0.1 m plate at 100 kg/m³ it rings at ~9 Hz
+  // nearly undamped, so the plate leaps and flutters on every wave (T5 owner QA).
+  // As in the GPU tile field: critically damped relaxation of height and tilt to the
+  // hydrostatic pose on the local water plane; the current carries it horizontally.
+  follow(b, h) {
+    const P = this.params, w = b.water, n = b.world.length;
+    b.updateWorld();
+    // Airborne (no cell touches water): plain free fall; entry makes the usual impact.
+    let wet = false;
+    for (let i = 0; i < n && !wet; i++) wet = w[i * 4] - b.world[i].y > -0.5 * b.desc.cellHeight;
+    if (!wet) {
+      b.vel.y -= G * h;
+      b.pos.addScaledVector(b.vel, h);
+      b.wet = false;
+      return;
+    }
+    this.impact(b);
+    let mx = 0, mz = 0, mh = 0, vx = 0, vz = 0, ly = 0;
+    for (let i = 0; i < n; i++) {
+      mx += b.world[i].x - b.pos.x; mz += b.world[i].z - b.pos.z; mh += w[i * 4];
+      vx += w[i * 4 + 1]; vz += w[i * 4 + 3]; ly += b.desc.samples[i].y;
+    }
+    mx /= n; mz /= n; mh /= n;
+    // least-squares water plane through the samples (ridge keeps collinear sets sane)
+    let cxx = 0, cxz = 0, czz = 0, cxh = 0, czh = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = b.world[i].x - b.pos.x - mx, dz = b.world[i].z - b.pos.z - mz, dh = w[i * 4] - mh;
+      cxx += dx * dx; cxz += dx * dz; czz += dz * dz; cxh += dx * dh; czh += dz * dh;
+    }
+    const ridge = 1e-6 + 1e-3 * (cxx + czz);
+    const xx = cxx + ridge, zz = czz + ridge, det = xx * zz - cxz * cxz;
+    const a = (cxh * zz - czh * cxz) / det, c = (czh * xx - cxh * cxz) / det;
+    const waterY = mh - a * mx - c * mz;
+
+    // height: cell centres at the hydrostatic draft, exact critically damped step
+    const draft = b.desc.cellHeight * (0.5 - b.desc.density / (RHO * P.buoyancy));
+    const target = waterY + draft - ly / n;
+    const f = 12 / (1 + 0.15 * P.drag), error = b.pos.y - target, k = b.vel.y + f * error, decay = Math.exp(-f * h);
+    b.pos.y = target + (error + k * h) * decay;
+    b.vel.y = (b.vel.y - f * k * h) * decay;
+
+    // tilt: towards the water-plane normal (clamped to 20°, as the field), yaw just decays
+    const normal = _w.set(-a, 1, -c).normalize();
+    if (normal.y < Math.cos(0.34906585)) {
+      const s = Math.sin(0.34906585) / Math.hypot(normal.x, normal.z);
+      normal.set(normal.x * s, Math.cos(0.34906585), normal.z * s);
+    }
+    const up = _v.set(0, 1, 0).applyQuaternion(b.quat);
+    const tiltError = _c.copy(up).cross(normal);
+    const yawRate = b.angVel.dot(up);
+    const tiltRate = _r.copy(b.angVel).addScaledVector(up, -yawRate);
+    const fa = 10 / (1 + P.angularDrag);
+    b.angVel.addScaledVector(tiltError, fa * fa * h).addScaledVector(tiltRate, -2 * fa * h)
+      .addScaledVector(up, yawRate * (Math.exp(-P.angularDrag * h) - 1));
+    const rate = b.angVel.length();
+    if (rate > 1e-6) {
+      _q.setFromAxisAngle(_f.copy(b.angVel).divideScalar(rate), rate * h);
+      b.quat.premultiply(_q).normalize();
+    }
+
+    // horizontal: drag towards the water velocity, like the field's drift
+    b.vel.x += P.drag * (vx / n - b.vel.x) * h;
+    b.vel.z += P.drag * (vz / n - b.vel.z) * h;
+    b.pos.x += b.vel.x * h;
+    b.pos.z += b.vel.z * h;
+
+    // beach / seabed: never below the ground, with friction
+    let pen = 0;
+    for (const p of b.world) pen = Math.max(pen, this.heightAt(p.x, p.z) - p.y);
+    if (pen > 0) {
+      b.pos.y += pen;
+      b.vel.y = Math.max(b.vel.y, 0);
+      b.vel.x *= Math.exp(-6 * h); b.vel.z *= Math.exp(-6 * h);
+    }
+    b.wet = true;
+  }
+
+  // hitting the water fast: ripple rings (and a splash) sized by the body and speed
+  impact(b) {
+    if (b.wet || b.vel.y >= -1.5) return;
+    const s = b.desc.size;
+    this.impacts.push({ x: b.pos.x, z: b.pos.z, t: this.time, amp: Math.min(0.35, 0.03 * -b.vel.y * Math.min(s.x, s.z)), size: Math.max(s.x, s.z) * 0.5 });
+    if (this.impacts.length > 8) this.impacts.shift();
+  }
+
   integrate(b, h) {
+    if (!b.ready) return;
     const P = this.params;
+    if (b.desc.follow && b.desc.density < RHO * P.buoyancy) { this.follow(b, h); return; }
     const force = _f.set(0, -b.mass * G, 0), torque = _t.set(0, 0, 0);
     const cell = b.desc.cellHeight;
     let wet = false;
@@ -178,12 +285,7 @@ export class Floaters {
         torque.add(_c.copy(_r).cross(_v));
       }
     }
-    // hitting the water fast: ripple rings (and a splash) sized by the body and speed
-    if (wet && !b.wet && b.vel.y < -1.5) {
-      const s = b.desc.size;
-      this.impacts.push({ x: b.pos.x, z: b.pos.z, t: this.time, amp: Math.min(0.35, 0.03 * -b.vel.y * Math.min(s.x, s.z)), size: Math.max(s.x, s.z) * 0.5 });
-      if (this.impacts.length > 8) this.impacts.shift();
-    }
+    if (wet) this.impact(b);
     b.wet = wet;
     b.vel.addScaledVector(force, h / b.mass);
     b.pos.addScaledVector(b.vel, h);

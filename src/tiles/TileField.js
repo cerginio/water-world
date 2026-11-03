@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { compileTileSource, fetchTileSource } from './tilecraftLoader.js';
 import { collectTileRest } from './tileRest.js';
 import { TileSim } from './TileSim.js';
+import { TilePromotion, bindTilePromotion } from './TilePromotion.js';
 import { patchTileMaterial } from './TileMaterial.js';
 import { tileMotionLimit, tileBounds, applyTileBounds, fieldShadowBody } from './tileBounds.js';
 
@@ -9,7 +10,9 @@ const MIN_DEPTH = 5;   // open water under the whole field (spec.md §6.5)
 
 // A live Tilecraft model on the water (spec.md §5).
 export class TileField {
-  constructor({ scene, renderer, surface, patchMaterial, heightAt, mobile = false }) {
+  constructor({ scene, renderer, surface, patchMaterial, heightAt, mobile = false, floaters, camera }) {
+    this.promotion = floaters ? new TilePromotion(this, floaters) : null;
+    this.camera = camera;
     this.profile = mobile ? 'mobile' : 'desktop';
     this.shadowScene = new THREE.Scene();
     this.shadowGroup = new THREE.Group();
@@ -116,6 +119,7 @@ export class TileField {
     const b = rest.bounds;
     this.extent.set(b.max.x - b.min.x, b.max.y - b.min.y);
     this.radius = Math.max(this.extent.length() / 2, 1);
+    if (this.promotion && this.camera) this.unbindPromotion = bindTilePromotion(this.renderer.domElement, this, this.camera);
     this.updateBounds();
   }
 
@@ -203,6 +207,9 @@ export class TileField {
   }
 
   clear() {
+    this.unbindPromotion?.();
+    this.unbindPromotion = null;
+    this.promotion?.clear();
     for (const proxy of [...this.shadowGroup.children]) {
       proxy.material.dispose();
       proxy.dispose?.();
@@ -224,6 +231,7 @@ export class TileField {
   }
 
   reset() {
+    this.promotion?.clear();
     this.sim?.reset();
     this.hasDrift = false;
     if (this.sim) this.updateBounds();
