@@ -30,7 +30,7 @@ export function collectTileRest(compiled, { frame = 'all' } = {}) {
     count: n,
     x: new Float32Array(n), z: new Float32Array(n), yaw: new Float32Array(n), radius: new Float32Array(n),
     y0: new Float32Array(n), thickness: new Float32Array(n), runId: new Int32Array(n), flags: new Uint8Array(n),
-    g: new Int32Array(n), f: new Int32Array(n),
+    g: new Int32Array(n), f: new Array(n),
   };
   tiles.forEach((t, i) => { for (const k of Object.keys(t)) rest[k][i] = t[k]; });
 
@@ -44,7 +44,7 @@ export function collectTileRest(compiled, { frame = 'all' } = {}) {
   for (let i = 0; i < n; i++) {
     const bottom = rest.y0[i] - rest.thickness[i] / 2;
     base = Math.min(base, bottom);
-    const key = `${rest.f[i]}:${rest.g[i]}:${bottom}`;
+    const key = `${typeof rest.f[i]}:${rest.f[i]}:${rest.g[i]}:${bottom}`;
     const ordinal = members.get(key) ?? 0;
     members.set(key, ordinal + 1);
     rest.surfaceOffset[i] = bottom + ordinal * 0.0001;
@@ -69,7 +69,7 @@ function collectInstances(record, layers, tiles) {
     e.setFromQuaternion(q, 'YXZ');
     const tile = layer.tiles[mesh.userData.instanceSources[i].tileIndex];
     ids[i] = tiles.length;
-    tiles.push({ x: p.x, z: p.z, yaw: e.y, radius: s.x / 2, y0: p.y, thickness: s.y, runId: -1, flags: 0, g: tile.g ?? -1, f: tile.f ?? -1 });
+    tiles.push({ x: p.x, z: p.z, yaw: e.y, radius: s.x / 2, y0: p.y, thickness: s.y, runId: -1, flags: 0, g: tile.g ?? -1, f: record.frameId ?? null });
   }
   const material = mesh.material;
   return {
@@ -108,7 +108,7 @@ function collectRoad(record, layers, space, tiles, runs) {
         x: (tile.x - space.origin.x) * space.unit, z: (tile.y - space.origin.y) * space.unit, yaw: 0,
         // half of the stroke width at this tile, the same formula as Tilecraft's roadWidth
         radius: 0.25 * (tile.s ?? 1) * (layer.gridSize ?? 1) * (layer.scale ?? 1) * space.unit,
-        y0: runY, thickness, runId, flags: FLAG_POLYLINE, g: tile.g ?? -1, f: tile.f ?? -1,
+        y0: runY, thickness, runId, flags: FLAG_POLYLINE, g: tile.g ?? -1, f: record.frameId ?? null,
       });
     }
     // LCR's source owner identifies the generating segment, which can be metres

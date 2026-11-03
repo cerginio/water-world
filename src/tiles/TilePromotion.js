@@ -54,6 +54,7 @@ export class TilePromotion {
     this.pickGroup.matrixAutoUpdate = false;
     this.pickGroup.matrix.copy(f.group.matrixWorld);
     this.pickGroup.matrixWorldNeedsUpdate = true;
+    this.pickGroup.children.forEach((proxy, i) => proxy.position.copy(f.group.children[i].position));
     // Clone: never mutate the real camera's view/projection, including on failure.
     camera.updateWorldMatrix(true, false);
     const view = camera.clone();

@@ -8,7 +8,8 @@ export function promotionMembers(rest, id) {
   if (t.flags[id] & 1) return [...rest.runs[t.runId[id]].tiles];
   if (t.g[id] < 0) return [id];
   return Array.from({ length: t.count }, (_, i) => i)
-    .filter(i => !(t.flags[i] & 1) && t.g[i] === t.g[id] && t.f[i] === t.f[id]);
+    .filter(i => !(t.flags[i] & 1) && t.g[i] === t.g[id]
+      && (t.frameIndex ? t.frameIndex[i] === t.frameIndex[id] : t.f[i] === t.f[id]));
 }
 
 // Same Rz * Rx and render envelope as TileMaterial (not a new physics model).
@@ -52,6 +53,10 @@ export function makePromotionDescriptor(field, ids, state0, state1) {
   const rest = field.rest, t = rest.tiles, selected = new Set(ids);
   const poses = new Map(ids.map(id => [id, tileSnapshotPose(t, id, state0, state1,
     field.sim.uniforms.uTileMotionLimit.value)]));
+  for (const [id, pose] of poses) {
+    const frame = field.frameRegistry?.entries[t.frameIndex?.[id]];
+    if (frame) pose.center.add(frame.offset);
+  }
   const object = new THREE.Group();
   object.name = 'promoted-tile-group';
   const bounds = new THREE.Box3();

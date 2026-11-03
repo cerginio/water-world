@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { compileTileSource, fetchTileSource } from './tilecraftLoader.js';
 import { collectTileRest } from './tileRest.js';
 import { TileSim } from './TileSim.js';
+import { TileFrames } from './TileFrames.js';
 import { TilePromotion, bindTilePromotion } from './TilePromotion.js';
 import { patchTileMaterial } from './TileMaterial.js';
 import { tileMotionLimit, tileBounds, applyTileBounds, fieldShadowBody } from './tileBounds.js';
@@ -35,6 +36,8 @@ export class TileField {
     this.compiled = null;
     this.rest = null;
     this.frames = [];
+    this.frameRegistry = new TileFrames();
+    this.frameMatrix = new THREE.Matrix4();
     this.extent = new THREE.Vector2(85, 30);   // rest bounds in metres; story-sized until a model is loaded
     this.radius = 45;      // circumscribed circle: the open-water test in place()
     this.center = new THREE.Vector3();
@@ -50,6 +53,8 @@ export class TileField {
     const epoch = ++this.epoch;
     this.source = source instanceof File ? source.name : source;
     this.clear();
+    this.frameRegistry = new TileFrames();
+    this.frames = [];
     this.payload = null;
     if (source === 'none') { this.status = '—'; return; }
     this.status = 'loading…';
@@ -58,7 +63,8 @@ export class TileField {
       if (epoch !== this.epoch) return;
       this.payload = payload;
       this.frames = (payload.model.frames ?? []).map((f) => f.id);
-      this.params.frame = this.frames.find((id) => String(id) === String(this.params.frame)) ?? 'all';
+      const matches = this.frames.filter(id => String(id) === String(this.params.frame));
+      if (!this.frames.includes(this.params.frame)) this.params.frame = matches.length === 1 ? matches[0] : 'all';
       await this.rebuild(epoch);
     } catch (e) {
       if (epoch !== this.epoch) return;
@@ -74,11 +80,19 @@ export class TileField {
     const compiled = await compileTileSource(this.payload, { metersPerSourceUnit: this.params.metersPerSourceUnit });
     if (epoch !== this.epoch) { compiled.scope.dispose(); return; }
     const t0 = performance.now();
-    const rest = collectTileRest(compiled, { frame: this.params.frame });
+    // Build identity and pivots from the WHOLE source, even with a frame filter.
+    this.group.updateWorldMatrix(true, false);
+    const all = collectTileRest(compiled);
+    this.frameRegistry.rebuild(all, this.group.matrixWorld);
+    const rest = this.params.frame === 'all' ? all : collectTileRest(compiled, { frame: this.params.frame });
+    if (rest !== all) for (const part of [...all.polygon, ...all.polyline]) part.geometry.dispose();
+    this.frameRegistry.assign(rest);
     compiled.scope.dispose();   // the Tilecraft meshes are spent; ours are copies
     this.compiled = { compileMs: compiled.compileMs, restMs: performance.now() - t0, sameThree: compiled.sameThree, space: compiled.space };
     this.rest = rest;
     this.build(rest);
+    this.extent.set(all.bounds.max.x - all.bounds.min.x, all.bounds.max.y - all.bounds.min.y);
+    this.radius = Math.max(this.extent.length() / 2, 1);
     this.status = this.describe();
   }
 
@@ -90,7 +104,7 @@ export class TileField {
 
   build(rest) {
     if (!rest.tiles.count) return;
-    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs, this.profile);
+    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs, this.profile, this.frameRegistry.entries);
     this.sim.uniforms.uTileMotionLimit = { value: tileMotionLimit(this.params.driftRadius) };
     for (const part of rest.polygon) {
       part.geometry.setAttribute('aSurfaceOffset', new THREE.InstancedBufferAttribute(
@@ -121,6 +135,7 @@ export class TileField {
     this.radius = Math.max(this.extent.length() / 2, 1);
     if (this.promotion && this.camera) this.unbindPromotion = bindTilePromotion(this.renderer.domElement, this, this.camera);
     this.updateBounds();
+    this.syncFrames(true);
   }
 
   prepareMesh(mesh, part) {
@@ -142,7 +157,7 @@ export class TileField {
       for (let i = 0; i < part.aOffset.length; i += 3) maxOffset = Math.max(maxOffset, Math.hypot(part.aOffset[i], part.aOffset[i + 1], part.aOffset[i + 2]));
     }
     for (const v of mesh.geometry.getAttribute('aSurfaceOffset').array) surfaceOffset = Math.max(surfaceOffset, Math.abs(v));
-    const entry = { mesh, restSphere, maxOffset, surfaceOffset };
+    const entry = { mesh, restSphere, maxOffset, surfaceOffset, frameIndex: part.frameIndex };
     if (this.sim.profile.fieldShadow) {
       // Shared buffers + uniform objects; only the depth material is owned here.
       const proxy = mesh.clone();
@@ -203,7 +218,40 @@ export class TileField {
     }
     this.group.position.copy(this.center);
     this.group.rotation.y = this.params.fieldYaw * Math.PI / 180;
+    this.syncFrames();
     return this.center;
+  }
+
+  syncFrames(force = false) {
+    this.group.updateWorldMatrix(true, false);
+    if (!force && this.frameMatrix.equals(this.group.matrixWorld)) return;
+    this.frameMatrix.copy(this.group.matrixWorld);
+    this.frameRegistry.sync(this.group.matrixWorld);
+    for (const e of this.boundsEntries) {
+      const frame = this.frameRegistry.entries[e.frameIndex];
+      if (!frame) continue;
+      e.mesh.position.copy(frame.offset);
+      if (e.proxy) e.proxy.position.copy(frame.offset);
+    }
+    this.sim?.syncFrames();
+  }
+
+  moveFrame(frameId, x, z) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error('Frame position must be finite');
+    this.syncFrames();
+    const frame = this.frameRegistry.get(frameId);
+    frame.world.set(x, 0, z);
+    frame.mode = 'placed';
+    this.syncFrames(true);
+    return frame;
+  }
+
+  releaseFrame(frameId) {
+    this.syncFrames();
+    const frame = this.frameRegistry.get(frameId);
+    frame.mode = 'inherited';
+    this.syncFrames(true);
+    return frame;
   }
 
   clear() {
@@ -232,6 +280,9 @@ export class TileField {
 
   reset() {
     this.promotion?.clear();
+    this.group.updateWorldMatrix(true, false);
+    this.frameRegistry.reset(this.group.matrixWorld);
+    this.syncFrames(true);
     this.sim?.reset();
     this.hasDrift = false;
     if (this.sim) this.updateBounds();
@@ -245,7 +296,7 @@ export class TileField {
   update(dt = 1 / 60, timer) {
     if (!this.sim) return;
     const start = performance.now();
-    this.group.updateWorldMatrix(true, false);
+    this.syncFrames();
     this.updateBounds();
     this.sim.update(this.group.matrixWorld, dt, this.params, timer);
     this.cpuMs += (performance.now() - start - this.cpuMs) * 0.05;

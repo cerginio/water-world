@@ -6,11 +6,22 @@ const WIDTH = 512;
 // Shared by polygon tiles and run centroids. Positions/velocities use field axes.
 const HORIZONTAL = /* glsl */`
 uniform bool uDrift;
+#ifdef TILE_FRAME_TEXTURE
+uniform highp sampler2D uFrames;
+vec4 framePose(int id) { return texelFetch(uFrames, ivec2(0, id), 0); }
+vec2 framePivot(int id) { return texelFetch(uFrames, ivec2(1, id), 0).xy; }
+#else
+uniform vec4 uFramePose[TILE_FRAME_COUNT];
+uniform vec2 uFramePivot[TILE_FRAME_COUNT];
+vec4 framePose(int id) { return uFramePose[id]; }
+vec2 framePivot(int id) { return uFramePivot[id]; }
+#endif
+bool frameDrift(vec4 pose) { return uDrift && pose.z < 0.5; }
 uniform float uWindage, uDriftRadius;
 uniform vec2 uWindVelocity;
-vec2 horizontalAcceleration(vec2 p, vec2 v, vec2 rest, vec2 waterVelocity) {
+vec2 horizontalAcceleration(vec2 p, vec2 v, vec2 rest, vec2 waterVelocity, bool drift) {
   float frequency = 6.283185307 / uAnchorPeriod;
-  if (!uDrift) return -frequency * frequency * p - 2.0 * frequency * v;
+  if (!drift) return -frequency * frequency * p - 2.0 * frequency * v;
   mat2 worldXZ = mat2(uFieldMatrix[0].xz, uFieldMatrix[2].xz);
   vec2 a = uDrag * (waterVelocity + transpose(worldXZ) * uWindVelocity * uWindage - v);
   vec2 fromCenter = rest + p;
@@ -51,9 +62,12 @@ void main() {
   vec4 s2 = texelFetch(uState2, uv, 0), s3 = texelFetch(uState3, uv, 0);
   if (bad(s0) || bad(s1) || bad(s2) || bad(s3)) { rest(); return; }
   vec4 r = texelFetch(uRest0, uv, 0), r1 = texelFetch(uRest1, uv, 0);
+  int frameId = int(r1.w) >> 2;
+  vec4 pose = framePose(frameId);
+  bool drift = frameDrift(pose);
   // The field is a rigid yaw transform. Dynamics and orbital offsets use FIELD axes.
   mat2 worldXZ = mat2(uFieldMatrix[0].xz, uFieldMatrix[2].xz);
-  vec2 q = (uFieldMatrix * vec4(r.x + s0.z, 0.0, r.y + s0.w, 1.0)).xz;
+  vec2 q = (uFieldMatrix * vec4(r.x + s0.z + pose.x, 0.0, r.y + s0.w + pose.y, 1.0)).xz;
   vec3 disp = waterAt(q, vec3(0.0));
   vec2 orbit = transpose(worldXZ) * disp.xz * uOrbit;
   vec3 waterVelocity = vec3(0.0);
@@ -85,11 +99,11 @@ void main() {
   vec2 localWaterVelocity = transpose(worldXZ) * waterVelocity.xz;
   if (s3.w > 0.5 && !polyline) {
     if (s3.z < 0.5) spring -= transpose(worldXZ) * s2.zw * s3.y;
-    if (uDrift && s3.z < 0.5) {
+    if (drift && s3.z < 0.5) {
       // Preserve the previous total position and include its orbital velocity.
       spring = s0.zw;
       velocity += localWaterVelocity * s3.y;
-    } else if (!uDrift && s3.z > 0.5) {
+    } else if (!drift && s3.z > 0.5) {
       spring -= orbit;
       velocity -= localWaterVelocity * uOrbit;
     }
@@ -135,7 +149,7 @@ void main() {
       s1.zw -= normal * max(0.0, dot(s1.zw, normal));
     }
     if (!polyline) {
-      velocity += horizontalAcceleration(spring, velocity, r.xy, localWaterVelocity) * dt;
+      velocity += horizontalAcceleration(spring, velocity, r.xy - framePivot(frameId), localWaterVelocity, drift) * dt;
       spring += velocity * dt;
     }
   }
@@ -144,12 +158,12 @@ void main() {
     vec4 run = texelFetch(uRun, ivec2(runId % 512, runId / 512), 0);
     spring = run.xy; velocity = run.zw;
   }
-  state0 = vec4(s0.xy, spring + ((!uDrift || polyline) ? orbit : vec2(0.0)));
+  state0 = vec4(s0.xy, spring + ((!drift || polyline) ? orbit : vec2(0.0)));
   state1 = s1;
   state2 = vec4(velocity, disp.xz);
   // y remembers orbital gain; z remembers the velocity convention (mode).
   // w is per-tile history validity, also cleared by the NaN recovery path.
-  state3 = vec4(disp.y, uOrbit, uDrift ? 1.0 : 0.0, 1.0);
+  state3 = vec4(disp.y, uOrbit, drift ? 1.0 : 0.0, 1.0);
   if (bad(state0) || bad(state1) || bad(state2) || bad(state3)) rest();
 }`;
 
@@ -173,16 +187,20 @@ void main() {
   if (uReset || uv.y * 512 + uv.x >= uRunCount) return;
   vec4 s = texelFetch(uRun, uv, 0), prev = texelFetch(uRunHistory, uv, 0);
   if (bad(s) || bad(prev)) return;
-  vec2 r = texelFetch(uRunRest, uv, 0).xy;
+  vec4 runRest = texelFetch(uRunRest, uv, 0);
+  vec2 r = runRest.xy;
+  int frameId = int(runRest.z);
+  vec4 pose = framePose(frameId);
+  bool drift = frameDrift(pose);
   mat2 worldXZ = mat2(uFieldMatrix[0].xz, uFieldMatrix[2].xz);
-  vec2 q = r + s.xy + transpose(worldXZ) * prev.xy * prev.z;
+  vec2 q = r + pose.xy + s.xy + transpose(worldXZ) * prev.xy * prev.z;
   vec2 disp = waterAt((uFieldMatrix * vec4(q.x, 0.0, q.y, 1.0)).xz, vec3(0.0)).xz;
   vec2 waterVelocity = prev.w > 0.5 ? transpose(worldXZ) * clamp((disp - prev.xy) / uSampleDt, vec2(-3.0), vec2(3.0)) : vec2(0.0);
   int steps = min(TILE_MAX_STEPS, max(1, int(ceil(uDt * 240.0))));
   float dt = uDt / float(steps);
   for (int step = 0; step < TILE_MAX_STEPS; step++) {
     if (step >= steps) break;
-    s.zw += horizontalAcceleration(s.xy, s.zw, r, waterVelocity) * dt;
+    s.zw += horizontalAcceleration(s.xy, s.zw, r - framePivot(frameId), waterVelocity, drift) * dt;
     s.xy += s.zw * dt;
   }
   if (bad(s)) return;
@@ -198,16 +216,29 @@ function restTexture(data, height) {
 
 // Run-centroid pass then tile MRT; no CPU readback or per-tile work after load.
 export class TileSim {
-  constructor(renderer, surface, tiles, runs = [], profile = 'desktop') {
+  constructor(renderer, surface, tiles, runs = [], profile = 'desktop', frames = []) {
     this.profile = TILE_PROFILES[profile];
     if (!this.profile) throw new Error(`Unknown tile profile: ${profile}`);
     this.renderer = renderer;
+    // Two vectors per frame; reserve 160 vectors for water, dynamics and matrices.
+    // WebGL2 guarantees 224. Large sources use two RGBA texels per frame instead.
+    const gl = renderer.getContext?.();
+    this.frameUniformLimit = Math.max(1, Math.floor(((gl?.getParameter?.(gl.MAX_FRAGMENT_UNIFORM_VECTORS) ?? 224) - 160) / 2));
+    this.frames = frames;
+    const count = Math.max(1, frames.length);
+    const useTexture = count > this.frameUniformLimit;
+    this.frameTexture = useTexture ? new THREE.DataTexture(new Float32Array(count * 8), 2, count, THREE.RGBAFormat, THREE.FloatType) : null;
+    this.frameUniforms = useTexture ? { uFrames: { value: this.frameTexture } } : {
+      uFramePose: { value: Array.from({ length: count }, (_, i) => frames[i]?.pose ?? new THREE.Vector4()) },
+      uFramePivot: { value: Array.from({ length: count }, (_, i) => new THREE.Vector2(frames[i]?.pivot.x ?? 0, frames[i]?.pivot.z ?? 0)) },
+    };
+    this.syncFrames();
     this.surface = surface;
     this.height = Math.max(1, Math.ceil(tiles.count / WIDTH));
     const r0 = new Float32Array(WIDTH * this.height * 4), r1 = new Float32Array(r0.length);
     for (let i = 0; i < tiles.count; i++) {
       r0.set([tiles.x[i], tiles.z[i], tiles.yaw[i], tiles.radius[i]], i * 4);
-      r1.set([tiles.y0[i], tiles.thickness[i], tiles.runId[i], tiles.flags[i]], i * 4);
+      r1.set([tiles.y0[i], tiles.thickness[i], tiles.runId[i], tiles.flags[i] | ((tiles.frameIndex?.[i] ?? 0) << 2)], i * 4);
     }
     this.rest0 = restTexture(r0, this.height);
     this.rest1 = restTexture(r1, this.height);
@@ -222,7 +253,7 @@ export class TileSim {
     runs.forEach((run, i) => {
       let x = 0, z = 0;
       for (const id of run.tiles) { x += tiles.x[id]; z += tiles.z[id]; }
-      runRest.set([x / run.tiles.length, z / run.tiles.length, 0, 0], i * 4);
+      runRest.set([x / run.tiles.length, z / run.tiles.length, tiles.frameIndex?.[run.tiles[0]] ?? 0, 0], i * 4);
     });
     this.runRest = restTexture(runRest, this.runHeight);
     this.runTargets = runs.length ? Array.from({ length: 2 }, () => new THREE.WebGLRenderTarget(WIDTH, this.runHeight, {
@@ -236,7 +267,7 @@ export class TileSim {
       uRun: { value: this.runTarget?.textures[0] ?? this.runRest },
     };
     this.quad = new FullscreenQuad(rawPass(FRAG, {
-      ...surface.uniforms, ...this.uniforms,
+      ...surface.uniforms, ...this.uniforms, ...this.frameUniforms,
       uFieldMatrix: { value: new THREE.Matrix4() }, uTileCount: { value: tiles.count },
       uDt: { value: 0 }, uSampleDt: { value: 1 / 60 }, uReset: { value: false },
       uDensity: { value: 500 }, uBuoyancy: { value: 1 }, uDrag: { value: 1.6 },
@@ -250,9 +281,24 @@ export class TileSim {
       uRunHistory: { value: this.runTarget.textures[1] },
     })) : null;
     for (const quad of [this.quad, this.runQuad]) if (quad) {
-      quad.material.defines = { TILE_MAX_STEPS: this.profile.maxSteps, TILE_WATER_SAMPLES: this.profile.waterSamples };
+      quad.material.defines = { TILE_MAX_STEPS: this.profile.maxSteps, TILE_WATER_SAMPLES: this.profile.waterSamples,
+        TILE_FRAME_COUNT: count, ...(useTexture ? { TILE_FRAME_TEXTURE: 1 } : {}) };
     }
     this.reset();
+  }
+
+  syncFrames() {
+    if (!this.frameTexture) return;
+    const data = this.frameTexture.image.data;
+    let changed = this.frameTexture.version === 0;
+    this.frames.forEach((frame, i) => {
+      const values = [frame.pose.x, frame.pose.y, frame.pose.z, 0, frame.pivot.x, frame.pivot.z, 0, 0];
+      values.forEach((value, k) => {
+        const rounded = Math.fround(value);
+        if (data[i * 8 + k] !== rounded) { data[i * 8 + k] = rounded; changed = true; }
+      });
+    });
+    if (changed) this.frameTexture.needsUpdate = true;
   }
 
   get target() { return this.targets[this.current]; }
@@ -303,6 +349,7 @@ export class TileSim {
   }
 
   dispose() {
+    this.frameTexture?.dispose();
     this.rest0.dispose(); this.rest1.dispose(); this.targets.forEach((t) => t.dispose()); this.quad.material.dispose();
     this.runRest.dispose(); this.runTargets.forEach((t) => t.dispose()); this.runQuad?.material.dispose();
   }

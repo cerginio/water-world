@@ -1,20 +1,37 @@
 # Handoff: frame-drag — перенесення фреймів по воді й рельєфу
 
-Стан на 2026-11-02. Гілка `master`. Спека v0.2 закомічена (`684b502`);
-реалізацію не почато.
+Стан на 2026-11-03. Гілка `master`. FD1 прийнято власником через
+`handoff:next`; код, перевірки й QA закриваються комітом цієї фази.
+Tile-floaters T0–T5 закриті (актуальний стан — у базовому HANDOFF).
 
 Спека: [FRAME-DRAG-SPEC.md](../../FRAME-DRAG-SPEC.md) (далі — «спека»). Базова тема:
 tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — її код
 (`src/tiles/`) ця тема розширює. Tilecraft лише читається (spec.md §1).
 
-> **Далі:** T4 вже прийнято власником; за новою прямою вказівкою зараз реалізовано T5 tile-floaters (подвійний клік), передано на рев’ю без закриття фази. FD1 ще не реалізовано; одиночний клік/drag лишаються за цією темою.
+> **Далі:** FD2 — picking і drag на воді. Спиратися на `TileFrames`, `moveFrame` / `releaseFrame` та спільну pose polygon/run з FD1. Заморожування drift-конфігурації, пригашення орбіти та арбітраж із dblclick T5 ще не реалізовані.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`; правило
 стенду — `AGENTS.md` → «Локальний стенд».
 
 ## Що зроблено і працює
 
-Нічого в цій темі. Основа з tile-floaters, на яку спирається FD1:
+FD1 прийнято 2026-11-03. Ручні сценарії: [QA.md](QA.md), QA-FD1-1…8.
+
+| файл FD1 | контракт |
+|---|---|
+| `src/tiles/TileFrames.js` | типізована ідентичність id (`2` ≠ `"2"`), синтетичний `UNFRAMED`, щільний frameIndex; world pivot, derived offset, placed/inherited |
+| `src/tiles/TileField.js` | `frameRegistry.get(frameId)`, `moveFrame(frameId,x,z)`, `releaseFrame(frameId)`; mesh/proxy position, повний reset, pose через filter/scale/yaw/place |
+| `src/tiles/TileSim.js` | frameIndex у `rest1.w >> 2` (bit 0 — polyline, bit 1 — hidden T5); pose у water queries тайлів і run, per-frame mode через state3.z, driftRadius від pivot |
+| `src/tiles/TilePromotion.js`, `tilePromotionGeometry.js` | picking-проксі й CPU snapshot враховують трансляцію фрейму; групи розрізняються за frameIndex |
+| `scripts/test-frame-pose.mjs`, `scripts/probe-frame-pose.mjs` | offline-ідентичність/координати та WebGL/GUI, uniform boundary і texture fallback |
+
+Важливо для FD2: `moveFrame` зараз лише вмикає локальний anchored біля нової pose.
+Він не фіксує рознесену drift-конфігурацію й не заморожує горизонтальні стани;
+це робота FD2 за спекою §5. Перебудова filter/scale зберігає pose за id, але
+пересоздає TileSim і обнуляє його локальні стани. Зміна source обнуляє реєстр.
+URL не зберігає pose; reload відновлює layout.
+
+Основа з tile-floaters:
 
 | файл | що вже є |
 |---|---|
@@ -27,10 +44,45 @@ tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — ї�
 
 ## Головні виміряні факти
 
-Поки немає. Відомо з коду на 2026-11-02 (не виміряно, перевірити в FD1/FD3):
+Перевірено в FD1 на desktop WebGL 2026-11-03 (це не mobile/hardware-budget PASS):
 
-- TileSim за оцінкою використовує 12 fragment samplers (спека §9).
-- Hybrid: 46 861 тайл, 8 фреймів, max довжина polyline-тайла 0.332 м (HANDOFF tile-floaters).
+- Guard: `npm run build`, `node scripts/probe-tiles.mjs`,
+  `node scripts/probe-tiles-drift.mjs` — PASS. Offline FD1/T4/T5 — PASS;
+  `node scripts/probe-frame-pose.mjs` — PASS, `errors=[]`.
+- Hybrid: 46 861 тайл; перенос третього фрейму (id `4`) рухає 2 його частини,
+  зміна чужих мешів / GPU-станів у момент виклику — 0. Instance-буфери не переписані.
+- World pivot після fieldYaw=45, filter, масштабу 0.06 і повторного place —
+  без зміни; при place +40 м inherited pivot зміщується на 40 м, placed — на 0.
+- WaterQuery після переносу й yaw: похибка тайлів ≤0.000000060 м,
+  run ≤0.000000004 м. Placed XZ на flat water після 10 с — 0,
+  inherited X — 4.68957 м; mode transitions: XZ <1e-8 м, швидкість <1.2e-7 м/с.
+- Drift guard: 131.48 с / 6 510 кадрів, nonfinite=0; 218 196 стиків,
+  maxSeam=0; після anchored recovery anchor error=0.00000696 м.
+- **Уточнення sampler-бюджету спеки §9:** linked tile pass має **13**, а не 12
+  sampler-ів; із frame texture — 14. Run pass — 9 / 10. TerrainContact додасть
+  ще один: очікувано 14 / 15, повторно виміряти у FD3/FD5.
+- MAX_FRAGMENT_UNIFORM_VECTORS=1024. `uFramePose` + `uFramePivot` займають по
+  2 вектори на фрейм; резерв інших uniform-ів — 160, threshold=432.
+  Перевірені 2 і 432 фрейми в uniform-шляху (на межі консервативно 917/1024
+  активних векторів), 433 — у texture fallback (2 RGBA texels/frame).
+  Формула threshold у TileSim залежить від реального GPU limit.
+- Bounds лишаються локальними sphere з T4; `mesh.matrixWorld` додає pose.
+  Shadow proxy отримує ту саму mesh.position; fieldShadowBody враховує її.
+  Мобільний профіль як і раніше без field shadow. Візуальні контакти/тіні на суші — FD5.
+- **Спростовано:** падіння старої `probe-tiles.mjs` на first vy — не регресія FD1.
+  На коді до FD1: first=1.6372680664 проти очікування 0.04291875; oracle був від
+  старого Archimedes, fixture успадковувала bathymetry і додавала 2 м у кожну
+  з трьох FFT-каскад. Тепер незалежний flat/deep fixture з сумарним step 2 м і
+  аналітичним damped-step oracle: 0.7509651184 проти 0.7509650353 м/с.
+
+Команди browser-проб (стенд уже працює):
+
+```powershell
+$env:PLAYWRIGHT_MODULE = 'D:/work/js-games/ua-dream/tilecraft/node_modules/playwright/index.mjs'
+node scripts/probe-tiles.mjs
+node scripts/probe-tiles-drift.mjs
+node scripts/probe-frame-pose.mjs
+```
 
 ## НЕЗАКРИТЕ — почни звідси
 
@@ -39,7 +91,7 @@ tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — ї�
 (dev-сервер має працювати); `?tiles=none` — без picking pass, контактних ресурсів
 і слухачів (спека §9), бенчмарк шоту без змін. `INVARIANTS.md` у репозиторії немає.
 
-1. **FD1 — реєстр фреймів і pose** (спека §3, §5, §6, §10; крок 1 §12).
+~~1. **FD1 — реєстр фреймів і pose** (спека §3, §5, §6, §10; крок 1 §12).~~ — ЗАКРИТО власником через `handoff:next` 2026-11-03.
    Контракт: `frameId → frameIndex` з синтетичним фреймом для тайлів без id;
    pose `(x,z)` у світі, похідна трансляція в осях поля → `mesh.position` і
    `uniform vec4 uFramePose[N]`; frameIndex у бітах `rest1.w`; per-frame режим
@@ -110,8 +162,8 @@ tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — ї�
   лишається за вибором/перенесенням фрейму; промоція групи в CPU-тіло (T5) переходить
   на **подвійний клік**, який власник явно погодив;
   T5 не перехоплює click/pointerdown. FD2 має не починати drag на другому натисканні подвійного кліку; після справжнього drag споживати dblclick через preventDefault() або canPromote gate. Наявний guard T5 відкидає dblclick протягом 600 мс після руху >5 CSS px; це не готовий FD2-арбітр.
-- **Перетин FD5 з T4.** Що з тіней/відбиття/bounds T4 уже враховує pose фрейму, а що
-  доведеться змінити, — видно лише після закриття T4.
-- **Бюджет uniform-векторів для `uFramePose[N]`** у фрагментному шейдері TileSim поруч
-  з uniform-ами води: виміряти в FD1; при нестачі — fallback-текстура (спека §6).
+- **Перетин FD5 з T4.** T4 закрито. FD1 синхронізує pose мешів/тіньових проксі
+  та bounds через matrixWorld; перевірка контактів і візуальної тіні на суші ще FD5.
+- **Uniform і sampler-бюджет виміряно в FD1:** див. факти вище. Після додавання
+  TerrainContact повторно перевірити linked samplers; вихідна оцінка 12 була занижена.
 - **Вимірювані пороги picking** (p95 ≤8 / ≤20 мс) — попередні, уточнити в FD2.
