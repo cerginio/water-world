@@ -16,3 +16,4 @@
 | тема | HANDOFF.md | код | інваріанти |
 |---|---|---|---|
 | tile-floaters | [HANDOFF.md](HANDOFF.md) | `src/tiles/`, `vite.config.js`, `src/main.js` | — |
+| frame-drag | [docs/frame-drag/HANDOFF.md](docs/frame-drag/HANDOFF.md) | `src/tiles/`, `src/scene/`, `src/main.js` | — |
