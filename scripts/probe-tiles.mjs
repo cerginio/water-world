@@ -132,6 +132,9 @@ try {
     const zero = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
     zero.needsUpdate = true;
     const uniforms = { ...app.surface.uniforms };
+    const deep = new THREE.DataTexture(new Float32Array([-60, 1e4, 0, 0]), 1, 1, THREE.RGBAFormat, THREE.FloatType);
+    deep.needsUpdate = true;
+    uniforms.uShore = { value: deep }; // analytic fixture must not inherit real depth attenuation
     for (const name of ['uDisp0', 'uDisp1', 'uDisp2']) uniforms[name] = { value: zero };
     uniforms.uShoreWave = { value: new THREE.Vector4() };
     uniforms.uImpact = { value: Array.from({ length: 8 }, () => new THREE.Vector4(0,0,1e9,0)) };
@@ -177,10 +180,14 @@ try {
       sim.reset();
       const resetMax = Math.max(...sim.targets.flatMap((t) => [0,1,2,3].flatMap((i) => read(i,t))).map(Math.abs));
       // A first sample with non-zero constant displacement has zero water velocity.
-      zero.image.data.set([0, 2, 0, 0]); zero.needsUpdate = true;
+      zero.image.data.set([0, 2 / 3, 0, 0]); zero.needsUpdate = true; // three cascades sum to 2 m
       sim.update(matrix, 1/240, p);
       const first = read(0)[1];
-      const expectedFirstVy = (1025/500-1)*9.81/240;
+      // Step response of the critically damped surface follower (T3).
+      // The old Archimedes-acceleration oracle predates that integrator.
+      const frequency = 12 / (1 + 0.15 * p.drag);
+      const equilibrium = 2 + tiles.thickness[0] * (0.5 - p.density / (1025 * p.buoyancy));
+      const expectedFirstVy = equilibrium * frequency ** 2 / 240 * Math.exp(-frequency / 240);
       // Poison one input attachment, recover to rest, then restart with fresh history.
       const poisonedData = new Float32Array(512*4).fill(NaN);
       poisonedData[0] = Infinity;
@@ -193,7 +200,7 @@ try {
       sim.update(matrix, 1/60, p);
       const recoveredFinite = [0,1,2,3].flatMap((i) => read(i)).every(Number.isFinite);
       return { dense, light, slowFrame, boosted, springPeriods, resetMax, first, expectedFirstVy, recoveryMax, recoveredFinite };
-    } finally { sim.dispose(); zero.dispose(); }
+    } finally { sim.dispose(); zero.dispose(); deep.dispose(); }
   });
   for (const result of [report.physics.dense, report.physics.light, report.physics.slowFrame, report.physics.boosted]) {
     for (const tile of result) {
