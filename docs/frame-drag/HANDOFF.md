@@ -1,28 +1,48 @@
 # Handoff: frame-drag — перенесення фреймів по воді й рельєфу
 
-Стан на 2026-11-03. Гілка `master`. FD1 закомічено як `6f54eab`.
-FD2 прийнято власником через `handoff:next`; код, перевірки й QA закриваються
-комітом цієї фази. Бюджети picking / CPU лишаються відкритими (див. нижче).
-Tile-floaters T0–T5 закриті (актуальний стан — у базовому HANDOFF).
+Стан на 2026-11-04. Гілка `master`. FD1 — `6f54eab`, FD2 — `18ae7cc`.
+FD3 прийнято власником через `handoff:next` 2026-11-04; реалізація, перевірки
+та документи входять у коміт закриття FD3. Бюджети picking / CPU лишаються
+відкритими для FD5. Tile-floaters T0–T5 закриті (базовий HANDOFF).
 
 Спека: [FRAME-DRAG-SPEC.md](../../FRAME-DRAG-SPEC.md) (далі — «спека»). Базова тема:
 tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — її код
 (`src/tiles/`) ця тема розширює. Tilecraft лише читається (spec.md §1).
 
-> **Далі:** FD3 — контакт із землею для polygon (спека §7–§8). Додати `TerrainContact` за вершинами видимого island mesh і точний terrain-ray у `SurfaceCursor` (`src/tiles/TileInteraction.js`); опору й нахил рахувати в `TileSim`, зберігши FD2 hold/drift та спільну деформацію render/ID/контурів. Picking/CPU-бюджети з FD2 не вважати виконаними; повернутися до них у FD5.
+> **Далі:** FD4 — polyline на суші, порядок перекриття та заборона схилів >55° (спека §8). Розширити нижній footprint/contact у `tileRest.js`, `tileContact.js`, `TileSim.js` на polyline, зберігши спільну горизонталь run і шви на плоскому піску. У `TileInteraction.js` перевіряти крутизну по всій зайнятій контактній області, з останньою валідною ціллю й маркером; додати placement rank для opaque polygonOffset / transparent renderOrder. Наявні state1.zw вже зайняті контактом; не повертати туди angular velocity. Picking/CPU-бюджети FD2 лишаються для FD5.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`; правило
 стенду — `AGENTS.md` → «Локальний стенд».
 
 ## Що зроблено і працює
 
-FD1 і FD2 прийнято 2026-11-03. Ручні сценарії: [QA.md](QA.md),
-QA-FD2-1…9 та QA-FD1-1…8. Прийняття FD2 не закриває бюджети продуктивності.
+FD1 і FD2 прийнято 2026-11-03, FD3 — 2026-11-04. Ручні сценарії:
+[QA.md](QA.md), QA-FD3-1…5, QA-FD2-1…9 та QA-FD1-1…8.
+Прийняття FD3 не закриває бюджети продуктивності FD5.
+
+| файл FD3 | контракт |
+|---|---|
+| `src/scene/TerrainContact.js` | 385² Float32 висот без повторного islandHeight між вузлами; CPU + R32F NearestFilter; трикутна інтерполяція/нормаль по діагоналі PlaneGeometry; raycast крокуванням по комірках, включно з невидимим дном |
+| `src/scene/terrain.js`, `src/main.js`, `TileField.js` | передається та сама terrain geometry; контакт створюється лише для непорожнього поля, dispose на clear/rebuild/source=none |
+| `src/tiles/tileRest.js`, `tileContact.js` | convex hull нижньої грані polygon після instance scale/yaw; вершини у вертикальних блоках rest0 без додаткового sampler-а; точний максимум h−bottomPlane за кутами, перетинами ребер сітки та внутрішніми вузлами |
+| `src/tiles/TileSim.js` | polygon: контакт inherited/placed/held, жорсткий floor після остаточних XZ/tilt; latch 2/5 см, blend 200 мс; приглушення orbit/drift/windage/вертикальної швидкості; вода не підтримує тайл над сухою землею |
+| `src/tiles/tileTilt.js`, `TileMaterial.js`, `tilePromotionGeometry.js` | спільний rotation vector / Rodrigues замість Rz·Rx; вода ≤20°, контакт ≤55°; render/ID/контури/shadow proxy/CPU snapshot узгоджені; декоративний offset на опорі обмежується 1 мм |
+| `src/tiles/TileInteraction.js` | SurfaceCursor вибирає ближчий перетин води/землі, terrain-ray враховує висоту захопленої поверхні; water query лишається асинхронною |
+| `src/tiles/tileBounds.js` | render envelope ±256 м замість ±64 м; culling sphere враховує цей самий ліміт |
+| `scripts/test-terrain-contact.mjs`, `scripts/probe-terrain-contact.mjs` | незалежний CPU oracle по реальних трикутниках; GPU висота/нормаль, внутрішній горб, схил, дно, відрив хвилею, pose fallback, реальний DOM drag, берег та unload |
+
+**Новий layout стану:** `state1.xy` — горизонтальний rotation vector;
+`state1.z` — blend опори, `state1.w` — latch. Angular velocity більше не
+зберігається: нахил експоненційно прямує до нормалі. `state3` зберіг FD2 history,
+mode і hold/release; `state3.y` тепер пам'ятає фактичний orbital gain із контактом.
+Перший блок `rest0` лишив стару адресацію 512×sim.height; блок +1 — кількість
+вершин footprint, блоки +2… — vec3 нижніх вершин. У polyline footprint поки немає:
+FD3 свідомо лишає його на водному шляху, контакт polyline — FD4.
 
 | файл FD2 | контракт |
 |---|---|
 | `src/tiles/TilePicker.js` | ID+world-height у float target 13×13, спільний `patchTileMaterial`; sync down, async hover; opacity/vertex alpha <0.1 не дає hit; opaque terrain/props пишуть depth; CSS/DPR/viewport і nearest pixel |
-| `src/tiles/TileInteraction.js` | `TileInteraction` і water-only `SurfaceCursor`; capture-арбітр перед OrbitControls, пороги 5/10 CSS px, tau=50 мс, settling ≤150 мс, другий touch передає обидва pointers камері; системне скасування, контури та T5 gate |
+| `src/tiles/TileInteraction.js` | `TileInteraction` і початковий water-only `SurfaceCursor` (terrain додано у FD3); capture-арбітр перед OrbitControls, пороги 5/10 CSS px, tau=50 мс, settling ≤150 мс, другий touch передає обидва pointers камері; системне скасування, контури та T5 gate |
 | `src/tiles/TileFrames.js`, `TileSim.js` | `held` / `holdAge`; `pose.w`=0 для вільного, 1…2 для hold із fade 125 мс; XZ і швидкості tile/run утримуються без snapshot; висота/нахил активні; negative `state3.w` — 125 мс повернення strip до run після release |
 | `src/tiles/TileField.js`, `src/main.js` | interaction lifecycle на build/clear/reset/place; GUI `selectedFrame`, «Відпустити у дрейф»; release знімає hold; scale/filter/source/yaw/place скасовують жест |
 | `src/water/WaterQuery.js` | owned query має `dispose`; late reads ігноруються, ресурси звільняються після завершення in-flight PBO |
@@ -42,9 +62,8 @@ QA-FD2-1…9 та QA-FD1-1…8. Прийняття FD2 не закриває б�
 локальний anchored біля нової pose. Перебудова filter/scale зберігає pose за id,
 але пересоздає TileSim і обнуляє локальні стани та hold. Зміна source обнуляє
 реєстр. URL не зберігає pose; reload відновлює layout.
-Для FD3: water-cursor утримує висоту реально захопленої поверхні відносно
-асинхронної water query; terrain intersection ще немає. Обмеження цілі зараз
-консервативне — `ISLAND_SIZE` з відступом загального `field.radius`; точна зайнята
+Після FD3 SurfaceCursor використовує точний terrain-ray та асинхронну water
+query, зберігаючи grab offset. Обмеження цілі зараз консервативне — `ISLAND_SIZE` з відступом загального `field.radius`; точна зайнята
 область і крутизна — FD4.
 
 Основа з tile-floaters:
@@ -59,6 +78,38 @@ QA-FD2-1…9 та QA-FD1-1…8. Прийняття FD2 не закриває б�
 | `src/scene/terrainGeometry.js` | меш острова `PlaneGeometry(2400, 384×384)`, крок 6.25 м |
 
 ## Головні виміряні факти
+
+FD3, AMD Radeon 890M / Chromium WebGL, 2026-11-04:
+
+- Guard: build, `probe-tiles.mjs`, `probe-tiles-drift.mjs` — PASS;
+  offline FD1/T4/T5 і terrain — PASS. Drift: 124.812 с / 4620 кадрів,
+  nonfinite=0, 218196 стиків, maxSeam=0; recovery error=0.00000661 м.
+- CPU oracle: 70 перетинів справжніх трикутників; height error≤6.40e-14 м,
+  oblique ray error≤1.43e-14 м. GPU/CPU у 512 точках: height error≤0.000042208 м,
+  normal error≤7.28e-8. Карта має 148225 вузлів.
+- FD3 probe — PASS на desktop і mobile-профілі цього ж GPU: внутрішній пік
+  5 м дає перший центр 5.105000019 м, мінімальний зазор ≥0.0049967 м;
+  схил 30° → 29.99950° / 29.99875°; на опорі horizontal speed=0.
+  Sinking fixture починається над дном −42 м із buoyancy=0.3 й зупиняється
+  центром на −41.89500046 м; floor працює нижче render cutoff −34 м.
+  Підйом води на 0.3 м відриває тайл, blend повертається до 0.
+- Реальний polygon source: 46861 тайл; усі перевірені нижні кути
+  ≥terrain+0.006023 м. Один фрейм на березі одночасно має 2395 wet і 1579 contact
+  (4 у переході; числа залежать від хвилі). DOM drag на суші: 12.00119 м,
+  grab error=0.875 CSS px, camera movement=0; terrain ray error=1.11e-14 м.
+- **Linked tile samplers із контактом: 14 uniform / 15 texture fallback**;
+  новий sampler лише для висот острова. Render/ID/контури без terrain sampler.
+  Frame texture fallback перевірено в mobile-профілі на цьому GPU;
+  реальний телефон і hardware-budget PASS не заявляються.
+- Регресійна FD2 probe з `FD2_SKIP_SOAK=1` — PASS: polygon/polyline усіх 8
+  фреймів, hold/release, camera, touch/pinch, blur, dblclick, unload; `errors=[]`.
+  Це не новий 60-секундний soak. Grab error=1.970 CSS px;
+  warm pick p50/p95=2.70/3.90 мс; CPU interaction=0.20/0.40 мс за 67 кадрами;
+  release jump=0.00000261 м. Ці короткі виміри не закривають бюджети FD5.
+- **Уточнення перевірок FD3:** T4 fixture тепер перевіряє render clamp за
+  `TILE_VERTICAL_LIMIT`, а не старим літералом 64; T5 незалежний quaternion
+  oracle перевіряє rotation vector замість попереднього Rx→Rz. Це зміна
+  контракту фази, а не регресія; історичні факти FD1/FD2 нижче збережені.
 
 FD2, AMD Radeon 890M / Chromium WebGL, 2026-11-03:
 
@@ -123,6 +174,8 @@ node scripts/probe-tiles.mjs
 node scripts/probe-tiles-drift.mjs
 node scripts/probe-frame-pose.mjs
 node scripts/probe-frame-drag.mjs
+node scripts/probe-terrain-contact.mjs
+node scripts/test-terrain-contact.mjs
 ```
 
 ## НЕЗАКРИТЕ — почни звідси
@@ -160,7 +213,7 @@ node scripts/probe-frame-drag.mjs
    - **qa:inspect:** точка захоплення відносно курсора; старт камери; рознесення деталей фрейму.
    - **qa:expected:** фрейм їде, деталь лишається під курсором (≤5 CSS px усталено); рознесений фрейм не збирається; на порожньому місці камера обертається одразу; права кнопка над фреймом — pan; другий палець фіксує фрейм і переходить у камеру без ривка; pick на down p95 ≤8 мс desktop.
 
-3. **FD3 — контакт із землею для polygon** (спека §7, §8 без polyline; крок 3 §12).
+~~3. **FD3 — контакт із землею для polygon** (спека §7, §8 без polyline; крок 3 §12).~~ — ЗАКРИТО власником через `handoff:next` 2026-11-04.
    Контракт: `TerrainContact` з 385² висот вершин (CPU + R32F `NearestFilter`),
    трикутна інтерполяція з діагоналлю `PlaneGeometry`, footprint-максимум;
    SurfaceCursor на суші; нахил від нормалі опори (переробка `tileTilt` /
@@ -207,8 +260,9 @@ node scripts/probe-frame-drag.mjs
   протягом 600 мс. Перевірено реальним DOM dblclick: одне CPU-тіло, drag не починається.
 - **Перетин FD5 з T4.** T4 закрито. FD1 синхронізує pose мешів/тіньових проксі
   та bounds через matrixWorld; перевірка контактів і візуальної тіні на суші ще FD5.
-- **Uniform і sampler-бюджет виміряно в FD1:** див. факти вище. Після додавання
-  TerrainContact повторно перевірити linked samplers; вихідна оцінка 12 була занижена.
+- **Uniform і sampler-бюджет:** FD1 дав 13/14 tile samplers без контакту;
+  FD3 виміряв 14/15 із TerrainContact. Повторна атестація hardware/таймінгів — FD5;
+  вихідна оцінка 12 у спеці була занижена.
 - **Відкриті бюджети FD2 → FD5:** desktop pick p95=14.40 мс проти ≤8;
   CPU interaction p95=0.70 мс проти ≤0.5. Mobile-профіль на desktop GPU
   не замінює телефон; cold pick і справжній mobile p95 ще виміряти.

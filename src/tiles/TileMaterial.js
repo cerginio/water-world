@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TILE_TILT_GLSL } from './tileTilt.js';
 import { TILE_VERTICAL_LIMIT } from './tileBounds.js';
 
 const PARS = /* glsl */`
@@ -10,10 +11,7 @@ attribute float aSurfaceOffset;
 attribute float aTile;
 attribute vec3 aOffset;
 #endif
-mat3 tileTilt(vec2 a) {
-  float cx = cos(a.x), sx = sin(a.x), cz = cos(a.y), sz = sin(a.y);
-  return mat3(cz, sz, 0.0, -sz*cx, cz*cx, sx, sz*sx, -cz*sx, cx);
-}
+${TILE_TILT_GLSL}
 `;
 const INIT = /* glsl */`
 #ifdef USE_INSTANCING
@@ -27,10 +25,12 @@ const INIT = /* glsl */`
   vec4 tileState = texelFetch(uState0, tileUV, 0);
   tileState.x = clamp(tileState.x, -${TILE_VERTICAL_LIMIT.toFixed(1)}, ${TILE_VERTICAL_LIMIT.toFixed(1)});
   tileState.zw *= min(1.0, uTileMotionLimit / max(length(tileState.zw), 0.00001));
-  mat3 tileRotation = tileTilt(texelFetch(uState1, tileUV, 0).xy);
+  vec4 tileOrientation = texelFetch(uState1, tileUV, 0);
+  mat3 tileRotation = tileTilt(tileOrientation.xy);
+  float surfaceOffset = mix(aSurfaceOffset, min(aSurfaceOffset, 0.001), tileOrientation.z);
 #ifdef USE_INSTANCING
   mat4 tileMatrix = mat4(tileRotation) * instanceMatrix;
-  tileMatrix[3] = vec4(tileRest.x + tileState.z, tileRest1.x + tileState.x + aSurfaceOffset, tileRest.y + tileState.w, 1.0);
+  tileMatrix[3] = vec4(tileRest.x + tileState.z, tileRest1.x + tileState.x + surfaceOffset, tileRest.y + tileState.w, 1.0);
 #endif
 `;
 
@@ -59,7 +59,7 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 #ifndef USE_INSTANCING
   transformed = vec3(tileRest.x + tileState.z, tileRest1.x + tileState.x, tileRest.y + tileState.w) + tileRotation * aOffset;
-  transformed.y += aSurfaceOffset;
+  transformed.y += surfaceOffset;
 #endif`);
     // Render-only bit: hidden promotions keep their GPU simulation alive.
     vertex = vertex.replace('#include <clipping_planes_vertex>', `
@@ -67,5 +67,5 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
       #include <clipping_planes_vertex>`);
     shader.vertexShader = vertex;
   };
-  material.customProgramCacheKey = () => `${previousKey}-tile-state-v4`;
+  material.customProgramCacheKey = () => `${previousKey}-tile-state-v5`;
 }

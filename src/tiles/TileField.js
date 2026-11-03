@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { compileTileSource, fetchTileSource } from './tilecraftLoader.js';
 import { collectTileRest } from './tileRest.js';
+import { TerrainContact } from '../scene/TerrainContact.js';
 import { TileSim } from './TileSim.js';
 import { TileFrames } from './TileFrames.js';
 import { TileInteraction } from './TileInteraction.js';
@@ -12,7 +13,7 @@ const MIN_DEPTH = 5;   // open water under the whole field (spec.md §6.5)
 
 // A live Tilecraft model on the water (spec.md §5).
 export class TileField {
-  constructor({ scene, renderer, surface, patchMaterial, heightAt, mobile = false, floaters, camera, controls }) {
+  constructor({ scene, renderer, surface, patchMaterial, heightAt, terrainGeometry, mobile = false, floaters, camera, controls }) {
     this.scene = scene;
     this.controls = controls;
     this.promotion = floaters ? new TilePromotion(this, floaters) : null;
@@ -27,6 +28,7 @@ export class TileField {
     this.surface = surface;
     this.patchMaterial = patchMaterial;
     this.heightAt = heightAt;
+    this.terrainGeometry = terrainGeometry;
     this.group = new THREE.Group();
     this.group.name = 'tile-field';
     scene.add(this.group);
@@ -107,7 +109,8 @@ export class TileField {
 
   build(rest) {
     if (!rest.tiles.count) return;
-    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs, this.profile, this.frameRegistry.entries);
+    this.terrainContact = this.terrainGeometry ? new TerrainContact(this.terrainGeometry, this.terrainGeometry.parameters.width) : null;
+    this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs, this.profile, this.frameRegistry.entries, this.terrainContact);
     this.sim.uniforms.uTileMotionLimit = { value: tileMotionLimit(this.params.driftRadius) };
     for (const part of rest.polygon) {
       part.geometry.setAttribute('aSurfaceOffset', new THREE.InstancedBufferAttribute(
@@ -279,6 +282,8 @@ export class TileField {
     this.cpuMs = 0;
     this.sim?.dispose();
     this.sim = null;
+    this.terrainContact?.dispose();
+    this.terrainContact = null;
     for (const mesh of [...this.group.children]) {
       mesh.geometry.dispose();
       mesh.material.dispose();

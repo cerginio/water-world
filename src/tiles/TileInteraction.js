@@ -4,7 +4,7 @@ import { patchTileMaterial } from './TileMaterial.js';
 import { WaterQuery } from '../water/WaterQuery.js';
 import { ISLAND_SIZE } from '../scene/islandHeight.js';
 
-// Water-only cursor for FD2. Terrain intersection is added with TerrainContact.
+// Shared support cursor: asynchronous water height and exact terrain-cell ray traversal.
 export class SurfaceCursor {
   constructor(field, camera) {
     this.field = field;
@@ -15,7 +15,7 @@ export class SurfaceCursor {
     this.tag = 0;
   }
 
-  point(x, y, height = this.height) {
+  point(x, y, height = this.height, waterOnly = false) {
     const renderer = this.field.renderer, rect = renderer.domElement.getBoundingClientRect();
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const viewport = renderer.getViewport(new THREE.Vector4()).multiplyScalar(renderer.getPixelRatio());
@@ -26,7 +26,11 @@ export class SurfaceCursor {
     if (ray.direction.y >= -0.015) return null;
     const t = (height - ray.origin.y) / ray.direction.y;
     if (t < 0 || t > 6000) return null;
-    const p = ray.at(t, new THREE.Vector3());
+    let p = ray.at(t, new THREE.Vector3());
+    if (!waterOnly && this.field.terrainContact) {
+      const land = this.field.terrainContact.raycast(ray, this.groundOffset ?? 0.005);
+      if (land && land.distanceToSquared(ray.origin) < p.distanceToSquared(ray.origin)) p = land;
+    }
     return Math.abs(p.x) <= ISLAND_SIZE / 2 && Math.abs(p.z) <= ISLAND_SIZE / 2 ? p : null;
   }
 
@@ -34,14 +38,23 @@ export class SurfaceCursor {
     this.tag++;
     this.height = hit.height;
     this.waterOffset = null;
-    this.sample(this.point(hit.x, hit.y), true);
+    const p = this.point(hit.x, hit.y, hit.height, true);
+    const ground = p && this.field.terrainContact?.at(p.x,p.z);
+    const tiles = this.field.rest.tiles;
+    let id = 0;
+    while (id < tiles.count && tiles.frameIndex[id] !== hit.frame.index) id++;
+    this.groundOffset = ground && hit.height-ground.height < 0.5
+      ? Math.max(0.005,hit.height-ground.height)
+      : (tiles.thickness[id] ?? 0.01)+0.005+Math.min(tiles.surfaceOffset[id] ?? 0,0.001);
+    this.onLand = !!(ground && hit.height-ground.height < 0.5 && hit.height-ground.height <= (tiles.thickness[id] ?? 0.01)+0.02);
+    this.sample(p, true);
   }
 
   sample(p, initial = false) {
     if (!p) return;
     if (this.query.resultTag === this.tag) {
       const water = this.query.result[0];
-      if (this.waterOffset === null) this.waterOffset = this.height - water;
+      if (this.waterOffset === null) this.waterOffset = this.onLand ? this.groundOffset : this.height - water;
       this.height = water + this.waterOffset;
     }
     if (!this.query.inFlight || initial) {

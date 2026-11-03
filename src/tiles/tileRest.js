@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { convexFootprint } from './tileContact.js';
 
 // Compiled Tilecraft records → rest arrays of the field (spec.md §4), taken once per load.
 // After this the Tilecraft meshes are disposed; the field draws its own copies.
@@ -22,12 +23,24 @@ export function collectTileRest(compiled, { frame = 'all' } = {}) {
 
   const tiles = [];   // { x, z, yaw, radius, y0, thickness, runId, flags, g, f }
   const polygon = instanceRecords.map((r) => collectInstances(r, layers, tiles));
+  const footprints = new Array(tiles.length);
+  for (const part of polygon) {
+    const pos = part.geometry.attributes.position;
+    const bottom = Math.min(...Array.from({ length: pos.count }, (_, i) => pos.getY(i)));
+    const vertices = [];
+    for (let i = 0; i < pos.count; i++) if (pos.getY(i) <= bottom + 1e-6) vertices.push(new THREE.Vector3().fromBufferAttribute(pos, i));
+    for (let i = 0; i < part.count; i++) {
+      const matrix = new THREE.Matrix4().fromArray(part.matrices, i * 16);
+      matrix.setPosition(0, 0, 0);
+      footprints[part.tile[i]] = convexFootprint(vertices.map(v => v.clone().applyMatrix4(matrix)));
+    }
+  }
   const runs = [];
   const polyline = roadRecords.map((r) => collectRoad(r, layers, space, tiles, runs));
 
   const n = tiles.length;
   const rest = {
-    count: n,
+    count: n, footprints,
     x: new Float32Array(n), z: new Float32Array(n), yaw: new Float32Array(n), radius: new Float32Array(n),
     y0: new Float32Array(n), thickness: new Float32Array(n), runId: new Int32Array(n), flags: new Uint8Array(n),
     g: new Int32Array(n), f: new Array(n),

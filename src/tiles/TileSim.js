@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { FullscreenQuad, rawPass } from '../engine/fullscreen.js';
+import { TERRAIN_CONTACT_GLSL } from '../scene/TerrainContact.js';
+import { TILE_TILT_GLSL } from './tileTilt.js';
+import { TILE_CONTACT_GLSL } from './tileContact.js';
 import { WATER_GLSL } from '../water/OceanSurface.js';
 
 const WIDTH = 512;
@@ -50,6 +53,11 @@ uniform float uDt, uSampleDt, uDensity, uBuoyancy, uDrag, uAngularDrag, uOrbit, 
 uniform bool uReset;
 uniform highp sampler2D uRun;
 ${HORIZONTAL}
+${TILE_TILT_GLSL}
+#ifdef TILE_TERRAIN_CONTACT
+${TERRAIN_CONTACT_GLSL}
+${TILE_CONTACT_GLSL}
+#endif
 layout(location = 0) out vec4 state0;
 layout(location = 1) out vec4 state1;
 layout(location = 2) out vec4 state2;
@@ -69,7 +77,10 @@ void main() {
   mat2 worldXZ = mat2(uFieldMatrix[0].xz, uFieldMatrix[2].xz);
   vec2 q = (uFieldMatrix * vec4(r.x + s0.z + pose.x, 0.0, r.y + s0.w + pose.y, 1.0)).xz;
   vec3 disp = waterAt(q, vec3(0.0));
-  vec2 orbit = transpose(worldXZ) * disp.xz * uOrbit;
+  // state1.xy: horizontal rotation vector; z: support blend; w: 2/5 cm latch.
+  float contact = s1.z;
+  float orbitGain = uOrbit * (1.0-contact);
+  vec2 orbit = transpose(worldXZ) * disp.xz * orbitGain;
   vec3 waterVelocity = vec3(0.0);
   if (abs(s3.w) > 0.01) {
     waterVelocity = clamp((disp - vec3(s2.z, s3.x, s2.w)) / uSampleDt,
@@ -91,8 +102,27 @@ void main() {
     surfaceTilt += vec2(-rim[i].y, rim[i].x) * (heights[i] - heights[0]);
   }
   surfaceTilt /= (TILE_WATER_SAMPLES == 2 ? 0.49 : 0.735) * radius * radius;
+  surfaceTilt = normalTilt(normalize(vec3(-surfaceTilt.y, 1.0, surfaceTilt.x)), 0.34906585);
   float surfaceAngle = length(surfaceTilt);
   if (surfaceAngle > 0.34906585) surfaceTilt *= 0.34906585 / surfaceAngle;
+  float groundTarget = -1e20;
+  vec4 ground = vec4(0.0,1.0,0.0,-1e20);
+#ifdef TILE_TERRAIN_CONTACT
+  if (!polyline) {
+    ground = terrainAt(q);
+    groundTarget = polygonSupport(uv, q, worldXZ, s1.xy);
+    float gap = r1.x + s0.x - groundTarget;
+    // Geometric Schmitt band: dry terrain always supports, a lifting wave must
+    // lift the bottom clear of the 5 cm exit threshold.
+    bool supported = ground.w > -1e19 && (disp.y <= ground.w ||
+      gap <= (s1.w > 0.5 ? 0.05 : 0.02));
+    s1.w = supported ? 1.0 : 0.0;
+    contact = clamp(contact + (supported ? 1.0 : -1.0)*uDt/0.2, 0.0,1.0);
+    vec3 n = ground.xyz;
+    vec2 localNormal = transpose(worldXZ)*n.xz;
+    surfaceTilt = mix(surfaceTilt,normalTilt(vec3(localNormal.x,n.y,localNormal.y),0.95993109),contact);
+  }
+#endif
   float displacedFraction = uDensity / max(1025.0 * uBuoyancy, 0.001);
   vec2 spring = s0.zw;
   vec2 velocity = s2.xy;
@@ -105,7 +135,7 @@ void main() {
       velocity += localWaterVelocity * s3.y;
     } else if (!drift && s3.z > 0.5) {
       spring -= orbit;
-      velocity -= localWaterVelocity * uOrbit;
+      velocity -= localWaterVelocity * orbitGain;
     }
   }
   int steps = min(TILE_MAX_STEPS, max(1, int(ceil(uDt * 240.0))));
@@ -115,7 +145,9 @@ void main() {
     if (displacedFraction < 1.0) {
       // Hydrostatic draft with exact critically damped relaxation, for both
       // polygons and strips. Stability at drag=0 does not depend on density.
-      float target = heights[0] + thickness * (0.5 - displacedFraction) - r1.x;
+      float wet = heights[0] + thickness * (0.5 - displacedFraction);
+      float target = mix(wet, max(wet,groundTarget),contact) - r1.x;
+      if (disp.y <= ground.w) target = groundTarget-r1.x;
       float frequency = 12.0 / (1.0 + 0.15 * uDrag);
       float error = s0.x - target, c = s0.y + frequency * error;
       float decay = exp(-frequency * dt);
@@ -126,8 +158,8 @@ void main() {
       float ay = -9.81;
       for (int i = 0; i < TILE_WATER_SAMPLES; i++) {
         vec2 lever = vec2(-rim[i].y, rim[i].x);
-        float y = r1.x + s0.x + dot(lever, s1.xy);
-        float pointVelocity = s0.y + dot(lever, s1.zw);
+        float y = r1.x + s0.x + (tileTilt(s1.xy)*vec3(rim[i].x,0.0,rim[i].y)).y;
+        float pointVelocity = s0.y;
         float sub = clamp((heights[i] - y) / thickness + 0.5, 0.0, 1.0);
         ay += (1.0 / float(TILE_WATER_SAMPLES)) * sub * (1025.0 * 9.81 / uDensity * uBuoyancy
           - 1.5 * uDrag * (pointVelocity - waterVelocity.y));
@@ -137,19 +169,14 @@ void main() {
     }
     {
       float frequency = 10.0 / (1.0 + uAngularDrag);
-      vec2 error = s1.xy - surfaceTilt, c = s1.zw + frequency * error;
-      float decay = exp(-frequency * dt);
-      s1.xy = surfaceTilt + (error + c * dt) * decay;
-      s1.zw = (s1.zw - frequency * c * dt) * decay;
+      s1.xy = mix(s1.xy, surfaceTilt, 1.0-exp(-frequency*dt));
     }
+    float limit = mix(0.34906585,0.95993109,contact);
     float tilt = length(s1.xy);
-    if (tilt > 0.34906585) {
-      vec2 normal = s1.xy / tilt;
-      s1.xy = normal * 0.34906585;
-      s1.zw -= normal * max(0.0, dot(s1.zw, normal));
-    }
+    if (tilt > limit) s1.xy *= limit/tilt;
     if (!polyline && pose.w < 0.5) {
-      velocity += horizontalAcceleration(spring, velocity, r.xy - framePivot(frameId), localWaterVelocity, drift) * dt;
+      velocity += horizontalAcceleration(spring, velocity, r.xy - framePivot(frameId), localWaterVelocity, drift) * (1.0-contact) * dt;
+      velocity *= exp(-40.0*contact*dt);
       spring += velocity * dt;
     }
   }
@@ -159,11 +186,11 @@ void main() {
     spring = run.xy; velocity = run.zw;
   }
   state0 = vec4(s0.xy, spring + ((!drift || polyline) ? orbit : vec2(0.0)));
-  state1 = s1;
+  state1 = vec4(s1.xy,contact,s1.w);
   state2 = vec4(velocity, disp.xz);
   // y remembers orbital gain; z remembers the velocity convention (mode).
   // w is per-tile history validity, also cleared by the NaN recovery path.
-  state3 = vec4(disp.y, uOrbit, drift ? 1.0 : 0.0, 1.0);
+  state3 = vec4(disp.y, orbitGain, drift ? 1.0 : 0.0, 1.0);
   // A strip's individual frozen orbital offsets need to rejoin its shared run
   // continuously when explicitly released. Negative history.w is the remaining
   // transition time, and still denotes a valid water sample.
@@ -181,10 +208,20 @@ void main() {
       vec2 previousOrbit = transpose(worldXZ) * s2.zw * s3.y;
       state0.zw += (orbit - previousOrbit) * clamp(2.0 - pose.w, 0.0, 1.0);
     }
-    state2.xy = s2.xy;
+    state2.xy = s2.xy*exp(-40.0*contact*uDt);
     state3.z = s3.z;
     state3.w = -0.125;
   }
+#ifdef TILE_TERRAIN_CONTACT
+  if (!polyline) {
+    // Re-evaluate after horizontal integration and tilt: hard floor applies even
+    // during the 200 ms blend, in hold, and on the invisible deep seabed.
+    vec2 finalQ = (uFieldMatrix*vec4(r.x+state0.z+pose.x,0.0,r.y+state0.w+pose.y,1.0)).xz;
+    float floorY = polygonSupport(uv,finalQ,worldXZ,state1.xy)-r1.x;
+    if (state0.x <= floorY) { state0.x=floorY; state0.y=max(0.0,state0.y); }
+    state0.y *= exp(-40.0*contact*uDt);
+  }
+#endif
   if (bad(state0) || bad(state1) || bad(state2) || bad(state3)) rest();
 }`;
 
@@ -238,7 +275,7 @@ function restTexture(data, height) {
 
 // Run-centroid pass then tile MRT; no CPU readback or per-tile work after load.
 export class TileSim {
-  constructor(renderer, surface, tiles, runs = [], profile = 'desktop', frames = []) {
+  constructor(renderer, surface, tiles, runs = [], profile = 'desktop', frames = [], terrainContact = null) {
     this.profile = TILE_PROFILES[profile];
     if (!this.profile) throw new Error(`Unknown tile profile: ${profile}`);
     this.renderer = renderer;
@@ -257,12 +294,19 @@ export class TileSim {
     this.syncFrames();
     this.surface = surface;
     this.height = Math.max(1, Math.ceil(tiles.count / WIDTH));
-    const r0 = new Float32Array(WIDTH * this.height * 4), r1 = new Float32Array(r0.length);
+    this.footprintVertices = (tiles.footprints ?? []).reduce((n,p) => Math.max(n,p?.length ?? 0),3);
+    // Extra vertical blocks of the existing rest sampler hold lower-face hulls.
+    // The first block keeps the original tile addressing in all render passes.
+    const restHeight = this.height * (this.footprintVertices+2);
+    const r0 = new Float32Array(WIDTH * restHeight * 4), r1 = new Float32Array(WIDTH*this.height*4);
     for (let i = 0; i < tiles.count; i++) {
       r0.set([tiles.x[i], tiles.z[i], tiles.yaw[i], tiles.radius[i]], i * 4);
+      const footprint = tiles.footprints?.[i] ?? [];
+      r0[(WIDTH*this.height+i)*4] = footprint.length;
+      footprint.forEach((v,k) => r0.set([v.x,v.y,v.z,0], ((k+2)*WIDTH*this.height+i)*4));
       r1.set([tiles.y0[i], tiles.thickness[i], tiles.runId[i], tiles.flags[i] | ((tiles.frameIndex?.[i] ?? 0) << 2)], i * 4);
     }
-    this.rest0 = restTexture(r0, this.height);
+    this.rest0 = restTexture(r0, restHeight);
     this.rest1 = restTexture(r1, this.height);
     this.targets = Array.from({ length: 2 }, () => new THREE.WebGLRenderTarget(WIDTH, this.height, {
       count: 4, type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
@@ -289,7 +333,8 @@ export class TileSim {
       uRun: { value: this.runTarget?.textures[0] ?? this.runRest },
     };
     this.quad = new FullscreenQuad(rawPass(FRAG, {
-      ...surface.uniforms, ...this.uniforms, ...this.frameUniforms,
+      ...surface.uniforms, ...this.uniforms, ...this.frameUniforms, ...terrainContact?.uniforms,
+      uStateHeight: { value: this.height },
       uFieldMatrix: { value: new THREE.Matrix4() }, uTileCount: { value: tiles.count },
       uDt: { value: 0 }, uSampleDt: { value: 1 / 60 }, uReset: { value: false },
       uDensity: { value: 500 }, uBuoyancy: { value: 1 }, uDrag: { value: 1.6 },
@@ -304,7 +349,8 @@ export class TileSim {
     })) : null;
     for (const quad of [this.quad, this.runQuad]) if (quad) {
       quad.material.defines = { TILE_MAX_STEPS: this.profile.maxSteps, TILE_WATER_SAMPLES: this.profile.waterSamples,
-        TILE_FRAME_COUNT: count, ...(useTexture ? { TILE_FRAME_TEXTURE: 1 } : {}) };
+        TILE_FOOTPRINT_VERTICES: this.footprintVertices,
+        ...(terrainContact ? { TILE_TERRAIN_CONTACT: 1 } : {}), TILE_FRAME_COUNT: count, ...(useTexture ? { TILE_FRAME_TEXTURE: 1 } : {}) };
     }
     this.reset();
   }

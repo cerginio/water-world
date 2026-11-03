@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tileTiltMatrix } from './tileTilt.js';
 import { TILE_VERTICAL_LIMIT } from './tileBounds.js';
 
 // Group ids are scoped to their frame; ungrouped polygon tiles stay independent.
@@ -12,16 +13,15 @@ export function promotionMembers(rest, id) {
       && (t.frameIndex ? t.frameIndex[i] === t.frameIndex[id] : t.f[i] === t.f[id]));
 }
 
-// Same Rz * Rx and render envelope as TileMaterial (not a new physics model).
+// Same rotation vector and render envelope as TileMaterial (not a new physics model).
 export function tileSnapshotPose(tiles, id, state0, state1, motionLimit) {
   const k = id * 4;
   const dx = state0[k + 2], dz = state0[k + 3];
   const gain = Math.min(1, motionLimit / Math.max(Math.hypot(dx, dz), 0.00001));
   const center = new THREE.Vector3(tiles.x[id] + dx * gain,
     tiles.y0[id] + THREE.MathUtils.clamp(state0[k], -TILE_VERTICAL_LIMIT, TILE_VERTICAL_LIMIT)
-      + tiles.surfaceOffset[id], tiles.z[id] + dz * gain);
-  const tilt = new THREE.Matrix4().makeRotationZ(state1[k + 1])
-    .multiply(new THREE.Matrix4().makeRotationX(state1[k]));
+      + THREE.MathUtils.lerp(tiles.surfaceOffset[id], Math.min(tiles.surfaceOffset[id], 0.001), state1[k + 2]), tiles.z[id] + dz * gain);
+  const tilt = tileTiltMatrix(state1[k], state1[k + 1]);
   return { center, tilt };
 }
 

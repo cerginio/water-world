@@ -87,12 +87,12 @@ assert.equal(desc.object.children[0].material.opacity, 0.75);
 // Polygon prototypes: instance colour only, prototype vertex colours ignored as before.
 assert.equal(desc.object.children[0].geometry.attributes.color.itemSize, 3);
 assert.equal(desc.object.children[0].geometry.attributes.color.getX(0), 0.5);
-// Independent first vertex oracle: scale/yaw -> Rx -> Rz -> translation -> field yaw.
+// Independent first vertex oracle: scale/yaw -> horizontal rotation vector -> translation -> field yaw.
 const source = new T.Vector3().fromBufferAttribute(rest.polygon[0].geometry.attributes.position,
   rest.polygon[0].geometry.index.getX(0));
 source.applyMatrix4(new T.Matrix4().fromArray(rest.polygon[0].matrices));
-source.applyAxisAngle(new T.Vector3(1, 0, 0), state1[0]);
-source.applyAxisAngle(new T.Vector3(0, 0, 1), state1[1]);
+source.applyQuaternion(new T.Quaternion().setFromAxisAngle(
+  new T.Vector3(state1[0], 0, state1[1]).normalize(), Math.hypot(state1[0], state1[1])));
 source.add(new T.Vector3(1, 0.31, 2)).applyMatrix4(field.group.matrixWorld);
 const baked = new T.Vector3().fromBufferAttribute(desc.object.children[0].geometry.attributes.position, 0)
   .applyAxisAngle(new T.Vector3(0, 1, 0), desc.yaw).add(desc.positionWorld);

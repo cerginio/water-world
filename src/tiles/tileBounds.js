@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Render-only safety envelope. The soft drift wall and sinking integrator are
 // unbounded in time; pretending their rest bounds were conservative is incorrect.
 // Keep simulation untouched, but contain pathological excursions in ALL passes.
-export const TILE_VERTICAL_LIMIT = 64;
+export const TILE_VERTICAL_LIMIT = 256;
 export function tileMotionLimit(driftRadius, hasDrift = true) {
   return hasDrift ? Math.max(0, driftRadius) + 64 : 8;
 }

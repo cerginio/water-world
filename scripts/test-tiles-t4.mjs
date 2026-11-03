@@ -49,9 +49,9 @@ for (const mobile of [false, true]) {
     mesh.material.onBeforeCompile(shader, renderer);
     assert.equal(shader.uniforms.uState0, field.sim.uniforms.uState0);
     assert.equal(shader.uniforms.uTileMotionLimit, field.sim.uniforms.uTileMotionLimit);
-    assert(shader.vertexShader.includes('tileState.x = clamp(tileState.x, -64.0, 64.0)'));
+    assert(shader.vertexShader.includes(`tileState.x = clamp(tileState.x, -${TILE_VERTICAL_LIMIT.toFixed(1)}, ${TILE_VERTICAL_LIMIT.toFixed(1)})`));
     assert(shader.vertexShader.includes('mat4 tileMatrix = mat4(tileRotation) * instanceMatrix'));
-    assert(shader.vertexShader.includes('transformed.y += aSurfaceOffset'));
+    assert(shader.vertexShader.includes('transformed.y += surfaceOffset'));
   }
   field.params.driftRadius = 1000; field.update(1 / 60);
   assert.equal(field.sim.uniforms.uTileMotionLimit.value, 8);

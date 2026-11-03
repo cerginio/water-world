@@ -90,7 +90,7 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
-const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, mobile, floaters, camera, controls });
+const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, terrainGeometry: terrain.geometry, mobile, floaters, camera, controls });
 let camWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 

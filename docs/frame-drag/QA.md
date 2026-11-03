@@ -11,6 +11,132 @@ Pose живе лише в поточній сесії. URL зберігає па
 reload або зміна source починає нову розкладку. Reset повертає всі фрейми до
 початкових позицій відносно поточного поля, в `inherited`, і обнуляє симуляцію.
 
+## FD3. Контакт polygon із землею — ЗАКРИТО
+
+Прийнято власником через `handoff:next` 2026-11-04. Відкриті роботи FD4/FD5
+і hardware-бюджети нижче збережено; їх приймання не заявляється.
+
+Перевірено 2026-11-04 на AMD Radeon 890M / Chromium WebGL. Mobile нижче —
+профіль на цьому desktop GPU, не справжній телефон.
+
+| рівень / перевірка | результат |
+|---|---|
+| Guard | `npm run build`, `probe-tiles.mjs`, `probe-tiles-drift.mjs` — PASS, `errors=[]` |
+| Offline | `test-frame-pose.mjs`, `test-tiles-t4.mjs`, `test-tiles-t5.mjs`, `test-terrain-contact.mjs` — PASS |
+| Drift guard | 124.812 с / 4620 кадрів; nonfinite=0; 218196 стиків, maxSeam=0; recovery error=0.00000661 м |
+| CPU контакт проти реальних трикутників | 70 точок; max height error=6.40e-14 м; max oblique ray error=1.43e-14 м; 148225 вузлів |
+| FD3 probe | `node scripts/probe-terrain-contact.mjs` — PASS; desktop + mobile, uniform pose + texture fallback |
+| CPU / GPU | 512 точок: max height error=0.000042208 м (0.0423 мм), normal error=7.28e-8 |
+| Footprint | Внутрішній пік 5 м, якого не бачать кути: перший центр=5.105000019 м; мінімальний зазор усіх контрольованих точок ≥0.0049967 м |
+| Схил 30° | Нахил desktop=29.99950°, mobile=29.99875°; горизонтальна швидкість на опорі=0 |
+| Глибоке дно | При buoyancy=0.3 центр=−41.89500046 м над дном −42 м; blend=1, горизонтальна швидкість=0 |
+| Відрив хвилею / край | Після підйому води на 0.3 м blend=0, центр≈0.30244 м; за межами контактної сітки blend=0 |
+| Реальна модель | 46861 polygon; усі нижні кути ≥ terrain+0.006023 м; при переносі на сушу 3978 контактних тайлів, 42883 мокрих |
+| Берег одного фрейму | 2395 мокрих і 1579 контактних тайлів одночасно; решта 4 у переході; кількості залежать від хвиль |
+| Terrain cursor / DOM drag | Похибка ray-height=1.11e-14 м; перенос=12.00119 м; grab error=0.875 CSS px; рух камери=0 |
+| Linked samplers | Tile pass: 14 з uniform pose, 15 з texture fallback; render/ID/контури землю не читають |
+| Lifecycle | source=none: terrainContact=false, sim=false, interaction=false, `errors=[]` |
+| FD2 regression | `FD2_SKIP_SOAK=1 node scripts/probe-frame-drag.mjs` — PASS; обидва конвеєри 8 фреймів, hold/release, камера, touch, blur, dblclick, unload; grab error=1.970 CSS px |
+
+FD2 regression тут виконано без повторного 60-секундного soak (`FD2_SKIP_SOAK=1`);
+окремий drift guard вище пройшов 124.812 с. Його теплі pick p95=3.90 мс і CPU
+interaction p95=0.40 мс — виміри цього короткого запуску, не закриття бюджетів FD5.
+Холодний pick і справжній mobile лишаються відкритими.
+
+Фізична опора використовує нижній convex footprint прототипу після instance
+scale/yaw. Його вершини зберігаються у додаткових вертикальних блоках `rest0`,
+без нового sampler-а. `state1.xy` тепер rotation vector, `state1.z` — blend опори,
+`state1.w` — геометричний latch 2/5 см; blend триває 200 мс. Render, ID, контури,
+shadow proxy та CPU promotion використовують той самий поворот. На опорі
+декоративний `aSurfaceOffset` зменшується до максимум 1 мм. Render envelope
+піднято з ±64 до ±256 м, щоб вершина острова не обрізалась старим clamp.
+
+### QA-FD3-1. Один фрейм одночасно на березі та воді
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-polygon`
+**qa:action:** у консолі виконати:
+
+```js
+app.tiles.moveFrame(app.tiles.frameRegistry.entries[2].id, 330, 120);
+app.camera.position.set(330, app.tiles.terrainContact.at(330, 120).height + 60, 180);
+app.controls.target.set(330, app.tiles.terrainContact.at(330, 120).height, 120);
+app.controls.update();
+```
+
+Зачекати 3 с.
+**qa:inspect:** третій фрейм у центрі виду, межа води та піску під ним.
+**qa:expected:** берег перетинає малюнок; мокра частина слідує хвилям, частина
+на піску лишається на рельєфі. Весь фрейм не перемикається одразу на одну висоту;
+плитки не зникають усередині землі. Контакт не враховує декоративні камені.
+Автоматична перевірка mixed wet/contact є у FD3 probe; тут перевірити плавність
+та відсутність мерехтіння очима.
+
+### QA-FD3-2. Повторний захват і drag на суші
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-polygon`
+**qa:action:** у консолі виконати:
+
+```js
+app.tiles.moveFrame(app.tiles.frameRegistry.entries[2].id, 260, 120);
+app.camera.position.set(260, app.tiles.terrainContact.at(260, 120).height + 100, 220);
+app.controls.target.set(260, app.tiles.terrainContact.at(260, 120).height, 120);
+app.controls.update();
+```
+
+Зачекати 3 с; лівою кнопкою схопити видиму деталь третього фрейму, протягти
+приблизно на його ширину праворуч, відпустити й зачекати 1 с.
+**qa:inspect:** схоплена деталь відносно курсора, решта фрейму, камера та GUI selectedFrame.
+**qa:expected:** рухається весь третій фрейм; камера залишається нерухомою;
+деталь усталено під курсором у межах 5 CSS px. Після up фрейм лишається
+`placed`, не збирається у старій позиції. Реальний DOM drag покритий FD3 probe
+(12 м, похибка 0.875 CSS px).
+
+### QA-FD3-3. Схил, прихований горб і затоплене дно
+
+**qa:mode:** cli
+**qa:open:** PowerShell, `D:/work/_tools/water-3d/Ultra-Water`; стенд `http://localhost:5199/` працює.
+**qa:action:** виконати:
+
+```powershell
+$env:PLAYWRIGHT_MODULE = 'D:/work/js-games/ua-dream/tilecraft/node_modules/playwright/index.mjs'
+node scripts/probe-terrain-contact.mjs
+```
+
+**qa:inspect:** фінальний JSON, `pass`, `contact.fixtures`, `drag`, `shore`, `none`, `errors`.
+**qa:expected:** exit code 0, `pass=true`, `errors=[]`; обидва `slope` мають
+нахил у межах 30±0.15° та speed<0.001; обидва `bed` мають y=−41.895±0.005 м;
+мінімальні зазори не нижчі −0.001 м; `peak.first`=5.105±0.001 м; samplers≤16;
+`drag.grabError`≤5; у `shore` обидва лічильники >0; усі поля `none` — false.
+Дно нижче −34 м навмисно відсутнє в рендері, тому його опору перевіряє readback.
+
+### QA-FD3-4. Точність відносно видимого меша
+
+**qa:mode:** cli
+**qa:open:** PowerShell, `D:/work/_tools/water-3d/Ultra-Water`.
+**qa:action:** `node scripts/test-terrain-contact.mjs`.
+**qa:inspect:** stdout і код завершення.
+**qa:expected:** exit code 0; JSON `pass=true`, `checked=70`, `vertices=148225`;
+обидві похибки <0.00001 м. Oracle перетинає справжні трикутники через Raycaster.
+
+### QA-FD3-5. Вивантаження контактних ресурсів
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-polygon`
+**qa:action:** `Tiles → source → none`.
+**qa:inspect:** сцена, статус Tiles та консоль.
+**qa:expected:** малюнок зникає, статус `—`, у консолі немає нових помилок;
+`app.tiles.terrainContact`, `app.tiles.sim`, `app.tiles.interaction` — null.
+Покрито FD3 probe; вивантаження під час drag додатково покрито FD2 regression.
+
+### Свідомо не зроблено в FD3
+
+- Polyline-контакт, точна зайнята область / заборона схилів >55° та порядок
+  перекриття фреймів — FD4. У hybrid контакт поки має лише polygon.
+- Контакт із декоративними rocks/trees не входить до heightfield-контракту.
+- Візуальна атестація тіней/відбиття на суші, context-loss і повні hardware-бюджети — FD5.
+
 ## FD2. Picking і drag на воді — ЗАКРИТО
 
 Прийнято власником через `handoff:next` 2026-11-03. Відкриті бюджети
