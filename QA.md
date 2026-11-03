@@ -1,5 +1,190 @@
 # QA: tile-floaters — плавучі тайли Tilecraft
 
+## T5 — прийнято власником через `handoff:next` (2026-11-03)
+
+Фазу закрито після двох ітерацій owner QA на стенді hybrid (NOK → виправлення нижче).
+Це owner acceptance; mobile, latency жесту й hardware-бюджети не вимірювались.
+
+**Ітерація 2 (той самий день).** Власник: плоска фігура вистрибує перпендикулярно воді й
+на кожній хвилі намагається перевернутись; тінь, що має бути на дні, видно на поверхні
+самого об’єкта (помітно при waveScale 0). Обидва відтворено числами й виправлено:
+
+| NOK | причина | виправлення |
+|---|---|---|
+| плита вистрибує / тріпоче | комірковий Archimedes без приєднаної маси й демпфування — для 0.1 м / 100 кг/м³ пружина ~9 Гц майже без загасання: |vy| до 2.6 м/с (вода 0.94), кутова до 5 рад/с (поверхня 0.24) | промоція — follower як GPU-поле: критично демпфовані висота й нахил до площини води; вільне падіння лише в повітрі |
+| тінь з дна на самому об’єкті | регресія T4: камера float-тіні вписана в culling-конверт `driftRadius+64` → тексель **1.02 м**; верхні грані тайлів затінювали самі себе | тінь вписана в поле в спокої + 16 м → тексель **13.2 см**; normal-offset приймача 2 текселі |
+
+### QA-T5-10. Тінь лише на дні, не на самому об’єкті (waveScale 0)
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+**qa:action:** Waves → `waveScale` = 0; почекати 10 с, поки вода заспокоїться; наблизити
+камеру до великої зелено-синьої групи (лівий верх на скріні власника).
+**qa:inspect:** верхні грані цієї групи та дно поруч і під нею.
+**qa:expected:** верхні грані рівномірно освітлені, без темних смуг/прямокутників власної
+тіні; тінь групи лежить на дні й повторює її контур, без метрових блоків-сходинок.
+У консолі `2 * app.floatShadow.camera.right / 1024` — близько `0.13` (м), не `1.0`.
+
+### QA-T5-11. Плита лежить на хвилі, не тріпоче
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+**qa:action:** `waveScale` = 1; подвійний клік по 3–4 плоских групах (велика polygon,
+мала polygon, дорога); дивитися 20 с; потім у консолі
+`app.floaters.bodies.filter(b => b.onRemove).map(b => +Math.hypot(b.angVel.x, b.angVel.z).toFixed(2))`
+**qa:inspect:** промотовані групи на хвилях + масив у консолі.
+**qa:expected:** групи плавно підіймаються й опускаються разом з водою та нахиляються за
+схилом хвилі; не відриваються від поверхні й не перевертаються; кожне число в масиві < 0.5
+(рад/с).
+
+### Ітерація 2: агентська перевірка — PASS
+
+- `node scripts/test-tiles-t5.mjs` — PASS; нове: нахилена низька плита на рівній воді
+  виходить на осадку без перельоту (пік < осадка + 2 см) і вирівнюється; на схилі 0.2
+  нахиляється рівно на `atan(0.2)`; скинута з 3 м — вільне падіння, один impact, далі
+  осадка; density 1100 — тоне звичайним інтегратором.
+- `scripts/probe-tiles-t5-floating.mjs` (вода 60 Гц із запізненням 3 кадри, нахил
+  відносно поверхні): density 100/500/900 — PASS, |vy| ≤ 0.92 м/с (вода 0.94), кутова
+  ≤ 0.22 рад/с (поверхня 0.24), відставання нахилу ≤ 5.8°, дрейф 0. Без `follow` —
+  FAIL (|vy| 2.1 м/с).
+- `node scripts/test-tiles-t4.mjs` — PASS; контракт тіні переписано: радіус обгортки
+  поля < 40 м у фікстурі й не залежить від `driftRadius` (мутація «culling-конверт» — FAIL).
+- Стенд у headless SwiftShader: радіус камери тіні 519.7 → 67.3 м, тексель 101.5 → 13.2 см.
+  Візуальний знімок SwiftShader низької роздільності; на апаратному GPU не дивились.
+- `scripts/probe-tiles-t5.mjs` — PASS; `npm run build` — PASS, 42 modules.
+- QA-T5-6/7 (ітерація 1) лишаються чинними; QA-T5-7: `tilt` тепер ≤ ~25.
+
+Owner QA на `?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+(подвійні кліки по кількох групах) дав два NOK. Обидва відтворено й виправлено:
+
+| NOK | причина | виправлення |
+|---|---|---|
+| частина промотованих об’єктів «райдужна» | LCR-дорога має `color` RGBA (itemSize 4), копія читала `array[v*3]` — канали зсувались | колір через атрибут (`getX/Y/Z/W`), itemSize збережено; polygon — лише instance-колір, як в оригіналі |
+| об’єкти стрибають / перекидаються / стоять ребром | (1) нове тіло бачило воду `0` до першої відповіді WaterQuery — у западині легке тіло (density 100) отримувало ~90 м/с²; (2) семпли «по ламаній у порядку id» майже колінеарні — немає опору на крен; (3) початок тіла — центр bounds, а не центр мас | тіло нерухоме до перших висот води; семпли — farthest-point у плані по вершинах групи; початок — volume-weighted центр, центр плавучості під ним |
+
+Локальний стенд: `npm run dev` у `Ultra-Water/` → `http://localhost:5199/`
+(Tilecraft має лежати в `D:/work/js-games/ua-dream/tilecraft`, інтернет не потрібен).
+Ручні сценарії нижче агент виконав лише в headless SwiftShader (див. QA-T5-9),
+на апаратному GPU — ні.
+
+### QA-T5-4. Промотована дорога має свій колір, не райдугу
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+**qa:action:** дочекатися тайлів; подвійний клік по чорній дорозі (polyline), потім
+по світло-блакитній дорозі.
+**qa:inspect:** обидві промотовані дороги зблизька, порівняно з сусідніми непромотованими
+дорогами того ж кольору.
+**qa:expected:** промотована дорога того самого кольору, що й до кліку (чорна лишається
+чорною, блакитна — блакитною); жодних фіолетово-зелено-жовтих переливів на гранях.
+
+### QA-T5-5. Промотована polygon-група має свій колір
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+**qa:action:** подвійний клік по помаранчевій polygon-групі, потім по бежевій.
+**qa:inspect:** верхні грані промотованих груп.
+**qa:expected:** кольори тайлів збігаються з тими, що були в полі до кліку; немає райдужних
+плям.
+
+### QA-T5-6. Промотована група не злітає після кліку
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+**qa:action:** подвійний клік по 4–5 різним групам (малі й великі, polygon і дороги);
+дивитися 15 с.
+**qa:inspect:** висота кожної промотованої групи над водою і її відстань від місця кліку.
+**qa:expected:** групи лишаються на поверхні там, де їх клікнули: жодна не підстрибує
+вище ~0.5 м над водою, не відлітає на метри вбік і не з’являється далеко від свого фрейму.
+
+### QA-T5-7. Промотована група не перекидається і не стоїть ребром
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&tilesDensity=100&tilesBuoyancy=1&tilesDrag=1.6`
+**qa:action:** подвійний клік по 4–5 групам, почекати 15 с, потім у консолі DevTools:
+`app.floaters.bodies.filter(b => b.onRemove).map(b => ({ dy: +(b.pos.y - b.water[0]).toFixed(2), tilt: Math.round(Math.acos(Math.min(1, 1 - 2 * (b.quat.x ** 2 + b.quat.z ** 2))) * 180 / Math.PI) }))`
+**qa:inspect:** сцена (групи лежать пласко на хвилі) + масив у консолі.
+**qa:expected:** групи лежать пласко й гойдаються з хвилею; у масиві для кожної групи
+`tilt` ≤ 30 (градусів, не 90–180) і `dy` у межах −0.5…0.5 (м).
+
+### QA-T5-8. Звичайні пропи після зміни не «зависають»
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/`
+**qa:action:** нічого; дивитися на човен/ящики/бочки 10 с.
+**qa:inspect:** пропи на воді.
+**qa:expected:** пропи гойдаються на хвилях як раніше. Тіло тепер чекає перших висот води
+1–3 кадри — візуально непомітно, без завмирання в повітрі.
+
+### QA-T5-9. Агентська перевірка доопрацювання — PASS
+
+- `node scripts/test-tiles-t5.mjs` — PASS (нові контракти: footprint-семпли в обох осях,
+  центр плавучості під центром мас асиметричної групи, початок = volume-weighted центр,
+  RGBA дороги по вершинах з альфою, polygon лише instance-колір, тіло нерухоме до води).
+  Мутації вбиті: RGBA як упакований RGB, без центрування семплів, origin = bounds, без
+  воріт води, 1D footprint.
+- `scripts/probe-tiles-t5-floating.mjs` (новий; CPU у сторінці, без WebGL-рендера;
+  потрібен dev-сервер): 10 реальних груп фікстури (polygon 11…938 тайлів, run 12…300),
+  хвиля 0.6 м / 25 м, вода із затримкою 3 кадри, 20 с. Density 100 і 500 — PASS:
+  нахил ≤ 19.3°, |vy| ≤ 2.33 м/с, дрейф ≤ 0.12 м, над водою ≤ 0.2 м (плита 11.5 м — 0.75 м,
+  бо перекриває пів хвилі). Початковий код на тій самій пробі: нахил до 180°, підйом до 3.8 м.
+  Лише ворота без нових семплів: 4 з 10 груп перекидаються (159°, 144°, 134°, 52°).
+- Повний стенд у headless SwiftShader (апаратний GPU не використовувався): 4 промоції
+  реальних груп без помилок у консолі; дороги мають `color.itemSize = 4`, polygon — 3;
+  тіла стоять (`vel = 0`), доки WaterQuery не відповість, далі падають з g, без викиду.
+  SwiftShader дав ~13 кадрів за 15 с, тому довгу динаміку на стенді не дивились.
+- `scripts/probe-tiles-t5.mjs` — PASS (очікування дороги: ≥4 footprint-семпли замість 1).
+- `node scripts/test-tiles-t4.mjs` — PASS; `npm run build` — PASS, 42 modules, наявне
+  warning >500 kB.
+
+### QA-T5-1. Focused offline — PASS
+
+`node scripts/test-tiles-t5.mjs`:
+
+```text
+PASS T5 offline: scoped polygon/run groups, <=8 footprint samples centred on mass, RGBA road colours, water-gated spawn, snapshot geometry/normals/colors, real Body impacts, 28-body FIFO return, flags/rest/state preservation, ID-pass shader + error restoration, dblclick/drag arbitration, reset/unload
+```
+
+CPU-only: фреймова ізоляція polygon `g`, polyline-run, footprint-семпли (до 2026-11-03 — arc-length),
+незалежний оракул snapshot вершини (scale/yaw/tilt/fieldYaw), volume/color/opacity,
+справжній Floaters.integrate → impact, демоція найстарішої промоції після 29-го тіла
+та додавання звичайного prop, бюджет точок, bit 0 збережено при bit 1,
+rest0/MRT не переписано, cleanup/reset, dblclick не click, guard drag/спожитого жесту.
+Renderer stub доводить контракти, НЕ GPU picking або performance.
+
+### QA-T5-2. Одна tiny software-GPU проба — PASS
+
+```sh
+PLAYWRIGHT_MODULE='D:/work/js-games/ua-dream/tilecraft/node_modules/playwright/index.mjs' node scripts/probe-tiles-t5.mjs
+```
+
+Порожня сторінка, 32×32 canvas, два синтетичні тайли (polygon + road),
+аналітична flat water замість WATER_GLSL/FFT; state MRT заповнено контрольним
+GPU-зсувом +1 м і tilt, поле має yaw/translation. Реальний GLSL ID-pass вибирає
+поточні GPU-позиції, native click нічого не робить, dblclick промотує polygon,
+polyline теж копіюється/ховається, Floaters.clear повертає обидва без зміни state.
+GPU: `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)`.
+Фактичний підсумок: `before=[0,1]`, `afterPolygon=[-1,1]`,
+`afterBoth=[-1,-1]`, `returned=[0,1]`, `glError=0`, console/page errors відсутні.
+Це не проба повного океану, fixture, реального GPU або hardware budgets.
+Tilecraft лише читався (наявний Playwright), встановлень/записів там немає.
+
+### QA-T5-3. Regression/build і межі
+
+`node scripts/test-tiles-t4.mjs` — PASS, обидва профілі і main/depth контракти.
+`npm run build` — PASS, 42 modules; наявне warning chunk >500 kB.
+Наявний `http://localhost:5199/` — HTTP 200, сервер не зупиняли/не дублювали.
+
+Обмеження: ID-pass враховує лише геометрію поля (без depth-occlusion пропами/островом,
+без opacity mask). Readback/bake синхронні лише на жест, latency не виміряний.
+Samples — footprint вершин групи (з 2026-11-03), не оригінальні linePoints; один Mesh на part у Group.
+Початкові CPU-швидкості нульові, параметри надалі Floaters; демоція повертає живу
+приховану GPU-позу, не CPU-позу. Удар/бризки лише за звичайним порогом входу у воду:
+промоція не підкидає тіло. Ручний hybrid QA, вигляд повної сцени, mobile, budgets і
+FD2-арбітраж лишаються відкритими; після попереднього BSOD benchmark/повні GPU-проби,
+масові E2E й автоматичні повтори під навантаженням НЕ запускалися.
+
+
 ## T4 — прийнято власником через `handoff:next` (2026-11-02)
 
 Фазу закрито після звіту реалізації й обмежень. Це owner acceptance, не новий
