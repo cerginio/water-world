@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TilePicker } from './TilePicker.js';
-import { patchTileMaterial } from './TileMaterial.js';
+import { TileFrameQuery } from './TileFrameQuery.js';
 import { WaterQuery } from '../water/WaterQuery.js';
 import { ISLAND_SIZE } from '../scene/islandHeight.js';
 
@@ -77,17 +77,21 @@ export class TileInteraction {
     this.epoch = field.epoch; this.lastDrag = -Infinity; this.lastTap = null;
     this.samples = [];
     this.touches = new Set();
-    this.highlight = new THREE.Group(); scene.add(this.highlight);
-    this.outlines = this.picker.proxies.filter(p => p.tile).map(({ source: mesh, proxy: pick }) => {
-      const proxy = pick.clone(false);
-      if (pick.isInstancedMesh) { proxy.instanceMatrix = pick.instanceMatrix; proxy.instanceColor = pick.instanceColor; }
-      proxy.material = new THREE.MeshBasicMaterial({ color: 0xffd37a, wireframe: true,
-        transparent: true, opacity: 0.45, depthWrite: false, toneMapped: false });
-      patchTileMaterial(proxy.material, field.sim.uniforms, pick.userData.tileBase);
-      proxy.matrixAutoUpdate = false; proxy.frustumCulled = false; proxy.renderOrder = 20;
-      this.highlight.add(proxy);
-      return { mesh, proxy, frameIndex: pick.userData.frameIndex };
-    });
+    this.placementQuery = new TileFrameQuery(field, 1);
+    this.occupancyQuery = new TileFrameQuery(field, 2);
+    this.contactMargin=0;
+    for(const footprint of field.rest.tiles.footprints)for(const p of footprint??[])this.contactMargin=Math.max(this.contactMargin,2*p.length());
+    this.highlight = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    this.highlight.dataset.tileFrameSelection = '';
+    this.highlight.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;display:none';
+    this.outline=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    this.outline.setAttribute('fill','none');this.outline.setAttribute('stroke','#ffd37a');this.outline.setAttribute('stroke-width','1.5');
+    this.highlight.append(this.outline);
+    document.body.append(this.highlight);
+    this.marker = document.createElement('div');
+    this.marker.textContent = '⊘';this.marker.setAttribute('aria-label','Розміщення заборонено');
+    this.marker.style.cssText = 'position:fixed;pointer-events:none;color:#ff796a;font:28px sans-serif;z-index:6;display:none';
+    document.body.append(this.marker);
     this.abort = new AbortController();
     const listen = (target, name, fn, capture = false) => target.addEventListener(name, fn,
       { capture, signal: this.abort.signal });
@@ -122,12 +126,17 @@ export class TileInteraction {
     }
     if (e.pointerType === 'touch' && this.touches.size > 1) { this.cameraTouch = true; return; }
     if (this.cameraTouch || e.button !== 0 || !this.field.sim) return;
-    // The second press of a double click belongs to T5, without starting a drag.
-    if (this.lastTap && performance.now() - this.lastTap.time < 500 &&
-      Math.hypot(e.clientX - this.lastTap.x, e.clientY - this.lastTap.y) < 5) return;
+    // A second press may become a drag. Decide whether it was a double click
+    // only after pointerup; the dblclick listener still hands a true tap to T5.
     const hit = this.picker.pick(this.camera, e.clientX, e.clientY);
     this.samples.push(this.picker.lastMs); if (this.samples.length > 120) this.samples.shift();
-    if (!hit) return;
+    if (!hit) {
+      this.clearSelection();
+      this.emptyPress = { id:e.pointerId,x:e.clientX,y:e.clientY };
+      this.lastTap = null;
+      return;
+    }
+    this.emptyPress = null;
     e.stopImmediatePropagation(); e.preventDefault(); this.generation++;
     if (this.settling) this.settling = null;
     this.selected = hit.frame;
@@ -170,23 +179,65 @@ export class TileInteraction {
 
   target(g) {
     const p = this.cursor.point(g.x, g.y);
-    this.limited = !p;
-    this.canvas.style.cursor = p ? 'grabbing' : 'not-allowed';
-    if (!p) return;
+    if(!p){this.limited=true;this.canvas.style.cursor='not-allowed';return;}
+    this.canvas.style.cursor=this.limited?'not-allowed':'grabbing';
     const target = p.sub(g.offset).setY(0);
-    // FD2 bounds are a conservative frame footprint; exact occupied terrain
-    // contact validation belongs to FD4.
-    const margin = this.field.radius;
-    if (Math.abs(target.x) + margin > ISLAND_SIZE / 2 || Math.abs(target.z) + margin > ISLAND_SIZE / 2) {
-      this.limited = true; this.canvas.style.cursor = 'not-allowed'; return;
-    }
-    g.target.copy(target);
     this.cursor.sample(this.cursor.point(g.x, g.y));
+    // The ordinary island has no dry >55-degree faces. Do not delay a short
+    // water drag behind a GPU read just to prove an empty steep-cell list.
+    if(!this.field.terrainContact.steepBounds.length){
+      const b=g.frame.bounds,margin=this.field.sim.uniforms.uTileMotionLimit.value+this.contactMargin;
+      const inside=[[b.min.x,b.min.y],[b.max.x,b.min.y],[b.max.x,b.max.y],[b.min.x,b.max.y]].every(([x,z])=>{
+        const p=new THREE.Vector3(x+g.frame.offset.x,0,z+g.frame.offset.z).applyMatrix4(this.field.group.matrixWorld).add(target.clone().sub(g.frame.world));
+        return Math.max(Math.abs(p.x),Math.abs(p.z))+margin<=ISLAND_SIZE/2;
+      });
+      if(inside){g.validation=(g.validation??0)+1;g.target.copy(target);this.limited=false;return;}
+    }
+    if(!g.occupancy && g.frame.holdAge>=0.125 && !this.occupancyQuery.pending){
+      const origin=g.frame.world.clone();
+      this.occupancyQuery.query(g.frame).then(bounds=>{
+        if(this.disposed||this.gesture!==g||!bounds||bounds[0]<-1e19)return;
+        g.occupancy={minX:-bounds[0]-origin.x,maxX:bounds[2]-origin.x,
+          minZ:-bounds[1]-origin.z,maxZ:bounds[3]-origin.z};
+      }).catch(error=>console.error('[tile occupancy]',error));
+    }
+    // A cached GPU bound of the held layout cheaply excludes all steep cells.
+    // Only a possible overlap needs exact per-tile triangle clipping.
+    if(g.occupancy){
+      const b=g.occupancy;
+      // Cover subsequent tilt changes of a held tile as it reaches the shore.
+      const margin=this.contactMargin;
+      const minX=b.minX+Math.min(g.frame.world.x,target.x)-margin,maxX=b.maxX+Math.max(g.frame.world.x,target.x)+margin;
+      const minZ=b.minZ+Math.min(g.frame.world.z,target.z)-margin,maxZ=b.maxZ+Math.max(g.frame.world.z,target.z)+margin;
+      if(Math.max(Math.abs(minX),Math.abs(maxX),Math.abs(minZ),Math.abs(maxZ))<=ISLAND_SIZE/2 &&
+        !this.field.terrainContact.steepBounds.some(b=>b.maxX>=minX&&b.minX<=maxX&&b.maxZ>=minZ&&b.minZ<=maxZ)){
+        g.validation=(g.validation??0)+1;g.target.copy(target);this.limited=false;return;
+      }
+    }
+    if (this.placementQuery.pending) return;
+    // The GPU clips terrain against the swept occupied footprint, including
+    // the path between current pose and target, so large moves cannot tunnel.
+    const delta=target.clone().sub(g.frame.world).setY(0);
+    const candidate=g.frame.world.clone().add(delta);
+    const validation=g.validation=(g.validation??0)+1;
+    this.placementQuery.query(g.frame,new THREE.Vector2(delta.x,delta.z),
+      this.cursor.height-(this.cursor.waterOffset??this.cursor.groundOffset??0)).then(result=>{
+      if(this.disposed||this.gesture!==g||g.validation!==validation||!result)return;
+      this.limited=result[0]>0.5;
+      if(!this.limited) g.target.copy(candidate);
+      this.canvas.style.cursor=this.limited?'not-allowed':'grabbing';
+    }).catch(error=>{console.error('[tile placement]',error);this.limited=true;});
   }
 
   up(e) {
     this.touches.delete(e.pointerId);
     this.cameraTouch = this.touches.size > 0;
+    if(this.emptyPress?.id===e.pointerId){
+      if(Math.hypot(e.clientX-this.emptyPress.x,e.clientY-this.emptyPress.y)<(e.pointerType==='touch'?10:5)){
+        this.clearSelection();
+      }
+      this.emptyPress=null;
+    }
     if (!this.gesture || e.pointerId !== this.gesture.id) return;
     e.stopImmediatePropagation();
     this.finish(false);
@@ -199,6 +250,7 @@ export class TileInteraction {
     if (g.dragged) {
       this.lastDrag = performance.now(); this.lastTap = null;
       g.frame.mode = 'placed';
+      this.field.placeFrameOnTop(g.frame);
       if (!immediate) this.settling = { frame: g.frame, target: g.target.clone(), elapsed: 0 };
       this.field.syncFrames(true);
     } else this.lastTap = { x: g.x, y: g.y, time: performance.now() };
@@ -207,6 +259,7 @@ export class TileInteraction {
     this.state = this.settling ? 'settling' : 'selected';
     this.hoverPoint = g.type === 'touch' ? null : { x: g.x, y: g.y };
     this.canvas.style.cursor = '';
+    this.marker.style.display='none';this.limited=false;
   }
 
   cancel() {
@@ -221,9 +274,30 @@ export class TileInteraction {
       if (this.canvas.hasPointerCapture(g.id)) this.canvas.releasePointerCapture(g.id);
     }
     this.generation++; this.cursor.tag++; this.settling = null;
+    this.emptyPress=null;this.marker.style.display='none';this.limited=false;
     this.hoverPoint = null; this.hovered = null; this.cameraTouch = false;
     this.touches.clear();
     this.state = this.selected ? 'selected' : 'idle'; this.canvas.style.cursor = '';
+  }
+
+  clearSelection(){
+    this.selected=null;this.hovered=null;this.hoverPoint=null;this.highlightFrame=null;
+    this.generation++;this.state='idle';this.highlight.style.display='none';
+  }
+
+  updateHighlight(frame){
+    this.highlightFrame=frame;
+    if(!frame){this.highlight.style.display='none';return;}
+    const {min,max}=frame.bounds,rect=this.canvas.getBoundingClientRect();
+    const points=[[min.x,min.y],[max.x,min.y],[max.x,max.y],[min.x,max.y]].map(([x,z])=>{
+      const p=new THREE.Vector3(x+frame.offset.x,0,z+frame.offset.z).applyMatrix4(this.field.group.matrixWorld);
+      const land=this.field.terrainContact.at(p.x,p.z)?.height??-1e20;
+      p.y=land>0?land+0.05:frame.selectionHeight+0.05;
+      const screen=p.clone().project(this.camera);
+      return `${rect.left+(screen.x+1)*rect.width/2},${rect.top+(1-screen.y)*rect.height/2}`;
+    });
+    this.outline.setAttribute('points',points.join(' '));
+    this.highlight.style.display='block';
   }
 
   update(dt) {
@@ -235,6 +309,8 @@ export class TileInteraction {
     const g = this.gesture;
     if (g?.dragged) {
       this.target(g);
+      this.marker.style.display=this.limited?'block':'none';
+      this.marker.style.left=`${g.x+14}px`;this.marker.style.top=`${g.y+12}px`;
       const delta = g.target.clone().sub(g.frame.world).multiplyScalar(1 - Math.exp(-dt / 0.05));
       delta.clampLength(0, 500 * dt);
       const p = g.frame.world.clone().add(delta);
@@ -246,7 +322,7 @@ export class TileInteraction {
       const p = s.frame.world.clone().lerp(s.target, 1 - Math.exp(-dt / 0.035));
       if (s.elapsed >= 0.15) p.copy(s.target);
       this.field.moveFrame(s.frame.id, p.x, p.z);
-      if (s.elapsed >= 0.15) { this.settling = null; this.state = 'selected'; }
+      if (s.elapsed >= 0.15) { this.settling = null; this.state = this.selected?'selected':'idle'; }
     }
     if (!g && !this.hoverBusy && this.hoverPoint) {
       this.hoverBusy = true;
@@ -259,11 +335,7 @@ export class TileInteraction {
         }
       }).catch(() => {}).finally(() => { this.hoverBusy = false; });
     }
-    const frame = g?.frame ?? this.hovered ?? this.selected;
-    for (const { mesh, proxy, frameIndex } of this.outlines) {
-      proxy.visible = frame?.index === frameIndex;
-      if (proxy.visible) { mesh.updateWorldMatrix(true, false); proxy.matrix.copy(mesh.matrixWorld); proxy.matrixWorldNeedsUpdate = true; }
-    }
+    this.updateHighlight(g?.frame??this.selected);
   }
 
   dispose() {
@@ -274,7 +346,7 @@ export class TileInteraction {
     if (this.hoverBusy) this.retire = setInterval(() => {
       if (!this.hoverBusy) { clearInterval(this.retire); release(); }
     }, 10); else release();
-    for (const { proxy } of this.outlines) { proxy.material.dispose(); proxy.dispose?.(); }
-    this.highlight.removeFromParent();
+    this.placementQuery.dispose();this.occupancyQuery.dispose();
+    this.highlight.remove();this.marker.remove();
   }
 }

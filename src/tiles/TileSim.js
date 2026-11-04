@@ -108,9 +108,10 @@ void main() {
   float groundTarget = -1e20;
   vec4 ground = vec4(0.0,1.0,0.0,-1e20);
 #ifdef TILE_TERRAIN_CONTACT
-  if (!polyline) {
+  {
     ground = terrainAt(q);
     groundTarget = polygonSupport(uv, q, worldXZ, s1.xy);
+    if(groundTarget < -1e19) ground=vec4(0.0,1.0,0.0,-1e20);
     float gap = r1.x + s0.x - groundTarget;
     // Geometric Schmitt band: dry terrain always supports, a lifting wave must
     // lift the bottom clear of the 5 cm exit threshold.
@@ -213,7 +214,7 @@ void main() {
     state3.w = -0.125;
   }
 #ifdef TILE_TERRAIN_CONTACT
-  if (!polyline) {
+  {
     // Re-evaluate after horizontal integration and tilt: hard floor applies even
     // during the 200 ms blend, in hold, and on the invisible deep seabed.
     vec2 finalQ = (uFieldMatrix*vec4(r.x+state0.z+pose.x,0.0,r.y+state0.w+pose.y,1.0)).xz;
@@ -231,7 +232,8 @@ const RUN_FRAG = /* glsl */`
 precision highp float;
 precision highp int;
 ${WATER_GLSL}
-uniform highp sampler2D uRunRest, uRun, uRunHistory;
+uniform highp sampler2D uRunRest, uRun, uRunHistory, uState1;
+uniform int uRunHeight;
 uniform mat4 uFieldMatrix;
 uniform float uDt, uSampleDt, uDrag, uOrbit, uAnchorPeriod;
 uniform int uRunCount;
@@ -246,6 +248,11 @@ void main() {
   vec4 s = texelFetch(uRun, uv, 0), prev = texelFetch(uRunHistory, uv, 0);
   if (bad(s) || bad(prev)) return;
   vec4 runRest = texelFetch(uRunRest, uv, 0);
+  vec2 members = texelFetch(uRunRest, uv+ivec2(0,uRunHeight),0).xy;
+  float contact = 0.0;
+  for(int id=int(members.x);id<int(members.y);id++) {
+    contact=max(contact,texelFetch(uState1,ivec2(id%512,id/512),0).z);
+  }
   vec2 r = runRest.xy;
   int frameId = int(runRest.z);
   vec4 pose = framePose(frameId);
@@ -258,7 +265,8 @@ void main() {
   float dt = uDt / float(steps);
   for (int step = 0; step < TILE_MAX_STEPS; step++) {
     if (step >= steps) break;
-    s.zw += horizontalAcceleration(s.xy, s.zw, r - framePivot(frameId), waterVelocity, drift) * dt;
+    s.zw += horizontalAcceleration(s.xy, s.zw, r - framePivot(frameId), waterVelocity, drift) * (1.0-contact)*dt;
+    s.zw *= exp(-40.0*contact*dt);
     s.xy += s.zw * dt;
   }
   if (bad(s)) return;
@@ -302,7 +310,7 @@ export class TileSim {
     for (let i = 0; i < tiles.count; i++) {
       r0.set([tiles.x[i], tiles.z[i], tiles.yaw[i], tiles.radius[i]], i * 4);
       const footprint = tiles.footprints?.[i] ?? [];
-      r0[(WIDTH*this.height+i)*4] = footprint.length;
+      r0.set([footprint.length,tiles.surfaceOffset?.[i]??0,0,0],(WIDTH*this.height+i)*4);
       footprint.forEach((v,k) => r0.set([v.x,v.y,v.z,0], ((k+2)*WIDTH*this.height+i)*4));
       r1.set([tiles.y0[i], tiles.thickness[i], tiles.runId[i], tiles.flags[i] | ((tiles.frameIndex?.[i] ?? 0) << 2)], i * 4);
     }
@@ -315,13 +323,14 @@ export class TileSim {
     this.current = 0;
     this.runCount = runs.length;
     this.runHeight = Math.max(1, Math.ceil(runs.length / WIDTH));
-    const runRest = new Float32Array(WIDTH * this.runHeight * 4);
+    const runRest = new Float32Array(WIDTH * this.runHeight * 8);
     runs.forEach((run, i) => {
       let x = 0, z = 0;
       for (const id of run.tiles) { x += tiles.x[id]; z += tiles.z[id]; }
       runRest.set([x / run.tiles.length, z / run.tiles.length, tiles.frameIndex?.[run.tiles[0]] ?? 0, 0], i * 4);
+      runRest.set([run.tiles[0],run.tiles.at(-1)+1,0,0],(WIDTH*this.runHeight+i)*4);
     });
-    this.runRest = restTexture(runRest, this.runHeight);
+    this.runRest = restTexture(runRest, this.runHeight*2);
     this.runTargets = runs.length ? Array.from({ length: 2 }, () => new THREE.WebGLRenderTarget(WIDTH, this.runHeight, {
       count: 2, type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
       depthBuffer: false, generateMipmaps: false,
@@ -344,7 +353,7 @@ export class TileSim {
     }));
     this.runQuad = runs.length ? new FullscreenQuad(rawPass(RUN_FRAG, {
       ...this.quad.material.uniforms,
-      uRunRest: { value: this.runRest }, uRunCount: { value: runs.length },
+      uRunRest: { value: this.runRest }, uRunCount: { value: runs.length }, uRunHeight: { value: this.runHeight },
       uRunHistory: { value: this.runTarget.textures[1] },
     })) : null;
     for (const quad of [this.quad, this.runQuad]) if (quad) {

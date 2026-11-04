@@ -104,7 +104,8 @@ export class TileField {
   describe() {
     const r = this.rest;
     const kinds = [r.polygon.length && 'polygon', r.polyline.length && 'polyline'].filter(Boolean).join(' + ');
-    return `${r.tiles.count} tiles · ${r.groups} groups · ${kinds || 'empty'}`;
+    return (r.maxPolylineLength > 1 ? `Warning: polyline tile ${r.maxPolylineLength.toFixed(3)} m > 1 m; terrain contact accuracy not guaranteed · ` : '') +
+      `${r.tiles.count} tiles · ${r.groups} groups · ${kinds || 'empty'}`;
   }
 
   build(rest) {
@@ -241,9 +242,18 @@ export class TileField {
       const frame = this.frameRegistry.entries[e.frameIndex];
       if (!frame) continue;
       e.mesh.position.copy(frame.offset);
+      e.mesh.renderOrder = frame.rank;
+      e.mesh.material.polygonOffset = !e.mesh.material.transparent && frame.rank > 0;
+      e.mesh.material.polygonOffsetFactor = 0;
+      e.mesh.material.polygonOffsetUnits = -frame.rank;
       if (e.proxy) e.proxy.position.copy(frame.offset);
     }
     this.sim?.syncFrames();
+  }
+
+  placeFrameOnTop(frame) {
+    frame.rank = Math.max(0, ...this.frameRegistry.entries.map(f => f.rank)) + 1;
+    this.syncFrames(true);
   }
 
   moveFrame(frameId, x, z) {

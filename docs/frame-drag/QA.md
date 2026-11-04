@@ -11,6 +11,170 @@ Pose живе лише в поточній сесії. URL зберігає па
 reload або зміна source починає нову розкладку. Reset повертає всі фрейми до
 початкових позицій відносно поточного поля, в `inherited`, і обнуляє симуляцію.
 
+## FD4. Polyline на суші, перекриття, крутизна — ЗАКРИТО
+
+Додатково на вимогу власника: рамка за чотирма фіксованими кутами фрейму
+замість wireframe деталей. SVG має тільки контур (`fill=none`), проєктує
+світові кути синхронно з камерою й pose, не змінює матеріали малюнка.
+Hover змінює тільки курсор; короткий клік / tap по порожньому місцю знімає
+вибір. Після вибору можна відразу почати drag наступним натисканням.
+Прийнято власником через `handoff:next frame-drag` 2026-11-04.
+QA-FD4-1…5 прийнято як фазу загалом, без приписування нового окремого ручного
+прогону кожному сценарію. Рендер, lifecycle та бюджети FD5 лишаються відкритими.
+
+Перевірено 2026-11-04, AMD Radeon 890M / Chromium WebGL. Mobile — профіль
+на цьому ж GPU; справжній телефон і hardware-бюджети не атестовані.
+
+| рівень / перевірка | результат |
+|---|---|
+| Guard | `npm run build`, `probe-tiles.mjs`, `probe-tiles-drift.mjs` — PASS; `errors=[]` |
+| Offline | FD1, T4, T5, terrain — PASS |
+| Drift guard | 120.076 с / 4648 кадрів, nonfinite=0; 218196 стиків, maxSeam=0; recovery error=0.00000661 м |
+| FD4 probe | `node scripts/probe-frame-land.mjs` — PASS; 8 slope/profile fixtures, 6 placement fixtures, 4 overlap fixtures; реальний hybrid і DOM-жести |
+| Polyline | 0° / 10° / 30° / 45°; max tilt error=0.00060°; min clearance≥0.005010 м; спільний XZ run і плоский шов: error=0 |
+| Реальна суша → вода | 1958 контактних polyline-тайлів обраного фрейму; min clearance=0.0049892 м; після повернення контактних polyline=0 |
+| Перекриття | Opaque RGB: синій `[0,0,255]`, червоний `[255,0,0]`; transparent: `[53,0,178]` / `[178,0,53]` при зміні останнього покладеного фрейму |
+| Рамка / порожній клік | Клік → через 50 мс повторний down + drag=8.552 м; 4 кути незмінні протягом 400 мс хвиль; fill=none, wireframe=false, promotions=0; після порожнього кліку selected=null і display=none, hover її не повертає |
+| Заборона | Крута зайнята область, схил поза pivot, край і sweep через схил відхилені; порожня область та глибоке дно дозволені; DOM marker=block на підготовленому трикутнику |
+| Геометрія hybrid | 46861 тайл, 46842 непорожніх footprint; max contact footprint=6.99761 м з прилеглими гранями, warning >1 м; shader hull limit=17 вершин |
+| FD3 regression | `probe-terrain-contact.mjs` — PASS; linked tile samplers=14 uniform / 15 texture; land drag=12.0012 м, grab error=1.011 CSS px, camera movement=0; source=none звільняє ресурси |
+| FD2 regression | `FD2_SKIP_SOAK=1 node scripts/probe-frame-drag.mjs` — PASS після виправлень виділення; polygon/polyline усіх 8 фреймів, mouse/touch/pinch, blur, dblclick, reset/unload; grab error while held=2.440 CSS px, after up=4.199 CSS px |
+
+Останній FD2 regression: pick p50/p95=0.90/1.20 мс, interaction CPU=0.20/0.50 мс
+(81 кадр), mobile-profile pick=0.90/1.40 мс. Це короткий прогін без повторного
+60-секундного soak, не повна атестація бюджетів FD5. Окремий drift guard вище —
+120 с. Після останніх виправлень UI повторено build, offline FD1/T4/T5, FD4
+і FD2; фізика після drift guard не змінювалася.
+
+Регресія, повідомлена власником 2026-11-04: екранний AABB плавав від хвиль,
+hover повертав рамку після зняття вибору, а раннє розпізнавання double click
+ігнорувало друге натискання до початку руху. Виправлено фіксованими світовими
+кутами, вибором лише кліком і рішенням про dblclick після pointerup. Для
+opaque placement bias використовується тільки polygonOffsetUnits (factor=0);
+для transparent — тільки renderOrder, без slope-dependent polygonOffset.
+
+Контактна область polyline включає грані, що з'єднують різних owners, а не
+лише їхні власні вершини. Одинарна вершина / ребро має envelope 10 мкм;
+owner без видимих вершин не бере участі у перевірці. Перший вимір лише за
+власними вершинами давав 1.147 м; повна область прилеглих граней — 6.998 м.
+Спекова оцінка 0.332 м не є максимальною довжиною цієї контактної геометрії.
+Placement / occupancy читають асинхронно тільки зведений 1×1 GPU-результат,
+без повного snapshot фрейму. Рамка не має GPU readback. На воді й пологій суші
+CPU broad phase виключає круті комірки без вузького GPU-проходу; за відсутності
+крутих комірок звичайний drag починається без очікування GPU.
+
+### QA-FD4-1. Рамка та зняття вибору
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid`
+**qa:action:** навести курсор на фрейм; коротко клікнути його видиму деталь;
+зачекати 1 с без руху камери; знову клікнути деталь і одразу наступним
+натисканням перетягнути її; коротко клікнути воду між малюнками; знову навести
+курсор на фрейм без натискання.
+**qa:inspect:** рамка навколо малюнка та `Tiles → selectedFrame`.
+**qa:expected:** hover не створює рамки. Після вибору видно один тонкий контур
+за чотирма кутами фрейму, з перспективою сцени, без заливки та сітки на деталях.
+Хвилі не змінюють його кути; під час drag він рухається разом із фреймом.
+Швидке повторне натискання починає drag. Після порожнього кліку рамка зникає,
+selectedFrame показує `—`; наведення її не повертає.
+Натискання й drag із порожнього місця обертає камеру. Перевірено DOM-жестами
+у FD4 probe; регресія жестів камери — у FD2 probe.
+
+### QA-FD4-2. Контакт, шви, перекриття та обмеження — автоматична проба
+
+**qa:mode:** cli
+**qa:open:** PowerShell у `D:/work/_tools/water-3d/Ultra-Water`, стенд
+`http://localhost:5199/` уже запущений.
+**qa:action:** виконати:
+
+```powershell
+$env:PLAYWRIGHT_MODULE = 'D:/work/js-games/ua-dream/tilecraft/node_modules/playwright/index.mjs'
+Remove-Item Env:FD4_DOM_ONLY -ErrorAction SilentlyContinue
+node scripts/probe-frame-land.mjs
+```
+
+**qa:inspect:** фінальний JSON, поля `fixtures`, `land`, `returned`, `selection`,
+`cleared`, `blocked`, `errors`, `pass`.
+**qa:expected:** exit code 0, `pass: true`, `errors: []`. Polyline у desktop/mobile
+повторює 0°, 10°, 30°, 45° з похибкою <0.15°; низ ≥ terrain−1 мм;
+горизонтальна різниця двох членів run <1e−7 м; плоский шов <0.1 мм.
+`steep`, `offPivot`, `edge`, `sweep` відхилені; `deep` і `empty` дозволені.
+Порожній owner без видимих вершин не блокує рух. У `overlap` колір останнього
+покладеного фрейму переважає при обох порядках і для opaque / transparent.
+Реальні DOM-жести показують рамку, знімають вибір і вмикають маркер заборони.
+Probe також зберігає знімки у системному temp, шляхи — у JSON.
+Якщо на вихідному острові немає сухого трикутника >55°, probe тимчасово
+створює такий трикутник одночасно у видимій геометрії й контактній карті
+своєї ізольованої сторінки; тоді `blocked.terrainFixture: true`.
+
+### QA-FD4-3. Polyline на реальному пагорбі
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid`
+**qa:action:** у консолі виконати й зачекати 3 с:
+
+```js
+app.tiles.moveFrame(app.tiles.frameRegistry.entries[2].id, 260, 120);
+app.camera.position.set(260, app.tiles.terrainContact.at(260, 120).height + 100, 220);
+app.controls.target.set(260, app.tiles.terrainContact.at(260, 120).height, 120);
+app.controls.update();
+```
+
+**qa:inspect:** стрічки polyline та polygon у третьому фреймі на схилі.
+**qa:expected:** стрічки лежать по профілю пагорба, без занурення в землю;
+фрейм не стає однією горизонтальною дошкою. Невеликі розходження жорстких
+сегментів на зламі трикутників допустимі; на площині шви перевіряє QA-FD4-2.
+Позицію, камеру й нижні вершини реальної hybrid-моделі перевіряє FD4 probe;
+тут перевірити вигляд і мерехтіння очима.
+
+### QA-FD4-4. Два фрейми внахлест
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid`
+**qa:action:** перетягнути один фрейм поверх сусіднього, відпустити; потім
+схопити видиму деталь нижнього фрейму й перемістити його поверх першого.
+**qa:inspect:** спільна область двох малюнків після кожного відпускання.
+**qa:expected:** серед збіжних поверхонь зверху останній покладений фрейм,
+порядок змінюється після другого переносу, немає миготіння збіжних граней.
+Геометрія не підстрибує від зміни порядку. Обидва порядки opaque / transparent
+додатково перевірені кольоровими GPU-пікселями у QA-FD4-2.
+
+### QA-FD4-5. Попередження про довгий polyline-тайл
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?tiles=story-8-frames-hibrid`
+**qa:action:** розгорнути `Tiles`; подивитися початок `status`; для повного
+тексту виконати в консолі `app.tiles.status`.
+**qa:inspect:** `Tiles → status`.
+**qa:expected:** текст починається `Warning: polyline tile`, далі число >1
+і `m > 1 m`. Це діаметр контактного footprint, включно з прилеглими гранями
+спільних стиків, а не відстань між центрами вихідних тайлів.
+Спекова оцінка 0.332 м не описує цей footprint;
+точність контакту для сегментів понад 1 м не гарантується.
+
+### Свідомо не зроблено в FD4
+
+- Hardware-бюджети picking / CPU / GPU, справжній телефон, фінальна атестація
+  reflection/depth/shadow і повний lifecycle — FD5.
+- Subdivision довгих polyline-тайлів не додається (спека §8).
+- На зламі трикутників жорсткі сегменти можуть мати міліметрові розходження;
+  ≤0.1 мм вимагається на площині.
+
+### Журнал перевірок FD4
+
+2026-11-04: власник прийняв FD4 командою `handoff:next frame-drag`.
+Перед комітом повторено guard: build, `probe-tiles.mjs` та
+`probe-tiles-drift.mjs` — PASS, `errors=[]`. Offline FD1/T4/T5/terrain —
+4 набори PASS. Свіжий drift: 123.730 с / 4314 кадрів, nonfinite=0,
+218196 стиків, maxSeam=0; anchored recovery error=0.000006693 м.
+Після guard повторено повний `probe-frame-land.mjs` — PASS: 8 slope/profile,
+6 placement і 4 overlap fixtures, реальна модель та DOM-жести, `errors=[]`.
+Реальна суша: 1958 контактних polyline, min clearance=0.0049721 м;
+повернення у воду — 0 контактних polyline; повторний drag=8.70174 м.
+Зняття вибору: selected=null, display=none; маркер заборони=block.
+Це новий прогін guard + FD4 probe; наведені вище FD2/FD3 regression і їхні
+таймінги збережено як результати приймального прогону, повторно їх не заявлено.
+
 ## FD3. Контакт polygon із землею — ЗАКРИТО
 
 Прийнято власником через `handoff:next` 2026-11-04. Відкриті роботи FD4/FD5

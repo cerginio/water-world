@@ -13,12 +13,19 @@ export class TileFrames {
   rebuild(rest, matrix) {
     const previous = this.byId;
     const boxes = new Map();
+    const corners=new Map(),heights=new Map();
     for (const part of [...rest.polygon, ...rest.polyline]) {
       const key = frameKey(part.frameId);
       if (!boxes.has(key)) boxes.set(key, new THREE.Box2());
+      if(!corners.has(key))corners.set(key,new THREE.Box2());
       const box = boxes.get(key);
       const ids = part.tile ?? new Set(part.aTile);
-      for (const id of ids) box.expandByPoint(new THREE.Vector2(rest.tiles.x[id], rest.tiles.z[id]));
+      for (const id of ids) {
+        const t=rest.tiles;
+        box.expandByPoint(new THREE.Vector2(t.x[id], t.z[id]));
+        for(const p of t.footprints?.[id]??[new THREE.Vector3()])corners.get(key).expandByPoint(new THREE.Vector2(t.x[id]+p.x,t.z[id]+p.z));
+        heights.set(key,Math.max(heights.get(key)??0,(t.surfaceOffset?.[id]??0)+(t.thickness?.[id]??0)/2));
+      }
     }
     this.entries = [];
     this.byId = new Map();
@@ -31,7 +38,8 @@ export class TileFrames {
       const world = old?.world.clone() ?? pivot.clone().applyMatrix4(matrix);
       const offset = world.clone().applyMatrix4(inverse).sub(pivot).setY(0);
       const entry = { id, index: this.entries.length, pivot, world, offset,
-        mode: old?.mode ?? 'inherited', held: false, holdAge: 0, pose: new THREE.Vector4() };
+        mode: old?.mode ?? 'inherited', rank: old?.rank ?? 0, bounds:corners.get(id),selectionHeight:heights.get(id)??0,
+        held: false, holdAge: 0, pose: new THREE.Vector4() };
       this.entries.push(entry);
       this.byId.set(id, entry);
     }
@@ -63,7 +71,7 @@ export class TileFrames {
   }
 
   reset(matrix) {
-    for (const entry of this.entries) { entry.mode = 'inherited'; entry.held = false; entry.offset.set(0, 0, 0); }
+    for (const entry of this.entries) { entry.mode = 'inherited'; entry.rank = 0; entry.held = false; entry.offset.set(0, 0, 0); }
     this.sync(matrix);
   }
 }

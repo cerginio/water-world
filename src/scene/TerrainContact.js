@@ -33,6 +33,14 @@ export class TerrainContact {
     this.texture.minFilter = this.texture.magFilter = THREE.NearestFilter;
     this.texture.needsUpdate = true;
     this.uniforms = { uTerrainContact: { value: this.texture }, uTerrainSize: { value: size } };
+    this.steepBounds = [];
+    const h=this.heights,w=this.width,step=this.step,half=size/2;
+    for(let j=0;j<this.segments;j++)for(let i=0;i<this.segments;i++){
+      const k=j*w+i,a=h[k],b=h[k+1],c=h[k+w],d=h[k+w+1];
+      if(Math.max(Math.hypot(b-a,c-a),Math.hypot(d-c,d-b))/step<=Math.tan(55*Math.PI/180))continue;
+      this.steepBounds.push({minX:i*step-half,maxX:(i+1)*step-half,
+        minZ:j*step-half,maxZ:(j+1)*step-half});
+    }
   }
 
   at(x, z) {

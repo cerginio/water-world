@@ -104,7 +104,13 @@ export class TilePicker {
       let visible = true;
       for (let p = source; p; p = p.parent) visible &&= p.visible;
       proxy.visible = visible;
-      if (proxy.userData.frameIndex !== undefined) proxy.material.opacity = source.material.opacity;
+      if (proxy.userData.frameIndex !== undefined) {
+        proxy.material.opacity = source.material.opacity;
+        proxy.renderOrder=source.renderOrder;
+        proxy.material.polygonOffset=source.material.polygonOffset;
+        proxy.material.polygonOffsetFactor=source.material.polygonOffsetFactor;
+        proxy.material.polygonOffsetUnits=source.material.polygonOffsetUnits;
+      }
     }
     const previous = r.getRenderTarget(), autoClear = r.autoClear;
     const scissor = r.getScissor(new THREE.Vector4()), scissorTest = r.getScissorTest();

@@ -37,6 +37,38 @@ export function collectTileRest(compiled, { frame = 'all' } = {}) {
   }
   const runs = [];
   const polyline = roadRecords.map((r) => collectRoad(r, layers, space, tiles, runs));
+  let maxPolylineLength = 0;
+  for (const part of polyline) {
+    const owners = new Map(),sourceCount=part.aTile.length/2;
+    for (let v = 0; v < part.aTile.length / 2; v++) {
+      const id = part.aTile[v];
+      if (!owners.has(id)) owners.set(id, new Set());
+      owners.get(id).add(v);
+    }
+    // Shared joints can put a face's vertices under different rigid owners.
+    // Include the incident lower faces, so support and slope validation cover
+    // their interiors as well as their corners.
+    const index=part.geometry.index;
+    for(let i=0;i<(index?.count??part.aTile.length);i+=3){
+      const vertices=[0,1,2].map(k=>(index?index.getX(i+k):i+k)%sourceCount);
+      for(const id of new Set(vertices.map(v=>part.aTile[v])))for(const v of vertices)owners.get(id).add(v);
+    }
+    for (const [id, members] of owners) {
+      const vertices=Array.from(members,v=>{
+        const owner=tiles[part.aTile[v]],tile=tiles[id];
+        return new THREE.Vector3().fromArray(part.aOffset,v*3).add(new THREE.Vector3(owner.x-tile.x,owner.y0-tile.y0,owner.z-tile.z));
+      });
+      let hull = convexFootprint(vertices);
+      // A shared road joint may give an owner only one point or one edge.
+      // Those vertices still render and need support. Give their degenerate
+      // footprint a 10-micrometre envelope, below the contact error budget.
+      if(hull.length<3) hull=convexFootprint(hull.flatMap(p=>[
+        new THREE.Vector3(p.x-1e-5,p.y,p.z-1e-5),new THREE.Vector3(p.x+1e-5,p.y,p.z-1e-5),
+        new THREE.Vector3(p.x+1e-5,p.y,p.z+1e-5),new THREE.Vector3(p.x-1e-5,p.y,p.z+1e-5)]));
+      footprints[id] = hull;
+      for (const a of hull) for (const b of hull) maxPolylineLength = Math.max(maxPolylineLength, a.distanceTo(b));
+    }
+  }
 
   const n = tiles.length;
   const rest = {
@@ -67,7 +99,7 @@ export function collectTileRest(compiled, { frame = 'all' } = {}) {
   const box = new THREE.Box2();
   for (let i = 0; i < n; i++) box.expandByPoint(new THREE.Vector2(rest.x[i], rest.z[i]));
   const groups = new Set(rest.g).size;
-  return { tiles: rest, polygon, polyline, runs, groups, bounds: box };
+  return { tiles: rest, polygon, polyline, runs, groups, bounds: box, maxPolylineLength };
 }
 
 // InstancedMesh record: one tile per instance; the prototype geometry is kept as built

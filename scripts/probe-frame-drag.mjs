@@ -91,7 +91,18 @@ try {
     fd2.world = app.tiles.interaction.selected.world.toArray();
   });
   await page.mouse.move(point.x + 140, point.y + 50, { steps: 15 });
-  await page.waitForTimeout(500); await page.mouse.up(); await page.waitForTimeout(300);
+  await page.waitForTimeout(500);
+  report.grabBeforeUp = await page.evaluate(({id,x,y})=>{
+    const t=app.tiles,data=fd2.read(t.sim.target),k=id*4;
+    const f=t.frameRegistry.entries[t.rest.tiles.frameIndex[id]];
+    const p=new fd2.THREE.Vector3(t.rest.tiles.x[id]+data[k+2]+f.offset.x,
+      t.rest.tiles.y0[id]+data[k]+t.rest.tiles.surfaceOffset[id],
+      t.rest.tiles.z[id]+data[k+3]+f.offset.z).applyMatrix4(t.group.matrixWorld).project(app.camera);
+    return {error:Math.hypot((p.x+1)*700-(x+140),(1-p.y)*500-(y+50)),
+      pending:t.interaction.placementQuery.pending,occupancy:!!t.interaction.gesture.occupancy,
+      target:t.interaction.gesture.target.toArray(),world:f.world.toArray()};
+  },point);
+  await page.mouse.up(); await page.waitForTimeout(300);
   report.hold = await page.evaluate(() => {
     const t = app.tiles, f = t.interaction.selected, after = fd2.read(t.sim.target), run = fd2.read(t.sim.runTarget);
     let xz = 0, runError = 0;
@@ -116,7 +127,7 @@ try {
       t.rest.tiles.z[id] + data[k + 3] + f.offset.z).applyMatrix4(t.group.matrixWorld).project(app.camera);
     return Math.hypot((p.x + 1) * 700 - (x + 140), (1 - p.y) * 500 - (y + 50));
   }, point);
-  assert.ok(report.grabErrorPx <= 5, `grab error ${report.grabErrorPx}`);
+  assert.ok(report.grabErrorPx <= 5, `grab error ${report.grabErrorPx}; before up ${JSON.stringify(report.grabBeforeUp)}`);
   await page.screenshot({ path: join(tmpdir(), 'water-fd2-drag.png') });
   await page.waitForTimeout(600);
   const again = await page.evaluate(() => fd2.find());

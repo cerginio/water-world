@@ -1,24 +1,33 @@
 # Handoff: frame-drag — перенесення фреймів по воді й рельєфу
 
 Стан на 2026-11-04. Гілка `master`. FD1 — `6f54eab`, FD2 — `18ae7cc`.
-FD3 прийнято власником через `handoff:next` 2026-11-04; реалізація, перевірки
-та документи входять у коміт закриття FD3. Бюджети picking / CPU лишаються
+FD3 — `5670f09`. FD4 прийнято власником через `handoff:next frame-drag`
+2026-11-04; реалізація, перевірки та документи входять у коміт закриття FD4.
+Бюджети picking / CPU лишаються
 відкритими для FD5. Tile-floaters T0–T5 закриті (базовий HANDOFF).
 
 Спека: [FRAME-DRAG-SPEC.md](../../FRAME-DRAG-SPEC.md) (далі — «спека»). Базова тема:
 tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — її код
 (`src/tiles/`) ця тема розширює. Tilecraft лише читається (spec.md §1).
 
-> **Далі:** FD4 — polyline на суші, порядок перекриття та заборона схилів >55° (спека §8). Розширити нижній footprint/contact у `tileRest.js`, `tileContact.js`, `TileSim.js` на polyline, зберігши спільну горизонталь run і шви на плоскому піску. У `TileInteraction.js` перевіряти крутизну по всій зайнятій контактній області, з останньою валідною ціллю й маркером; додати placement rank для opaque polygonOffset / transparent renderOrder. Наявні state1.zw вже зайняті контактом; не повертати туди angular velocity. Picking/CPU-бюджети FD2 лишаються для FD5.
+> **Далі:** FD5 — рендер, lifecycle, виміри (спека §9, §11; крок 5 §12). Перевірити reflection/depth і тіні після переносу на сушу; context lost / unload / source change під час drag і pending readback. Виміряти cold/warm picking, CPU interaction та додатковий GPU контакт/pose на desktop і доступному mobile; окремо позначати профіль desktop GPU та справжній телефон. Зберегти рамку за фіксованими світовими кутами, швидкий повторний drag і порожній клік без повернення рамки від hover. Наявні state1.zw зайняті контактом; не повертати туди angular velocity.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`; правило
 стенду — `AGENTS.md` → «Локальний стенд».
 
 ## Що зроблено і працює
 
-FD1 і FD2 прийнято 2026-11-03, FD3 — 2026-11-04. Ручні сценарії:
-[QA.md](QA.md), QA-FD3-1…5, QA-FD2-1…9 та QA-FD1-1…8.
-Прийняття FD3 не закриває бюджети продуктивності FD5.
+FD1 і FD2 прийнято 2026-11-03, FD3 і FD4 — 2026-11-04. Ручні сценарії:
+[QA.md](QA.md), QA-FD4-1…5, QA-FD3-1…5, QA-FD2-1…9 та QA-FD1-1…8.
+Прийняття FD4 не закриває бюджети продуктивності FD5.
+
+| файл FD4 | контракт |
+|---|---|
+| `src/tiles/tileRest.js`, `tileContact.js`, `TileSim.js` | нижній footprint polyline включає прилеглі грані спільних owners; контакт по тайлах, спільний XZ run, шви на площині; status попереджає про footprint >1 м |
+| `src/tiles/TileFrameQuery.js`, `src/scene/TerrainContact.js` | GPU перевіряє зайняту область і sweep через сухі схили >55° / край; асинхронно читається зведений 1×1 результат; CPU steepBounds — broad phase, порожній owner не блокує рух |
+| `src/tiles/TileField.js`, `TileFrames.js`, `TilePicker.js` | placement rank, opaque polygonOffsetUnits при factor=0, transparent renderOrder; ID picking повторює порядок; reset обнуляє rank |
+| `src/tiles/TileInteraction.js` | остання валідна ціль та маркер заборони; SVG-контур за чотирма світовими кутами, без readback і wireframe; hover лише змінює курсор; порожній клік знімає вибір; повторний down може почати drag до рішення про dblclick |
+| `scripts/probe-frame-land.mjs`, `probe-frame-drag.mjs` | slope/profile, placement/sweep, opaque/transparent overlap, реальний hybrid і DOM-жести; регресії рамки, повторного drag та порожнього кліку |
 
 | файл FD3 | контракт |
 |---|---|
@@ -36,8 +45,9 @@ FD1 і FD2 прийнято 2026-11-03, FD3 — 2026-11-04. Ручні сцен�
 зберігається: нахил експоненційно прямує до нормалі. `state3` зберіг FD2 history,
 mode і hold/release; `state3.y` тепер пам'ятає фактичний orbital gain із контактом.
 Перший блок `rest0` лишив стару адресацію 512×sim.height; блок +1 — кількість
-вершин footprint, блоки +2… — vec3 нижніх вершин. У polyline footprint поки немає:
-FD3 свідомо лишає його на водному шляху, контакт polyline — FD4.
+вершин footprint, блоки +2… — vec3 нижніх вершин. FD4 поширює цей layout на
+polyline; shader hull limit — 17 вершин. Вершина / ребро має envelope 10 мкм,
+owner без видимих вершин — порожню область.
 
 | файл FD2 | контракт |
 |---|---|
@@ -63,8 +73,9 @@ FD3 свідомо лишає його на водному шляху, конт�
 але пересоздає TileSim і обнуляє локальні стани та hold. Зміна source обнуляє
 реєстр. URL не зберігає pose; reload відновлює layout.
 Після FD3 SurfaceCursor використовує точний terrain-ray та асинхронну water
-query, зберігаючи grab offset. Обмеження цілі зараз консервативне — `ISLAND_SIZE` з відступом загального `field.radius`; точна зайнята
-область і крутизна — FD4.
+query, зберігаючи grab offset. FD4 замінив загальний `field.radius` перевіркою
+зайнятого footprint і sweep; CPU broad phase пропускає цілі без можливих
+перетинів крутих комірок, решту перевіряє `TileFrameQuery`.
 
 Основа з tile-floaters:
 
@@ -78,6 +89,37 @@ query, зберігаючи grab offset. Обмеження цілі зараз 
 | `src/scene/terrainGeometry.js` | меш острова `PlaneGeometry(2400, 384×384)`, крок 6.25 м |
 
 ## Головні виміряні факти
+
+FD4, AMD Radeon 890M / Chromium WebGL, 2026-11-04 (приймальний прогін із QA.md):
+
+- Перед комітом повторено guard (build, tiles, drift) і 4 offline-набори — PASS;
+  drift 123.730 с / 4314 кадрів, nonfinite=0, maxSeam=0 (218196 стиків),
+  recovery error=0.000006693 м. Повний FD4 probe повторно PASS, errors=[]:
+  1958 контактних polyline, min clearance=0.0049721 м, після повернення у воду — 0;
+  повторний drag=8.70174 м. Попередні FD2/FD3 regression нижче не перезапускалися.
+- Guard і offline FD1/T4/T5/terrain — PASS; drift 120.076 с / 4648 кадрів,
+  nonfinite=0, 218196 стиків, maxSeam=0, recovery error=0.00000661 м.
+- FD4 probe — PASS: 8 slope/profile, 6 placement, 4 overlap fixtures.
+  Polyline 0°/10°/30°/45°: max tilt error=0.00060°, min clearance≥0.005010 м,
+  XZ run і плоский шов — error=0. Реальна суша: 1958 контактних polyline,
+  min clearance=0.0049892 м; повернення у воду — 0 контактних polyline.
+- Hybrid: 46861 тайл, 46842 непорожніх footprint; максимальний контактний
+  діаметр=6.99761 м. Спростовано оцінку 1.147 м лише за власними вершинами:
+  вона ігнорувала прилеглі грані. Спекові 0.332 м не описують цю область.
+  Для >1 м є warning; subdivision не додається, точність не гарантується.
+- Opaque та transparent overlap змінюють верхній колір за placement rank.
+  Steep/offPivot/edge/sweep заборонені, deep/empty дозволені.
+  DOM-маркер перевірено на синтетичному сухому трикутнику >55°: вихідний
+  острів може не мати такого трикутника.
+- Рамка незмінна протягом 400 мс хвиль; повторний down через 50 мс
+  починає drag (8.552 м), promotions=0. Порожній клік прибирає рамку й вибір,
+  hover її не повертає. Регресія власника класифікована як рішення UI фази:
+  фіксовані світові кути та рішення про dblclick після pointerup;
+  перевірка — DOM-сценарії `probe-frame-land.mjs`. Реєстру інваріантів немає.
+- FD3 і FD2 regression — PASS; FD2 без повторного 60-секундного soak:
+  grab error held=2.440 / after up=4.199 CSS px; pick p50/p95=0.90/1.20 мс,
+  CPU=0.20/0.50 мс (81 кадр), mobile-profile pick=0.90/1.40 мс.
+  Це короткі desktop-виміри, не атестація бюджетів FD5 або телефона.
 
 FD3, AMD Radeon 890M / Chromium WebGL, 2026-11-04:
 
@@ -175,6 +217,7 @@ node scripts/probe-tiles-drift.mjs
 node scripts/probe-frame-pose.mjs
 node scripts/probe-frame-drag.mjs
 node scripts/probe-terrain-contact.mjs
+node scripts/probe-frame-land.mjs
 node scripts/test-terrain-contact.mjs
 ```
 
@@ -227,7 +270,7 @@ node scripts/test-terrain-contact.mjs
    - **qa:expected:** частина фрейму плаває, частина стоїть на піску, без загального стрибка висоти; плитки на схилі нахилені, жодна не врізається в рельєф (проба: низ ≥ terrain − 1 мм); затонулі тайли лежать на дні, не крізь нього.
    Нова проба: `scripts/probe-terrain-contact.mjs` — CPU vs GPU висота, порівняння з вершинами меша, footprint-максимум, низ ≥ terrain.
 
-4. **FD4 — polyline на суші, перекриття, крутизна** (спека §8 Polyline, «Порядок перекриття», схили >55°; крок 4 §12).
+~~4. **FD4 — polyline на суші, перекриття, крутизна** (спека §8 Polyline, «Порядок перекриття», схили >55°; крок 4 §12).~~ — ЗАКРИТО власником через `handoff:next frame-drag` 2026-11-04.
    Контракт: polyline укладається по тайлах у симуляції; перевірка довжини
    polyline-тайла при load (>1 м → попередження в статусі); `aSurfaceOffset` не
    вдруге поверх контакту; перекриття фреймів — `polygonOffset` (непрозорі) і
@@ -255,8 +298,9 @@ node scripts/test-terrain-contact.mjs
 - **Жест T5 (tile-floaters), вирішено власником.** Одиночний клік по тайлу
   лишається за вибором/перенесенням фрейму; промоція групи в CPU-тіло (T5) переходить
   на **подвійний клік**, який власник явно погодив;
-  T5 не перехоплює click/pointerdown. FD2 вже віддає друге натискання подвійного
-  кліку T5, а після справжнього drag споживає dblclick і блокує `canPromote`
+  T5 не перехоплює click/pointerdown. FD4 дозволяє другому натисканню почати drag,
+  а справжній подвійний клік без руху віддає T5 після pointerup.
+  Після справжнього drag споживає dblclick і блокує `canPromote`
   протягом 600 мс. Перевірено реальним DOM dblclick: одне CPU-тіло, drag не починається.
 - **Перетин FD5 з T4.** T4 закрито. FD1 синхронізує pose мешів/тіньових проксі
   та bounds через matrixWorld; перевірка контактів і візуальної тіні на суші ще FD5.

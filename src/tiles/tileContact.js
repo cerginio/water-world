@@ -70,6 +70,7 @@ float polygonSupport(ivec2 uv, vec2 center, mat2 worldXZ, vec2 tilt) {
 export function convexFootprint(points) {
   const sorted = [...new Map(points.map(p => [`${p.x},${p.z}`,p])).values()]
     .sort((a,b) => a.x-b.x || a.z-b.z);
+  if(sorted.length<=2)return sorted;
   const cross=(a,b,c)=>(b.x-a.x)*(c.z-a.z)-(b.z-a.z)*(c.x-a.x);
   const lower=[],upper=[];
   for(const p of sorted) { while(lower.length>1 && cross(lower.at(-2),lower.at(-1),p)<=1e-12) lower.pop(); lower.push(p); }
