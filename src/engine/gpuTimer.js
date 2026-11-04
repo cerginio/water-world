@@ -13,6 +13,17 @@ export class GpuTimer {
 
   get available() { return !!this.ext; }
 
+  reset() {
+    // Context loss invalidates queries and extension handles together.
+    if (!this.gl.isContextLost()) {
+      this.end();
+      for (const { q } of [...this.pending.flat(), ...(this.frame ?? [])]) this.gl.deleteQuery(q);
+    }
+    this.pending = []; this.current = null; this.frame = null;
+    this.ms = {}; this.total = 0;
+    this.ext = this.gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  }
+
   beginFrame() { if (this.ext) this.frame = []; }
 
   begin(label) {

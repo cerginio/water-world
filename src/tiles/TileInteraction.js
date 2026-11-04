@@ -28,7 +28,9 @@ export class SurfaceCursor {
     if (t < 0 || t > 6000) return null;
     let p = ray.at(t, new THREE.Vector3());
     if (!waterOnly && this.field.terrainContact) {
-      const land = this.field.terrainContact.raycast(ray, this.groundOffset ?? 0.005);
+      // Only terrain in front of the water point can win. Do not traverse
+      // underwater cells behind it just to discard their intersection.
+      const land = this.field.terrainContact.raycast(ray, this.groundOffset ?? 0.005, t);
       if (land && land.distanceToSquared(ray.origin) < p.distanceToSquared(ray.origin)) p = land;
     }
     return Math.abs(p.x) <= ISLAND_SIZE / 2 && Math.abs(p.z) <= ISLAND_SIZE / 2 ? p : null;
@@ -105,7 +107,6 @@ export class TileInteraction {
       if (!this.canPromote()) { e.preventDefault(); e.stopImmediatePropagation(); }
     }, true);
     listen(window, 'blur', () => this.cancel());
-    listen(this.canvas, 'webglcontextlost', () => this.cancel());
   }
 
   canPromote() { return !this.gesture && performance.now() - this.lastDrag > 600; }
@@ -181,8 +182,8 @@ export class TileInteraction {
     const p = this.cursor.point(g.x, g.y);
     if(!p){this.limited=true;this.canvas.style.cursor='not-allowed';return;}
     this.canvas.style.cursor=this.limited?'not-allowed':'grabbing';
+    this.cursor.sample(p);
     const target = p.sub(g.offset).setY(0);
-    this.cursor.sample(this.cursor.point(g.x, g.y));
     // The ordinary island has no dry >55-degree faces. Do not delay a short
     // water drag behind a GPU read just to prove an empty steep-cell list.
     if(!this.field.terrainContact.steepBounds.length){
@@ -199,7 +200,7 @@ export class TileInteraction {
         if(this.disposed||this.gesture!==g||!bounds||bounds[0]<-1e19)return;
         g.occupancy={minX:-bounds[0]-origin.x,maxX:bounds[2]-origin.x,
           minZ:-bounds[1]-origin.z,maxZ:bounds[3]-origin.z};
-      }).catch(error=>console.error('[tile occupancy]',error));
+      }).catch(error=>{if(!this.disposed)console.error('[tile occupancy]',error);});
     }
     // A cached GPU bound of the held layout cheaply excludes all steep cells.
     // Only a possible overlap needs exact per-tile triangle clipping.
@@ -226,7 +227,7 @@ export class TileInteraction {
       this.limited=result[0]>0.5;
       if(!this.limited) g.target.copy(candidate);
       this.canvas.style.cursor=this.limited?'not-allowed':'grabbing';
-    }).catch(error=>{console.error('[tile placement]',error);this.limited=true;});
+    }).catch(error=>{if(!this.disposed){console.error('[tile placement]',error);this.limited=true;}});
   }
 
   up(e) {
@@ -324,8 +325,10 @@ export class TileInteraction {
       this.field.moveFrame(s.frame.id, p.x, p.z);
       if (s.elapsed >= 0.15) { this.settling = null; this.state = this.selected?'selected':'idle'; }
     }
-    if (!g && !this.hoverBusy && this.hoverPoint) {
+    if (!g && !this.hoverBusy && this.hoverPoint &&
+      (this.hoverGeneration !== this.generation || performance.now() - (this.hoverTime ?? 0) >= 100)) {
       this.hoverBusy = true;
+      this.hoverTime = performance.now();
       const generation = this.generation, epoch = this.field.epoch;
       this.hoverGeneration = generation;
       this.picker.hover(this.camera, this.hoverPoint.x, this.hoverPoint.y).then(hit => {
@@ -339,13 +342,9 @@ export class TileInteraction {
   }
 
   dispose() {
+    if (this.disposed) return;
     this.cancel(); this.disposed = true; this.abort.abort(); this.cursor.dispose();
-    const release = () => this.picker.dispose();
-    // A PBO already submitted cannot be canceled in three; invalidate its epoch
-    // and retire the target once that bounded read has completed.
-    if (this.hoverBusy) this.retire = setInterval(() => {
-      if (!this.hoverBusy) { clearInterval(this.retire); release(); }
-    }, 10); else release();
+    this.picker.dispose();
     this.placementQuery.dispose();this.occupancyQuery.dispose();
     this.highlight.remove();this.marker.remove();
   }

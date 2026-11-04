@@ -81,9 +81,11 @@ export class TileField {
   // metersPerSourceUnit or frame changed: compile and collect again (spec.md §6.4)
   async rebuild(epoch = ++this.epoch) {
     if (!this.payload) return;
+    if (this.renderer.getContext().isContextLost()) { this.bindLifecycle(); return; }
     this.clear();
     const compiled = await compileTileSource(this.payload, { metersPerSourceUnit: this.params.metersPerSourceUnit });
     if (epoch !== this.epoch) { compiled.scope.dispose(); return; }
+    if (this.renderer.getContext().isContextLost()) { compiled.scope.dispose(); this.bindLifecycle(); return; }
     const t0 = performance.now();
     // Build identity and pivots from the WHOLE source, even with a frame filter.
     this.group.updateWorldMatrix(true, false);
@@ -110,6 +112,7 @@ export class TileField {
 
   build(rest) {
     if (!rest.tiles.count) return;
+    this.bindLifecycle();
     this.terrainContact = this.terrainGeometry ? new TerrainContact(this.terrainGeometry, this.terrainGeometry.parameters.width) : null;
     this.sim = new TileSim(this.renderer, this.surface, rest.tiles, rest.runs, this.profile, this.frameRegistry.entries, this.terrainContact);
     this.sim.uniforms.uTileMotionLimit = { value: tileMotionLimit(this.params.driftRadius) };
@@ -275,7 +278,35 @@ export class TileField {
     return frame;
   }
 
-  clear() {
+  bindLifecycle() {
+    if (this.lifecycle || typeof window === 'undefined' || !this.renderer.domElement) return;
+    this.lifecycle = new AbortController();
+    const options = { signal: this.lifecycle.signal };
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('webglcontextlost', () => {
+      // Keep only the restoration/page lifecycle hooks. clear() restores the
+      // captured pose before discarding GPU state; late reads are invalidated.
+      ++this.epoch;
+      this.clear({ keepLifecycle: true });
+      this.status = 'WebGL context lost';
+    }, options);
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.rebuild().catch(error => {
+        this.status = `error: ${error.message}`;
+        console.error('[tiles restore]', error);
+      });
+    }, options);
+    window.addEventListener('pagehide', event => {
+      // A BFCache entry is a suspended live page, not an unload. Keep its
+      // resources/listeners so Back can resume it, but never retain a gesture.
+      if (event.persisted) { this.interaction?.cancel(); return; }
+      ++this.epoch;
+      this.clear();
+    }, options);
+  }
+
+  clear({ keepLifecycle = false } = {}) {
+    if (!keepLifecycle) { this.lifecycle?.abort(); this.lifecycle = null; }
     this.interaction?.dispose();
     this.interaction = null;
     this.unbindPromotion?.();

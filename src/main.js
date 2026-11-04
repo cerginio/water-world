@@ -456,8 +456,21 @@ fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).onFinishChange(makeTargets);
 const gl = renderer.getContext();
 const timer = new GpuTimer(gl);
 let elapsed = 0;
+renderer.domElement.addEventListener('webglcontextlost', () => timer.reset());
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  renderer.capabilities.maxTextures = gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+  timer.reset();
+  // Render targets survive as JS objects, but their GPU contents do not.
+  ocean.dirty = true;
+  sunDirty = true;
+  floatShadow.ready = false;
+  tex.foam.dispose();
+  tex.foam = bakeWaterTextures(renderer).foam;
+  surface.uniforms.uFoamTex.value = tex.foam;
+});
 
 function renderFrame(dt) {
+  if (gl.isContextLost()) return;
   elapsed += dt;
   if (sunDirty) applySun();
   timer.beginFrame();
@@ -687,7 +700,7 @@ function loop(now) {
 const fences = [], chan = new MessageChannel();
 chan.port1.onmessage = spin;
 function spin() {
-  if (!uncapped || document.hidden) {   // hidden: back to rAF, which pauses until visible
+  if (!uncapped || document.hidden || gl.isContextLost()) {   // back to rAF until rendering can resume
     fences.splice(0).forEach((s) => gl.deleteSync(s));
     requestAnimationFrame(loop);
     return;

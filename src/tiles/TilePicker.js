@@ -144,6 +144,7 @@ export class TilePicker {
   }
 
   pick(camera, x, y) {
+    if (this.disposed) return null;
     const start = performance.now(), request = this.render(camera, x, y);
     if (!request) return null;
     const buffer = new Float32Array(13 * 13 * 4);
@@ -153,14 +154,28 @@ export class TilePicker {
   }
 
   async hover(camera, x, y) {
+    if (this.disposed || this.pending) return null;
     const request = this.render(camera, x, y);
     if (!request) return null;
     const buffer = new Float32Array(13 * 13 * 4);
-    await this.field.renderer.readRenderTargetPixelsAsync(this.target, 0, 0, 13, 13, buffer);
-    return this.decode(buffer, request);
+    this.pending = true;
+    try {
+      await this.field.renderer.readRenderTargetPixelsAsync(this.target, 0, 0, 13, 13, buffer);
+      return this.disposed ? null : this.decode(buffer, request);
+    } finally {
+      this.pending = false;
+      if (this.disposed) this.release();
+    }
   }
 
   dispose() {
+    this.disposed = true;
+    if (!this.pending) this.release();
+  }
+
+  release() {
+    if (this.released) return;
+    this.released = true;
     this.target.dispose();
     for (const { proxy } of this.proxies) {
       for (const m of Array.isArray(proxy.material) ? proxy.material : [proxy.material]) m.dispose();

@@ -180,6 +180,6 @@ export class TileFrameQuery {
     }
   }
 
-  release(){this.targets.forEach(t=>t.dispose());this.quad.material.dispose();this.reduce.material.dispose();}
+  release(){if(this.released)return;this.released=true;this.targets.forEach(t=>t.dispose());this.quad.material.dispose();this.reduce.material.dispose();}
   dispose(){this.disposed=true;if(!this.pending)this.release();}
 }

@@ -1,25 +1,41 @@
 # Handoff: frame-drag — перенесення фреймів по воді й рельєфу
 
 Стан на 2026-11-04. Гілка `master`. FD1 — `6f54eab`, FD2 — `18ae7cc`.
-FD3 — `5670f09`. FD4 прийнято власником через `handoff:next frame-drag`
-2026-11-04; реалізація, перевірки та документи входять у коміт закриття FD4.
-Бюджети picking / CPU лишаються
-відкритими для FD5. Tile-floaters T0–T5 закриті (базовий HANDOFF).
+FD3 — `5670f09`, FD4 — `b48b8ed`. FD5 прийнято власником через
+`handoff:next` 2026-11-04; реалізація, перевірки та документи входять у коміт
+закриття FD5. Функціональні FD1–FD5 закриті; бюджети picking / CPU,
+достовірний додатковий GPU-час і справжній телефон лишаються відкритими.
+Прийняття FD5 не є hardware-budget PASS. Tile-floaters T0–T5 закриті
+(базовий HANDOFF).
 
 Спека: [FRAME-DRAG-SPEC.md](../../FRAME-DRAG-SPEC.md) (далі — «спека»). Базова тема:
 tile-floaters ([HANDOFF.md](../../HANDOFF.md), [spec.md](../../spec.md)) — її код
 (`src/tiles/`) ця тема розширює. Tilecraft лише читається (spec.md §1).
 
-> **Далі:** FD5 — рендер, lifecycle, виміри (спека §9, §11; крок 5 §12). Перевірити reflection/depth і тіні після переносу на сушу; context lost / unload / source change під час drag і pending readback. Виміряти cold/warm picking, CPU interaction та додатковий GPU контакт/pose на desktop і доступному mobile; окремо позначати профіль desktop GPU та справжній телефон. Зберегти рамку за фіксованими світовими кутами, швидкий повторний drag і порожній клік без повернення рамки від hover. Наявні state1.zw зайняті контактом; не повертати туди angular velocity.
+> **Далі:** функціональні FD1–FD5 закриті; нової номерної фази не визначено. Відкритий наступний обсяг — бюджети продуктивності (спека §11): відтворити picking stall між звичайними GPU-кадрами на реальній hybrid-моделі, відокремити очікування попереднього кадру від ID pass; зменшити CPU interaction, отримати достовірний GPU contact/pose і виміри справжнього телефона. Не підтверджувати бюджети серією sync pick в одному JS task або invalid GPU timer series. Зберегти рамку за фіксованими світовими кутами, швидкий повторний drag та порожній клік; state1.zw зайняті контактом, angular velocity туди не повертати.
 
 Локальний стенд: `http://localhost:5199/?tiles=story-8-frames-hibrid`; правило
 стенду — `AGENTS.md` → «Локальний стенд».
 
 ## Що зроблено і працює
 
-FD1 і FD2 прийнято 2026-11-03, FD3 і FD4 — 2026-11-04. Ручні сценарії:
-[QA.md](QA.md), QA-FD4-1…5, QA-FD3-1…5, QA-FD2-1…9 та QA-FD1-1…8.
-Прийняття FD4 не закриває бюджети продуктивності FD5.
+FD1 і FD2 прийнято 2026-11-03, FD3–FD5 — 2026-11-04. Ручні сценарії:
+[QA.md](QA.md), QA-FD5-1…5, QA-FD4-1…5, QA-FD3-1…5, QA-FD2-1…9 та QA-FD1-1…8.
+Бюджети продуктивності лишаються відкритими після прийняття FD5.
+
+| файл FD5 | контракт |
+|---|---|
+| `src/tiles/TileField.js` | context lost скасовує drag, прибирає interaction/listeners та GPU-ресурси; restore перебудовує поле зі збереженими world pose / режимами; source=none знімає також lifecycle hooks поля; unload звільняє поле; BFCache лише скасовує жест |
+| `src/tiles/TilePicker.js`, `TileFrameQuery.js`, `src/water/WaterQuery.js` | disposed-запити не публікують late results; звільнення ідемпотентне, picker retire відбувається у finally readback, без polling-таймера |
+| `src/tiles/TileInteraction.js` | нерухомий hover оновлюється не частіше 100 мс; прибрано подвійний terrain-ray для target, пошук обмежено відстанню до точки води; помилки disposed queries не публікуються |
+| `src/main.js`, `src/engine/gpuTimer.js` | після restore заново запікаються піна, спектр океану, небо й сонячні тіні; timer queries/extension скидаються; кадри й uncapped fence submission призупинені при context lost |
+| `scripts/probe-frame-lifecycle.mjs` | реальний hybrid, depth/shadow/reflection на суші, source/unload/context loss під час drag і pending reads, restore/BFCache; bounded p50/p95, cold first pick, linked samplers, invalid timer series позначені явно |
+
+Після context restore локальна TileSim і hold починаються заново: snapshot
+GPU-стану не зберігається. Це рішення lifecycle FD5, не новий платформний
+інваріант; реєстру інваріантів у темі немає. BFCache `persisted=true` зберігає
+живе поле, але скасовує активний жест. Source=none не має ресурсів поля;
+загальні WebGL lifecycle hooks застосунку залишаються.
 
 | файл FD4 | контракт |
 |---|---|
@@ -89,6 +105,50 @@ query, зберігаючи grab offset. FD4 замінив загальний `
 | `src/scene/terrainGeometry.js` | меш острова `PlaneGeometry(2400, 384×384)`, крок 6.25 м |
 
 ## Головні виміряні факти
+
+FD5, AMD Radeon 890M / Chromium ANGLE D3D11, 2026-11-04:
+
+- Guard (build, tiles, drift) і offline FD1/terrain/T4/T5 — PASS. Drift:
+  126.964 с / 4416 кадрів, nonfinite=0, maxSeam=0 (218196 стиків),
+  anchored recovery error=0.000007358 м. Числа з прогону фази, не новий soak
+  під час закриття.
+- FD5 probe — PASS на desktop і mobile-профілі, errors=[]. Main/depth і
+  shadow: 931 піксель до переносу, 937 після, центроїди збігаються;
+  перенос 10 м дає +25.645 px. Реальний reflection target і mirrored depth
+  мають по 332 пікселі; сонячна shadow-camera бачить фрейм при Golden hour.
+  Bounds лишилися frustumCulled зі спільним envelope ±256 м і matrixWorld pose.
+- Source=none, context lost/restored і pagehide перевірено під час drag
+  із реальними pending PBO. Picker / water cursor / occupancy / placement
+  звільнені, capture=false, controls=true; після unload overlays=0.
+  Restore дає 46861 тайл, ту саму world pose до жесту й ненульовий спектр
+  океану. Окрема BFCache DOM-проба PASS; перший її startup timeout 60 с
+  пройдено повторним запуском із timeout 120 с, errors=[].
+- FD2 regression без нового 60-секундного soak — PASS: обидва конвеєри
+  всіх 8 фреймів, touch/pinch, blur, dblclick, unload; grab error=4.204 CSS px,
+  camera delta=0, release jump=0.000002604 м. FD4 DOM regression — PASS:
+  повторний drag=8.457 м, стабільна рамка, порожній клік і hover, promotions=0.
+  Перший FD4 startup timeout 60 с; окремий повторний запуск PASS, errors=[].
+- Linked tile/run samplers: uniform 14/10, texture fallback 15/11;
+  fallback перевірено на 433 фреймах в обох профілях.
+- Desktop: CSS/drawing 1400×1000, DPR=1, resolution=1, MSAA=4,
+  reflectionScale=0.5. Cold first pick=114.8 мс (1 зразок, не p95);
+  warm pick p50/p95=77.9/92.5 мс за 40 звичайними кадрами;
+  CPU interaction p50/p95=0.4/0.8 мс за 91 кадром drag/settling.
+- Mobile-профіль того самого GPU: CSS 480×850, DPR=2, drawing 576×1020,
+  resolution=0.6, MSAA=2, reflectionScale=0.35. Cold first pick=51.9 мс;
+  warm p50/p95=51.8/68.8 мс (40 кадрів); CPU=0.3/0.6 мс (117 кадрів).
+  **Бюджети picking ≤8/20 мс і CPU ≤0.5 мс не виконані.** Це виміри робочого
+  desktop, не ізольованого hardware-стенду і не справжнього телефона.
+- **Спростовано як доказ бюджету:** 25 sync pick підряд в одному JS task
+  не вимірюють очікування попереднього GPU-кадру. Старі факти FD2–FD4 нижче
+  збережені, але їхні короткі серії не доводять end-to-end budget PASS.
+- GPU-серії по 40 звичайних кадрів на воді й суші не атестовані: є значення
+  близько 184467 мс при незведеному disjoint flag. Вся серія позначена invalid,
+  p50/p95 не приписані. Проба вимірює всю tile+run simulation як верхню межу
+  contact/pose; достовірного додаткового GPU-часу й доказу ≤1 мс немає.
+- Source=none benchmark smoke: 8 кадрів, warmup=2, Golden hour,
+  tiles.count=0, tile passes відсутні, 48.175 мс/кадр. Це окремий короткий
+  запуск, не порівняння швидкості різних комітів.
 
 FD4, AMD Radeon 890M / Chromium WebGL, 2026-11-04 (приймальний прогін із QA.md):
 
@@ -218,6 +278,7 @@ node scripts/probe-frame-pose.mjs
 node scripts/probe-frame-drag.mjs
 node scripts/probe-terrain-contact.mjs
 node scripts/probe-frame-land.mjs
+node scripts/probe-frame-lifecycle.mjs
 node scripts/test-terrain-contact.mjs
 ```
 
@@ -282,7 +343,7 @@ node scripts/test-terrain-contact.mjs
    - **qa:inspect:** стрічки polyline на пагорбі; зона перекриття; маркер біля курсора.
    - **qa:expected:** стрічки повторюють профіль пагорба; внахлест зверху другий фрейм, без мерехтіння; стики polyline на піску ≤0.1 мм; на скелі фрейм зупиняється на останньому допустимому місці, маркер заборони видно.
 
-5. **FD5 — рендер, lifecycle, виміри** (спека §9, §11 продуктивність; крок 5 §12).
+~~5. **FD5 — рендер, lifecycle, виміри** (спека §9, §11 продуктивність; крок 5 §12).~~ — ЗАКРИТО власником через `handoff:next` 2026-11-04; прийнято функціональну частину та звіт вимірів, бюджети залишені відкритими.
    Контракт: відбиття, depth, тіні T4 і підсвічування коректні після переносу на
    сушу; unload / context lost / зміна source знімають capture і listeners,
    скасовують pending reads, звільняють ресурси; linked sampler counts записані;
@@ -302,11 +363,20 @@ node scripts/test-terrain-contact.mjs
   а справжній подвійний клік без руху віддає T5 після pointerup.
   Після справжнього drag споживає dblclick і блокує `canPromote`
   протягом 600 мс. Перевірено реальним DOM dblclick: одне CPU-тіло, drag не починається.
-- **Перетин FD5 з T4.** T4 закрито. FD1 синхронізує pose мешів/тіньових проксі
-  та bounds через matrixWorld; перевірка контактів і візуальної тіні на суші ще FD5.
+- **Перетин FD5 з T4 — перевірено.** Depth/shadow silhouettes і відбиття
+  перенесеного фрейму на суші збігаються; Golden hour і bounds перевірено в FD5.
 - **Uniform і sampler-бюджет:** FD1 дав 13/14 tile samplers без контакту;
-  FD3 виміряв 14/15 із TerrainContact. Повторна атестація hardware/таймінгів — FD5;
-  вихідна оцінка 12 у спеці була занижена.
-- **Відкриті бюджети FD2 → FD5:** desktop pick p95=14.40 мс проти ≤8;
-  CPU interaction p95=0.70 мс проти ≤0.5. Mobile-профіль на desktop GPU
-  не замінює телефон; cold pick і справжній mobile p95 ще виміряти.
+  FD3/FD5 підтвердили 14/15 із TerrainContact; run у FD5 — 10/11.
+  Вихідна оцінка 12 у спеці була занижена. Timing budget не атестований.
+- **Відкриті бюджети після FD5:** звичайні GPU-кадри дають desktop pick
+  p95=92.5 мс проти ≤8, CPU p95=0.8 мс проти ≤0.5; mobile-профіль —
+  pick=68.8 мс проти ≤20, CPU=0.6 мс. Почати з профілювання попереднього
+  GPU-кадру та ID pass окремо, зберігаючи однакові viewport/quality й модель.
+  Не підміняти цю перевірку tight loop sync pick; не вводити затримку
+  pointerdown або sync readback у move всупереч спеці §2–§3.
+- **GPU contact/pose і телефон:** повторити виміри з достовірним timer/query
+  шляхом; invalid series не є PASS або виміряним перевищенням GPU-бюджету.
+  Desktop mobile-профіль не замінює телефон. Cold first pick виміряно лише
+  одним зразком на профіль, cold p95 і hardware mobile p95 лишаються відкритими.
+- **Контактні footprint >1 м:** warning FD4 збережено, subdivision відсутній;
+  максимальний діаметр hybrid 6.99761 м, точність на таких областях не гарантується.

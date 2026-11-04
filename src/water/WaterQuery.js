@@ -61,5 +61,5 @@ export class WaterQuery {
 
   dispose() { this.disposed = true; if (!this.inFlight) this.release(); }
 
-  release() { this.input.dispose(); this.target.dispose(); this.quad.material.dispose(); }
+  release() { if (this.released) return; this.released = true; this.input.dispose(); this.target.dispose(); this.quad.material.dispose(); }
 }
