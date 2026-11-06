@@ -51,6 +51,40 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxDistance = 6000;
 
+// Move across the ground relative to the camera, keeping its orbit target in step.
+const cameraKeys = new Set();
+const cameraMove = new THREE.Vector3();
+const cameraForward = new THREE.Vector3();
+const cameraRight = new THREE.Vector3();
+const cameraUp = new THREE.Vector3(0, 1, 0);
+const cameraMoveSpeed = 100; // world units per second
+const isCameraKey = (code) => ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(code);
+const isEditing = (target) => target instanceof HTMLElement
+  && (target.isContentEditable || !!target.closest('input, textarea, select'));
+window.addEventListener('keydown', (event) => {
+  if (!isCameraKey(event.code) || event.ctrlKey || event.metaKey || event.altKey || isEditing(event.target)) return;
+  cameraKeys.add(event.code);
+  event.preventDefault();
+});
+window.addEventListener('keyup', (event) => cameraKeys.delete(event.code));
+window.addEventListener('blur', () => cameraKeys.clear());
+document.addEventListener('visibilitychange', () => cameraKeys.clear());
+document.addEventListener('focusin', (event) => {
+  if (isEditing(event.target)) cameraKeys.clear();
+});
+
+function moveCamera(dt) {
+  if (!controls.enabled || cameraKeys.size === 0) return;
+  cameraRight.setFromMatrixColumn(camera.matrix, 0).setY(0).normalize();
+  cameraForward.crossVectors(cameraUp, cameraRight).normalize();
+  const forward = Number(cameraKeys.has('KeyW')) - Number(cameraKeys.has('KeyS'));
+  const right = Number(cameraKeys.has('KeyD')) - Number(cameraKeys.has('KeyA'));
+  cameraMove.copy(cameraForward).multiplyScalar(forward).addScaledVector(cameraRight, right);
+  cameraMove.normalize().multiplyScalar(cameraMoveSpeed * dt);
+  camera.position.add(cameraMove);
+  controls.target.add(cameraMove);
+}
+
 // --- world ------------------------------------------------------------------------
 const sky = new SkySystem(renderer);
 // the surf rock as a dome in the bake: the fronts wrap round it, break on its face and
@@ -678,6 +712,7 @@ function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   controls.update();
+  moveCamera(dt);
   clampCamera();
   renderFrame(dt);
   frames++;

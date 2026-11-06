@@ -214,7 +214,7 @@ export const defaultOceanParams = () => ({
   // mean square slope (0.145) is 3x Cox-Munk for the whole sea and turns the water to
   // brushed metal; 0.08 keeps fine ripples up close and the water glossy
   capillaryFade: 0.08,
-  waveScale: 1,
+  waveScale: 0.16,
   swellScale: 0.7,
   swellWindSpeed: 7,
   swellDirection: -15,
