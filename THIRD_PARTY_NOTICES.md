@@ -4,6 +4,17 @@ Ultra Water is MIT licensed (see [LICENSE](LICENSE)). A few small pieces of its 
 
 Runtime dependencies (three.js, lil-gui) are installed from npm and carry their own licences in `node_modules`. `npm run build` writes their licence texts to `dist/licenses.md` and copies this file to `dist/`, so both ship with every build.
 
+## Tilecraft
+
+The production build includes the Tilecraft model loader, geometry compiler,
+thickness-scale and polyline/LCR modules, and selected model JSON files.
+Copyright (c) 2026 SIA Mental Health & Gamification. Tilecraft's license is
+CC BY-NC-ND 4.0, separate from Ultra Water's MIT license; see the bundled
+`TILECRAFT_LICENSE.txt` and `TILECRAFT_THIRD_PARTY_NOTICES.md`.
+The Ultra-Water build adapter changes the loader's asset URL base and maps
+the selected source model paths to a public models directory in the bundle;
+the source checkout is not modified. Story variants use Tilecraft's own modifiers.
+
 ## three.js
 
 - Source: https://github.com/mrdoob/three.js

@@ -4,11 +4,9 @@ import * as THREE from 'three';
 // compiling, so the field draws exactly what Tilecraft draws; every Tilecraft call
 // lives here and in tileRest.js (spec.md §14, "Дрейф Tilecraft").
 
-/* global __TILECRAFT_ROOT__ */
-const ROOT = __TILECRAFT_ROOT__;
-const THREE_DIR = `/@fs/${ROOT}/viewer/engines/three`;
-
-export const tilecraftAvailable = ROOT !== '';
+// Configuration validates the checkout before dev/build starts. Vite bundles
+// these imports; local filesystem paths never reach the production browser.
+export const tilecraftAvailable = true;
 
 // the fixtures worth floating; Tilecraft applies the hibrid / polygon modifiers itself
 export const TILE_SOURCES = ['story-8-frames-hibrid', 'story-8-frames-polygon', 'story-8-frames-polyline', 'demo'];
@@ -17,12 +15,14 @@ let modules = null;
 function loadModules() {
   // the LCR builder is two classic IIFE scripts writing to globalThis, in this order (§3.3)
   modules ??= (async () => {
-    await import(/* @vite-ignore */ `/@fs/${ROOT}/lib/thickness-scale.js`);
-    await import(/* @vite-ignore */ `/@fs/${ROOT}/viewer/engines/pixi/polyline-lcr.js`);
-    const at = (path) => import(/* @vite-ignore */ `${THREE_DIR}/${path}`);
+    await import('@tilecraft/lib/thickness-scale.js');
+    await import('@tilecraft/viewer/engines/pixi/polyline-lcr.js');
     const [loader, coordinates, world, compiler, scope] = await Promise.all([
-      at('core/model-loader.js'), at('core/coordinates.js'), at('core/world-config.js'),
-      at('core/scene-compiler.js'), at('engine/resource-scope.js'),
+      import('@tilecraft/viewer/engines/three/core/model-loader.js'),
+      import('@tilecraft/viewer/engines/three/core/coordinates.js'),
+      import('@tilecraft/viewer/engines/three/core/world-config.js'),
+      import('@tilecraft/viewer/engines/three/core/scene-compiler.js'),
+      import('@tilecraft/viewer/engines/three/engine/resource-scope.js'),
     ]);
     return { ...loader, ...coordinates, ...world, ...compiler, ...scope };
   })();
@@ -32,7 +32,6 @@ function loadModules() {
 
 // source → { id, model, world, sidecar } (a fixture id, or a dropped File)
 export async function fetchTileSource(source, { signal } = {}) {
-  if (!tilecraftAvailable) throw new Error('Tilecraft unavailable (TILECRAFT_ROOT)');
   const tc = await loadModules();
   return source instanceof File ? tc.loadFile(source) : tc.loadFixture(source, { signal });
 }

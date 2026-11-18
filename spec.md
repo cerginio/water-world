@@ -62,8 +62,8 @@ URL-параметр `?tiles=<src>` і пункт `tiles` у GUI:
 
 ### 3.2 Імпорт модулів Tilecraft у Vite
 
-Корінь Tilecraft задається змінною середовища `TILECRAFT_ROOT`
-(типово `D:/work/js-games/ua-dream/tilecraft`). У `vite.config.js`:
+Корінь Tilecraft задається одним `TILECRAFT_ROOT` у `.env.local` або process env.
+Абсолютний шлях не залежить від розташування Ultra-Water. У `vite.config.js`:
 
 - alias `@tilecraft` → `TILECRAFT_ROOT`;
 - `server.fs.allow` містить `TILECRAFT_ROOT`;
@@ -75,12 +75,15 @@ URL-параметр `?tiles=<src>` і пункт `tiles` у GUI:
   попередження про кілька копій. Прапорці `isInstancedMesh`/`isMesh` працюють і так.
   Робота йде на three Ultra Water. Версії зведено (2026-11-02): Tilecraft —
   `0.186.1` у `package.json` і в import map `shell/index.html`; dedupe це не замінює.
-- Фікстури Tilecraft ходять відносними `fetch` (`../../../.pw-probe/...` від
-  `core/`). Їх треба віддавати тим самим dev-сервером: шлях резолвиться від URL
-  модуля, тож `fs.allow` на корінь Tilecraft це покриває. Перевіряється у фазі 0.
+- Таблиці фікстур Tilecraft зберігаються; вузький build-адаптер задає
+  `STAND_ROOT` на публічний `/tilecraft/viewer/engines/three/` з урахуванням
+  Vite base. Manifest віддається наживо у dev і копіюється байт у байт у `dist/`.
 
-Збірка (`vite build`) з полем — не мета v0.1: поле працює в `npm run dev`. Якщо
-`TILECRAFT_ROOT` недоступний, пункт `tiles` у GUI неактивний, сцена працює як раніше.
+Production-інтеграція реалізована за [BUILD-DEPLOY-SPEC.md](BUILD-DEPLOY-SPEC.md):
+`npm run build` включає модулі Tilecraft та потрібні моделі в самодостатній
+`dist/`. Alias `@tilecraft` використовується і в dev, і в build; шлях задається
+одним `TILECRAFT_ROOT` у локальному `.env.local`. Відсутній checkout або потрібний
+ресурс зупиняє запуск/білд із помилкою, а не вимикає поле мовчки.
 
 ### 3.3 Глобальні скрипти
 

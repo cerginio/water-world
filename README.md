@@ -2,10 +2,81 @@
 
 Real-time ocean renderer for three.js (WebGL2), with a demo island scene.
 
+Requires Node.js 24 and a separate Tilecraft checkout. Copy `.env.example` to
+`.env.local` in this project and set the single `TILECRAFT_ROOT` value to its
+absolute path (use forward slashes on Windows). Then:
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
+
+The development server runs at http://localhost:5199/. Moving the entire
+Ultra-Water folder, including `.env.local`, needs no configuration changes while
+Tilecraft stays in the same location. If Tilecraft moves, edit only
+`TILECRAFT_ROOT`. An environment variable of the same name overrides the file.
+Relative values are supported relative to Ultra-Water, but can need adjustment
+after moving it. A fresh Git clone needs its own ignored `.env.local`.
+
+## Build and deploy
+
+```bash
+npm run build
+npm run preview
+```
+
+Build bundles the Tilecraft compiler and emits the four required JSON assets,
+their original bytes, and license notices into `dist/`. It also checks those
+assets and rejects local runtime paths. A missing checkout or required file
+fails the build. `npm run preview` serves only `dist/` on port 4173; the preview
+server needs neither the Tilecraft checkout nor installed npm dependencies.
+You can upload the entire `dist/` directory manually to Netlify.
+
+Netlify CLI is a pinned local dev dependency. Authenticate once and optionally
+link this folder to the existing site:
+
+```bash
+npm exec -- netlify login
+npm exec -- netlify link
+npm run deploy:check
+npm run deploy
+npm run deploy:prod
+```
+
+`deploy:check` builds and verifies without uploading. `deploy` builds, verifies
+and uploads a draft URL; `deploy:prod` publishes production. The target is
+`NETLIFY_SITE_ID`, then the linked `.netlify/state.json` project, then
+`edge-of-elements`. Override explicitly with
+`npm run deploy -- --site PROJECT_ID`. In CI, use `NETLIFY_AUTH_TOKEN` and
+`NETLIFY_SITE_ID`; tokens stay in the environment and are never command arguments.
+The script invokes `netlify deploy --no-build --dir dist` after its own build.
+No R2 client or local filesystem URL is needed by the published application.
+
+GNU Make is optional; the [Makefile](Makefile) documents dependencies and provides
+equivalent commands:
+
+| Command | Result |
+|---|---|
+| `make deps` | install npm dependencies from the lockfile |
+| `make dev` | validate checkout and start Vite on 5199 |
+| `make build` | dependencies → checkout validation → build → artifact validation |
+| `make preview` | standalone static preview on 4173 |
+| `make browsers` | install Chromium for automated browser QA |
+| `make test` | build and test production loading, files, frames, and `/water/` base |
+| `make test-portability` | build in relocated temporary copies, including spaces |
+| `make netlify-login` / `make netlify-link` | authenticate / select existing site |
+| `make deploy-check` | build and prepare deployment without upload |
+| `make deploy` / `make deploy-prod` | build and upload draft / publish production |
+
+Without Make, run `npm exec -- playwright install chromium`, `npm run test:build`
+after building, and `npm run test:portability`. QA reports/screenshots and temporary
+copies stay in ignored `.build-qa/`. The checks use standalone static files,
+not the development server. A normal deployment does not require Chromium.
+
+For a Netlify-hosted build, `netlify.toml` sets Node.js 24, `npm run build` and
+`dist`. CI must first obtain a pinned Tilecraft checkout and supply its absolute
+Linux path as `TILECRAFT_ROOT`; the Windows path is only for local builds.
+See [BUILD-DEPLOY-SPEC.md](BUILD-DEPLOY-SPEC.md) for the integration contract.
 
 Open the printed localhost URL. Orbit with the mouse (or a finger: phones get their own profile, see [Phones and tablets](#phones-and-tablets)). It opens on the `Lagoon` shot. Pick others from the `camera` dropdown (they also set the sun). The performance panel (top left) shows the GPU, render size, fps, ms per frame and a 20 s graph. Its `Uncap FPS` button switches the loop off the display's refresh: frames then render back-to-back, with at most three in flight on the GPU, so the counter shows what the machine can do while the scene keeps running live. The screen still updates at its own rate. `Cap to display` switches back. Benchmark controls are omitted from the performance panel and settings; the developer benchmark function remains available for explicit diagnostics.
 
@@ -159,4 +230,7 @@ The design was argued out with a second agent before building, and again for eac
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Code adapted from other projects is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Ultra Water code is MIT, see [LICENSE](LICENSE). Bundled Tilecraft code and
+models have their own CC BY-NC-ND 4.0 license; builds include its original license
+and notices. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for components
+and the build adapter's changes.
