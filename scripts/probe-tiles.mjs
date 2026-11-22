@@ -15,7 +15,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.text().includes('Multiple instances of Three.js')) errors.push(m.text()); });
-  await page.goto(`${base}?tiles=story-8-frames-hibrid`);
+  await page.goto(`${base}?tiles=story-8-frames-hibrid&controls`);
   await page.waitForFunction(() => window.app?.tiles.sim, {}, { timeout: 60000 });
   await page.locator('button.lil-title').filter({ hasText: /^Waves$/ }).click();
   const wind = page.getByLabel('windSpeed', { exact: true });

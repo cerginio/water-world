@@ -23,6 +23,7 @@ import { WaveCaustics } from './water/Caustics.js';
 import { TileField } from './tiles/TileField.js';
 import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
+import { createTechPanels, isEditing } from './ui/techPanels.js';
 
 const REFLECT_LAYER = 1;
 
@@ -59,8 +60,6 @@ const cameraRight = new THREE.Vector3();
 const cameraUp = new THREE.Vector3(0, 1, 0);
 const cameraMoveSpeed = 100; // world units per second
 const isCameraKey = (code) => ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(code);
-const isEditing = (target) => target instanceof HTMLElement
-  && (target.isContentEditable || !!target.closest('input, textarea, select'));
 window.addEventListener('keydown', (event) => {
   if (!isCameraKey(event.code) || event.ctrlKey || event.metaKey || event.altKey || isEditing(event.target)) return;
   cameraKeys.add(event.code);
@@ -294,6 +293,8 @@ let fSun = null;
 // --- GUI -----------------------------------------------------------------------
 const gui = new GUI({ title: 'Gelatin Water' });
 if (mobile) gui.close();   // on phones the open panel covers most of the screen
+// hidden until F2 / F3, ?controls / ?fps / ?debug or the three-finger strip (SCENE-UI-SPEC §3)
+const techPanels = createTechPanels({ gui, perf: document.getElementById('perf'), args });
 const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 
@@ -636,7 +637,7 @@ async function runBenchmark(frames = 300, { shot, warmup = 20 } = {}) {
 window.runBenchmark = runBenchmark;
 window.app = {
   camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
-  camWater: () => camWater, markSun: () => (sunDirty = true),
+  camWater: () => camWater, markSun: () => (sunDirty = true), techPanels,
 };
 
 // --- HUD + loop ------------------------------------------------------------------
@@ -656,13 +657,16 @@ uncapButton.onclick = () => {
 };
 function updateHud(now) {
   const fps = (frames * 1000) / (now - lastHud);
+  frames = 0;
+  lastHud = now;
+  fpsHistory.push(fps);
+  if (fpsHistory.length > 40) fpsHistory.shift();
+  if (!techPanels.fps) return;   // a hidden panel gets no DOM writes; timers and the benchmark run on
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   $('pSpec').textContent = `${size.x}×${size.y} · ${quality.msaa}× MSAA · ${mobile ? 'mobile' : 'desktop'} profile`;
   $('pFps').textContent = fps.toFixed(0);
   $('pMode').textContent = uncapped ? 'UNCAPPED' : 'VSYNC';
   $('pMs').textContent = `${(1000 / fps).toFixed(2)} ms/frame`;
-  fpsHistory.push(fps);
-  if (fpsHistory.length > 40) fpsHistory.shift();
   const { width: cw, height: ch } = graph.canvas, lo = Math.min(...fpsHistory) * 0.9, hi = Math.max(...fpsHistory) * 1.05;
   graph.clearRect(0, 0, cw, ch);
   graph.beginPath();
@@ -679,8 +683,6 @@ function updateHud(now) {
   }
   if (bench) text += `${text ? '\n' : ''}${bench}`;
   hud.textContent = text;
-  frames = 0;
-  lastHud = now;
 }
 
 // mobile: hold 60 fps by stepping resolution down from the profile's, judged over 2 s

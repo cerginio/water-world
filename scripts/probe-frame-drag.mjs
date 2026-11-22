@@ -11,7 +11,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto('http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift');
+  await page.goto('http://localhost:5199/?tiles=story-8-frames-hibrid&tilesMode=drift&controls');
   await page.waitForFunction(() => window.app?.tiles.interaction, {}, { timeout: 60000 });
   await page.waitForTimeout(1000);
   await page.evaluate(async () => {

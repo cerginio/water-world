@@ -13,7 +13,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await page.goto(`${base}?tiles=story-8-frames-hibrid&tilesMode=drift&tilesFieldYaw=57`);
+  await page.goto(`${base}?tiles=story-8-frames-hibrid&tilesMode=drift&tilesFieldYaw=57&controls`);
   await page.waitForFunction(() => window.app?.tiles.sim, {}, { timeout: 60000 });
   report.physics = await page.evaluate(async () => {
     const source = await (await fetch('/src/tiles/TileSim.js')).text();

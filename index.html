@@ -30,10 +30,22 @@
     .mobile #perf { top: auto; bottom: 8px; min-width: 190px; padding: 8px 10px; font-size: 10px; }
     .mobile #pFps { font-size: 26px; }
     .mobile #hud { font-size: 8px; }
+    #perf[hidden], #techStrip[hidden] { display: none; }
+    /* three-finger tap on touch screens: the F2 / F3 keys as buttons (SCENE-UI-SPEC §3.2) */
+    #techStrip {
+      position: fixed; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      display: flex; gap: 8px; padding: 6px; border-radius: 10px; background: rgba(6, 10, 14, 0.6); z-index: 10;
+    }
+    #techStrip button {
+      min-width: 44px; min-height: 44px; padding: 0 14px; border: 0; border-radius: 6px; cursor: pointer;
+      font: 600 13px system-ui, sans-serif; color: #e8f4ff; background: #424242;
+    }
+    #techStrip button[aria-pressed="true"] { color: #071018; background: #2cc9ff; }
+    .tech-strip.mobile #perf { bottom: calc(72px + env(safe-area-inset-bottom)); }
   </style>
 </head>
 <body>
-  <div id="perf">
+  <div id="perf" hidden>
     <div id="pGpu"></div>
     <div id="pSpec"></div>
     <div class="pRow"><b id="pFps">–</b><i>FPS</i><span><em id="pMode">VSYNC</em><br><span id="pMs"></span></span></div>
