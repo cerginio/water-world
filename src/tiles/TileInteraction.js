@@ -70,8 +70,10 @@ export class SurfaceCursor {
 }
 
 export class TileInteraction {
-  constructor(field, scene, camera, controls) {
-    this.field = field; this.camera = camera; this.controls = controls;
+  constructor(field, scene, camera, rig) {
+    // The camera is read here, never written: the drag locks the controls through the
+    // camera owner (cameraRig.js) and releases exactly its own token.
+    this.field = field; this.camera = camera; this.rig = rig; this.lock = null;
     this.canvas = field.renderer.domElement;
     this.picker = new TilePicker(field, scene);
     this.cursor = new SurfaceCursor(field, camera);
@@ -148,13 +150,9 @@ export class TileInteraction {
     this.gesture = { id: e.pointerId, type: e.pointerType, startX: e.clientX, startY: e.clientY,
       x: e.clientX, y: e.clientY, frame: f, world: f.world.clone(), mode: f.mode, held: f.held,
       holdAge: f.holdAge, offset: p.clone().sub(f.world), target: f.world.clone(), dragged: false };
-    this.state = 'selected'; this.controlsEnabled = this.controls.enabled; this.controls.enabled = false;
-    // Drain OrbitControls' private damping accumulator without moving the view.
-    const pos = this.camera.position.clone(), rotation = this.camera.quaternion.clone();
-    const target = this.controls.target.clone(), damping = this.controls.enableDamping;
-    this.controls.enableDamping = false; this.controls.update();
-    this.camera.position.copy(pos); this.camera.quaternion.copy(rotation); this.controls.target.copy(target);
-    this.camera.updateMatrixWorld(); this.controls.enableDamping = damping;
+    this.state = 'selected';
+    this.rig.release(this.lock); this.lock = this.rig.lock('frame-drag');
+    this.rig.holdStill();   // drain OrbitControls' damping without moving the view
     this.canvas.setPointerCapture(e.pointerId);
   }
 
@@ -255,7 +253,7 @@ export class TileInteraction {
       if (!immediate) this.settling = { frame: g.frame, target: g.target.clone(), elapsed: 0 };
       this.field.syncFrames(true);
     } else this.lastTap = { x: g.x, y: g.y, time: performance.now() };
-    this.controls.enabled = this.controlsEnabled;
+    this.rig.release(this.lock); this.lock = null;
     if (this.canvas.hasPointerCapture(g.id)) this.canvas.releasePointerCapture(g.id);
     this.state = this.settling ? 'settling' : 'selected';
     this.hoverPoint = g.type === 'touch' ? null : { x: g.x, y: g.y };
@@ -271,7 +269,7 @@ export class TileInteraction {
       // For an inherited frame restore offset as well as world pose.
       g.frame.offset.copy(g.world).applyMatrix4(this.field.group.matrixWorld.clone().invert()).sub(g.frame.pivot).setY(0);
       this.field.syncFrames(true);
-      this.controls.enabled = this.controlsEnabled;
+      this.rig.release(this.lock); this.lock = null;
       if (this.canvas.hasPointerCapture(g.id)) this.canvas.releasePointerCapture(g.id);
     }
     this.generation++; this.cursor.tag++; this.settling = null;

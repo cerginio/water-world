@@ -25,7 +25,7 @@
 | [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортує лише `src/tiles/tilecraftLoader.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
-| [OWNER-3](#owner-3--писарі-камери-не-множаться) | записи камери/`controls` не ростуть: `main.js` 21, `TileInteraction.js` 6 | guard-static, baseline 27 ↓ | борг |
+| [OWNER-3](#owner-3--камеру-пише-лише-її-власник) | камеру/`controls` пише лише `src/scene/cameraRig.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-4](#owner-4--писарі-сонця-не-множаться) | записи `sky.params` поза `sky.js` не ростуть: `main.js` 6 | guard-static, baseline 6 ↓ | борг |
 | [OWNER-5](#owner-5--глобали-пише-лише-корінь-композиції) | `window.*` / `globalThis.*` / `self.*` пише лише `src/main.js` | guard-static, baseline 0 | ✓ |
 | [BUDGET-1](#budget-1--семплери-води-в-мінімумах-webgl2) | вода: фрагмент ≤ 16, вершина ≤ 16, разом ≤ 32 семплерів | guard-static | 16/16 |
@@ -137,33 +137,37 @@
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleOneRendererGui`.
 
-## OWNER-3 — писарі камери не множаться
+## OWNER-3 — камеру пише лише її власник
 
 **Формулювання.** Записи в `camera`/`controls` (`position`, `quaternion`,
-`rotation`, `up`, `target`, `controls.enabled`) за файлом не перевищують
-baseline: `src/main.js` 21, `src/tiles/TileInteraction.js` 6. Новий файл —
-0. Baseline лише опускається.
+`rotation`, `up`, `target`, `controls.enabled`) є лише в
+`src/scene/cameraRig.js`. Будь-який інший файл — 0. `controls.enabled`
+виводиться з lock-ів із причиною (`rig.lock(reason)` / `rig.release(token)`):
+керування ввімкнене рівно тоді, коли жодного lock-а немає.
 
-**Походження.** ARCHITECTURE.md TD2 і §2.3, огляд 2026-11-22: камерою керують
+**Походження.** ARCHITECTURE.md TD2 і §2.3, огляд 2026-11-22: камерою керували
 шоти, WASD (`de8e2a8`, 2026-11-07 — четвертий писар), `clampCamera` і
-`TileInteraction`, який зберігає й відновлює `controls.enabled` без токена.
-Переліт камери (SCENE-UI-SPEC U1) мав би стати п'ятим; перетягування кадру
-під час перельоту лишило б керування «залиплим». Ціль U1 — один власник;
-доти число не росте.
+`TileInteraction`, який зберігав і відновлював `controls.enabled` без токена
+(27 записів у 2 файлах). Переліт камери (SCENE-UI-SPEC U1) став би п'ятим, і
+перетягування кадру під час перельоту відновило б збережене `false` —
+керування «залипло» б. U1 звела всіх писарів до `CameraRig`; baseline 27 → 0.
 
-**Механізм.** guard-static, `OWNER-3 camera-writers`, baseline у
-`CAMERA_BASELINE`. Межа рахується за іменами `camera`/`controls`:
-перейменування отримувача виводить запис з-під правила (P9), тому зникнення
-запису з файлу теж валить guard — «опустіть планку».
+**Механізм.** guard-static, `OWNER-3 camera-writers`: власник
+`CAMERA_OWNER` не рахується, `CAMERA_BASELINE` порожній. Межа рахується за
+іменами `camera`/`controls`: перейменування отримувача виводить запис з-під
+правила (P9). Власник без жодного запису — правило дивиться не туди (P10).
+Поведінку lock-ів тримають юніти `tests/cameraFlight.test.js` (`CameraRig`).
 
-**Перевірюване твердження.** `✓ OWNER-3 camera-writers — 27 запис(ів) у 2 файл(ах), baseline 27`.
+**Перевірюване твердження.** `✓ OWNER-3 camera-writers — 0 запис(ів) у 0 файл(ах), baseline 0; власник src/scene/cameraRig.js — 7`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
-| `TileInteraction.js:258` + `this.camera.position.y += 1` | ✓ проходить — дефект | ✗ `TileInteraction.js: 7 запис(ів), baseline 6` |
-| `src/scene/floaters.js` + `export function flyTo(camera, p) { camera.position.copy(p); }` | ✓ проходить — дефект | ✗ `floaters.js: 1 запис(ів) — файл не в baseline` |
+| `TileInteraction.js` `down()` + `this.camera.position.y += 1` | ✓ проходить — дефект | ✗ `TileInteraction.js: 1 запис(ів) — файл не в baseline` |
+| `src/main.js` + `controls.enabled = false;` після `rig.bind(…)` | ✓ проходить — дефект | ✗ `main.js: 1 запис(ів) — файл не в baseline` |
+| `src/scene/floaters.js` + `export function flyTo(camera, p) { camera.position.copy(p); }` | ✓ проходить — дефект | ✗ `floaters.js: … — файл не в baseline` |
 
-**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `CAMERA_WRITE`, `CAMERA_BASELINE`, `baselineRule`.
+**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `CAMERA_WRITE`, `CAMERA_OWNER`, `CAMERA_BASELINE`, `baselineRule`;
+власник — [src/scene/cameraRig.js](src/scene/cameraRig.js).
 
 ## OWNER-4 — писарі сонця не множаться
 

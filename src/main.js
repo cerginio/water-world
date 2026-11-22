@@ -24,6 +24,9 @@ import { TileField } from './tiles/TileField.js';
 import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 import { createTechPanels, isEditing } from './ui/techPanels.js';
+import { CameraRig } from './scene/cameraRig.js';
+import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
+import { createStationRail } from './ui/stationRail.js';
 
 const REFLECT_LAYER = 1;
 
@@ -52,37 +55,14 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.maxDistance = 6000;
 
-// Move across the ground relative to the camera, keeping its orbit target in step.
-const cameraKeys = new Set();
-const cameraMove = new THREE.Vector3();
-const cameraForward = new THREE.Vector3();
-const cameraRight = new THREE.Vector3();
-const cameraUp = new THREE.Vector3(0, 1, 0);
-const cameraMoveSpeed = 100; // world units per second
-const isCameraKey = (code) => ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(code);
-window.addEventListener('keydown', (event) => {
-  if (!isCameraKey(event.code) || event.ctrlKey || event.metaKey || event.altKey || isEditing(event.target)) return;
-  cameraKeys.add(event.code);
-  event.preventDefault();
+// The one camera writer (SCENE-UI-SPEC U1, guard OWNER-3): shots, WASD, the ground
+// clamp, station flights and the frame drag all go through it.
+const rig = new CameraRig({
+  camera, controls,
+  ground: (x, z) => islandHeight(x, z) + 0.8,
+  water: () => camWater,
 });
-window.addEventListener('keyup', (event) => cameraKeys.delete(event.code));
-window.addEventListener('blur', () => cameraKeys.clear());
-document.addEventListener('visibilitychange', () => cameraKeys.clear());
-document.addEventListener('focusin', (event) => {
-  if (isEditing(event.target)) cameraKeys.clear();
-});
-
-function moveCamera(dt) {
-  if (!controls.enabled || cameraKeys.size === 0) return;
-  cameraRight.setFromMatrixColumn(camera.matrix, 0).setY(0).normalize();
-  cameraForward.crossVectors(cameraUp, cameraRight).normalize();
-  const forward = Number(cameraKeys.has('KeyW')) - Number(cameraKeys.has('KeyS'));
-  const right = Number(cameraKeys.has('KeyD')) - Number(cameraKeys.has('KeyA'));
-  cameraMove.copy(cameraForward).multiplyScalar(forward).addScaledVector(cameraRight, right);
-  cameraMove.normalize().multiplyScalar(cameraMoveSpeed * dt);
-  camera.position.add(cameraMove);
-  controls.target.add(cameraMove);
-}
+rig.bind(renderer.domElement, isEditing);
 
 // --- world ------------------------------------------------------------------------
 const sky = new SkySystem(renderer);
@@ -123,7 +103,7 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
-const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, terrainGeometry: terrain.geometry, mobile, floaters, camera, controls });
+const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, terrainGeometry: terrain.geometry, mobile, floaters, camera, rig });
 let camWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
@@ -204,64 +184,60 @@ function setSun(elevation, azimuth) {
   fSun?.controllers.forEach((c) => c.updateDisplay());
   applySun();
 }
+// dev shots (Controls → camera): each also sets the sun; the station rail does not
+const shotPosition = new THREE.Vector3(), shotTarget = new THREE.Vector3();
+const setShot = (px, py, pz, tx, ty, tz) => rig.place(shotPosition.set(px, py, pz), shotTarget.set(tx, ty, tz));
 const views = {
   'Golden hour': () => {
     setSun(3.5, 205);
     const b = sunBearing(), c = coast(THREE.MathUtils.radToDeg(b) + 18);
-    camera.position.set(c.x + Math.cos(b) * 120, 5, c.y + Math.sin(b) * 120);
-    controls.target.set(c.x + Math.cos(b) * 400, 0, c.y + Math.sin(b) * 400);
+    setShot(c.x + Math.cos(b) * 120, 5, c.y + Math.sin(b) * 120, c.x + Math.cos(b) * 400, 0, c.y + Math.sin(b) * 400);
   },
   'Breakers': () => {
     setSun(38, 205);
     // from 10 m over the clear outer shelf, looking down across the break line to the beach
     const b = sunBearing() + 1.9, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
-    camera.position.set(c.x + out.x * 48 - side.x * 35, 10, c.y + out.y * 48 - side.y * 35);
-    controls.target.set(c.x + out.x * 20 - side.x * 10, 0, c.y + out.y * 20 - side.y * 10);
+    setShot(c.x + out.x * 48 - side.x * 35, 10, c.y + out.y * 48 - side.y * 35,
+      c.x + out.x * 20 - side.x * 10, 0, c.y + out.y * 20 - side.y * 10);
   },
   'Lagoon': () => {
     setSun(50, 205);
     // the wide, flat shelf on the island's south-west: 1-2 m turquoise shallows, sand bars, soft swash
     const b = sunBearing() - 1.48, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
-    camera.position.set(c.x - out.x * 2 + side.x * 25, 16, c.y - out.y * 2 + side.y * 25);
-    controls.target.set(c.x + out.x * 34 - side.x * 10, 0, c.y + out.y * 34 - side.y * 10);
+    setShot(c.x - out.x * 2 + side.x * 25, 16, c.y - out.y * 2 + side.y * 25,
+      c.x + out.x * 34 - side.x * 10, 0, c.y + out.y * 34 - side.y * 10);
   },
   'Surf rock': () => {
     setSun(40, 205);
     // the big rock in the surf, from a little above and up the beach side
     const out = new THREE.Vector2(heroRock.x, heroRock.z).normalize(), side = new THREE.Vector2(-out.y, out.x);
-    camera.position.set(heroRock.x - out.x * 28 + side.x * 22, 14, heroRock.z - out.y * 28 + side.y * 22);
-    controls.target.set(heroRock.x, 0, heroRock.z);
+    setShot(heroRock.x - out.x * 28 + side.x * 22, 14, heroRock.z - out.y * 28 + side.y * 22, heroRock.x, 0, heroRock.z);
   },
   'Open ocean': () => {
     setSun(14, 205);
     const b = sunBearing() + 0.5;
-    camera.position.set(Math.cos(b) * 1500, 9, Math.sin(b) * 1500);
-    controls.target.set(Math.cos(b) * 2400, 0, Math.sin(b) * 2400 + 600);
+    setShot(Math.cos(b) * 1500, 9, Math.sin(b) * 1500, Math.cos(b) * 2400, 0, Math.sin(b) * 2400 + 600);
   },
   'Aerial': () => {
     setSun(30, 205);
-    camera.position.set(900, 420, 900);
-    controls.target.set(0, 0, 0);
+    setShot(900, 420, 900, 0, 0, 0);
   },
   'Flotsam': () => {
     setSun(40, 205);
     const b = sunBearing() + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
-    camera.position.set(c.x + out.x * 75 + side.x * 10, 9, c.y + out.y * 75 + side.y * 10);
-    controls.target.set(c.x + out.x * 53.5 - side.x * 8, 0, c.y + out.y * 53.5 - side.y * 8);
+    setShot(c.x + out.x * 75 + side.x * 10, 9, c.y + out.y * 75 + side.y * 10,
+      c.x + out.x * 53.5 - side.x * 8, 0, c.y + out.y * 53.5 - side.y * 8);
     floaters.spawn(camera.position, controls.target.clone().sub(camera.position));
   },
   'Tiles': () => {
     setSun(40, 205);
-    // 35° off the vertical, from the field's +z side: source x reads right and y down, as in Tilecraft
-    const c = placeTiles(), yaw = tiles.params.fieldYaw * Math.PI / 180;
-    const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const d = Math.max(tiles.extent.x / 2 / (half * camera.aspect), tiles.extent.y / 2 / half) * 1.4;   // margin: the perf panel and the GUI cover the sides
-    const tilt = THREE.MathUtils.degToRad(35);
-    camera.position.set(c.x + Math.sin(yaw) * d * Math.sin(tilt), d * Math.cos(tilt), c.z + Math.cos(yaw) * d * Math.sin(tilt));
-    controls.target.copy(c);
+    // margin 1.4: the perf panel and the GUI cover the sides
+    const pose = storyPose({ center: placeTiles(), extent: tiles.extent, yawDeg: tiles.params.fieldYaw,
+      fov: camera.fov, aspect: camera.aspect, margin: 1.4 });
+    rig.place(pose.position, pose.target);
   },
   'Underwater': () => {
     setSun(48, 205);
@@ -270,8 +246,7 @@ const views = {
     let r = 200;
     while (r < 1000 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > -9) r += 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    camera.position.set(x, -3.2, z);
-    controls.target.set(x - Math.cos(a) * 25, -1.8, z - Math.sin(a) * 25);
+    setShot(x, -3.2, z, x - Math.cos(a) * 25, -1.8, z - Math.sin(a) * 25);
     floaters.spawn(camera.position, controls.target.clone().sub(camera.position));
   },
 };
@@ -280,14 +255,48 @@ const views = {
 // outwards until the bed under the whole field is deep enough. The bearing is taken once,
 // so moving the sun later doesn't move the field.
 let tilesAnchor = null;
-function placeTiles() {
+function storyAnchor() {
   if (!tilesAnchor) {
     const b = sunBearing() + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b));
-    tilesAnchor = { start: c.clone().addScaledVector(out, 45), out };
+    tilesAnchor = { coast: c, start: c.clone().addScaledVector(out, 45), out };
   }
-  return tiles.place(tilesAnchor.start, tilesAnchor.out);
+  return tilesAnchor;
 }
+function placeTiles() {
+  const anchor = storyAnchor();
+  return tiles.place(anchor.start, anchor.out);
+}
+
+// --- station rail (SCENE-UI-SPEC §4) -------------------------------------------------
+// Stations never call setSun: the sun and the weather are not the camera's business.
+const radius = islandRadius(islandHeight);
+function storyField() {
+  // the field as placed on load; tiles.place() itself would cancel a drag
+  if (!tiles.loaded) return null;
+  return { center: tiles.center.clone(), extent: tiles.extent };
+}
+const stationPoses = {
+  island: () => islandPose({ radius, field: storyField(), fov: camera.fov, aspect: camera.aspect }),
+  shore: () => {
+    const anchor = storyAnchor(), field = storyField();
+    // without a story the beach still faces where the field would float
+    const facing = field?.center ?? new THREE.Vector3(anchor.start.x, 0, anchor.start.y).addScaledVector(new THREE.Vector3(anchor.out.x, 0, anchor.out.y), 40);
+    return shorePose({ heightAt: islandHeight, coast: anchor.coast, out: anchor.out, look: facing });
+  },
+  story: () => {
+    const field = storyField();
+    return field && storyPose({ center: field.center, extent: field.extent, yawDeg: tiles.params.fieldYaw,
+      fov: camera.fov, aspect: camera.aspect });
+  },
+  frame: () => null,   // U2
+};
+const stations = createStationRail({
+  rig,
+  poseOf: (id) => stationPoses[id]?.() ?? null,
+  isActive: (id) => (id === 'story' ? tiles.loaded : id !== 'frame'),
+  hasStory: () => tiles.loaded,
+});
 
 let fSun = null;
 // --- GUI -----------------------------------------------------------------------
@@ -575,12 +584,6 @@ function renderFrame(dt) {
   timer.endFrame();
 }
 
-function clampCamera() {
-  // free to dive; just stay out of the ground
-  const floor = islandHeight(camera.position.x, camera.position.z) + 0.8;
-  if (camera.position.y < floor) camera.position.y = floor;
-}
-
 // Chrome/ANGLE's readPixels and finish don't wait for the GPU, so sync on a fence.
 async function gpuFence() {
   const s = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -606,7 +609,7 @@ async function runBenchmark(frames = 300, { shot, warmup = 20 } = {}) {
   if (shot && !Object.hasOwn(views, shot)) throw new Error(`Unknown shot: ${shot}`);
   if (benchmarking) return null;
   if (shot === 'Tiles' && !tiles.loaded) throw new Error('Load tiles before the Tiles benchmark');
-  if (shot) { ui.view = shot; views[shot](); controls.update(); viewController.updateDisplay(); }
+  if (shot) { ui.view = shot; views[shot](); viewController.updateDisplay(); }
   benchmarking = true;
   try {
   timer.drain();
@@ -638,6 +641,8 @@ window.runBenchmark = runBenchmark;
 window.app = {
   camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
   camWater: () => camWater, markSun: () => (sunDirty = true), techPanels,
+  rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
+    get current() { return stations.current; }, get last() { return stations.last; } },
 };
 
 // --- HUD + loop ------------------------------------------------------------------
@@ -715,9 +720,8 @@ function setResolution(r) {
 function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
-  controls.update();
-  moveCamera(dt);
-  clampCamera();
+  rig.update(dt);
+  stations.update();
   renderFrame(dt);
   frames++;
   if (now - lastHud > 500) updateHud(now);
@@ -756,7 +760,6 @@ function spin() {
 resize();
 applySun();
 views[ui.view]();
-controls.update();
 // a link with ?tiles opens on the field once it has loaded and been placed
 if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
 requestAnimationFrame(loop);

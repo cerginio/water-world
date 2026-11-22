@@ -156,21 +156,20 @@ function ruleOneRendererGui(files) {
 /* ── OWNER-3: писарі камери — baseline, що лише падає ─────────────────────── */
 
 /**
- * Камеру й OrbitControls зараз пишуть шоти, WASD і clampCamera у main.js та
- * перенесення кадру в TileInteraction (ARCHITECTURE.md TD2). Переліт камери
- * (SCENE-UI-SPEC U1) мав би стати ще одним писарем, і TileInteraction, що сам
- * зберігає й відновлює `controls.enabled`, лишив би керування «залиплим».
- * Ціль U1 — один власник камери; доти число записів по файлу не росте.
+ * Камеру й OrbitControls пише лише їхній власник — `src/scene/cameraRig.js`
+ * (SCENE-UI-SPEC U1, ARCHITECTURE.md TD2): шоти, WASD, межа над рельєфом,
+ * переліт станцій і перенесення кадру йдуть через нього, а `controls.enabled`
+ * виводиться з lock-ів із причиною. До U1 писарів було 27 у двох файлах, і
+ * TileInteraction, що сам зберігав і відновлював `controls.enabled`, лишив би
+ * керування «залиплим» після перельоту.
  *
  * Межа рахується за іменами `camera` / `controls` (з `this.` чи без): це
  * публічні імена в main.js і TileField/TileInteraction. Перейменування
- * отримувача виведе запис з-під правила (P9) — тому baseline містить і
- * число, і файл: зникнення запису з файлу теж видно (`--baseline`).
+ * отримувача виведе запис з-під правила (P9). Власник має щонайменше один
+ * запис — інакше правило дивиться не туди (P10).
  */
-const CAMERA_BASELINE = {
-  'src/main.js': 21,
-  'src/tiles/TileInteraction.js': 6,
-};
+const CAMERA_OWNER = 'src/scene/cameraRig.js';
+const CAMERA_BASELINE = {};
 const CAMERA_WRITE = new RegExp([
   String.raw`\b(?:this\.)?(?:camera|controls)\.(?:position|quaternion|rotation|up|target)\.`
     + String.raw`(?:set|copy|add|addScaledVector|sub|applyQuaternion|lerp|setX|setY|setZ|setFromAxisAngle|setFromEuler)\(`,
@@ -265,8 +264,11 @@ async function main() {
   const t0 = performance.now();
   const reportOnly = process.argv.includes('--report');
   const files = collect(SRC);
-  const camera = baselineRule('OWNER-3 camera-writers', files, CAMERA_WRITE, CAMERA_BASELINE, null,
-    'камеру пише її власник (SCENE-UI-SPEC U1)');
+  const camera = baselineRule('OWNER-3 camera-writers', files, CAMERA_WRITE, CAMERA_BASELINE, CAMERA_OWNER,
+    `камеру пише лише ${CAMERA_OWNER} (lock / place / flyTo)`);
+  const ownerWrites = count(files.find(f => f.rel === CAMERA_OWNER)?.text ?? '', CAMERA_WRITE);
+  if (!ownerWrites) camera.failures.push(`${CAMERA_OWNER}: жодного запису камери — правило дивиться не туди`);
+  camera.note = `${camera.note}; власник ${CAMERA_OWNER} — ${ownerWrites}`;
   const sun = baselineRule('OWNER-4 sun-writers', files, SUN_WRITE, SUN_BASELINE, SUN_OWNER,
     'сонце пише віджет часу доби (MOOD-WEATHER M1)');
   const results = [ruleEngineLeaf(files), ruleSkyPortable(files), ruleTilecraftEntry(files),

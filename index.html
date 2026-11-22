@@ -32,8 +32,10 @@
     .mobile #hud { font-size: 8px; }
     #perf[hidden], #techStrip[hidden] { display: none; }
     /* three-finger tap on touch screens: the F2 / F3 keys as buttons (SCENE-UI-SPEC §3.2) */
+    /* the strip and a bottom #perf stand above the station rail (SCENE-UI-SPEC §3.2, §4.6) */
+    :root { --rail-top: calc(12px + 64px + env(safe-area-inset-bottom)); }
     #techStrip {
-      position: fixed; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      position: fixed; left: 50%; bottom: calc(var(--rail-top) + 8px); transform: translateX(-50%);
       display: flex; gap: 8px; padding: 6px; border-radius: 10px; background: rgba(6, 10, 14, 0.6); z-index: 10;
     }
     #techStrip button {
@@ -41,7 +43,43 @@
       font: 600 13px system-ui, sans-serif; color: #e8f4ff; background: #424242;
     }
     #techStrip button[aria-pressed="true"] { color: #071018; background: #2cc9ff; }
-    .tech-strip.mobile #perf { bottom: calc(72px + env(safe-area-inset-bottom)); }
+    .mobile #perf { bottom: calc(var(--rail-top) + 8px); }
+    .tech-strip.mobile #perf { bottom: calc(var(--rail-top) + 72px); }
+
+    /* station rail (SCENE-UI-SPEC §4.1): four nodes, ● on the station, ◎ the last one,
+       a bead runs between them during a flight */
+    #stationRail {
+      position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      display: grid; grid-template-columns: repeat(4, 76px); height: 64px; z-index: 9;
+      font: 500 12px/1.2 system-ui, sans-serif; color: #e8f4ff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+    }
+    #stationRail .track {
+      position: absolute; left: 38px; right: 38px; top: 21px; height: 2px; background: rgba(232, 244, 255, 0.45);
+      pointer-events: none;
+    }
+    #stationRail .bead {
+      position: absolute; top: -3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #e8f4ff;
+    }
+    #stationRail .bead[hidden] { display: none; }
+    #stationRail .station {
+      position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
+      min-width: 44px; min-height: 44px; padding: 10px 0 0; border: 0; background: none; color: inherit; font: inherit;
+      text-shadow: inherit; cursor: pointer;
+    }
+    #stationRail .dot {
+      width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; border: 2px solid #e8f4ff;
+      background: rgba(6, 10, 14, 0.55);
+    }
+    #stationRail .station.on .dot { background: #e8f4ff; }
+    #stationRail .station.last .dot { box-shadow: inset 0 0 0 2px rgba(6, 10, 14, 0.55), inset 0 0 0 5px #e8f4ff; }
+    #stationRail .station[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+    #stationRail .station:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 2px; border-radius: 6px; }
+    /* reduced motion: fade out, place, fade in (SCENE-UI-SPEC §4.4) */
+    #stationFade {
+      position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 8;
+      transition: opacity 250ms linear;
+    }
+    #stationFade.dark { opacity: 1; }
   </style>
 </head>
 <body>

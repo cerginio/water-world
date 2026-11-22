@@ -13,9 +13,9 @@ const MIN_DEPTH = 5;   // open water under the whole field (spec.md §6.5)
 
 // A live Tilecraft model on the water (spec.md §5).
 export class TileField {
-  constructor({ scene, renderer, surface, patchMaterial, heightAt, terrainGeometry, mobile = false, floaters, camera, controls }) {
+  constructor({ scene, renderer, surface, patchMaterial, heightAt, terrainGeometry, mobile = false, floaters, camera, rig }) {
     this.scene = scene;
-    this.controls = controls;
+    this.rig = rig;   // the camera owner: TileInteraction locks the controls through it
     this.promotion = floaters ? new TilePromotion(this, floaters) : null;
     this.camera = camera;
     this.profile = mobile ? 'mobile' : 'desktop';
@@ -145,7 +145,7 @@ export class TileField {
     this.radius = Math.max(this.extent.length() / 2, 1);
     this.updateBounds();
     this.syncFrames(true);
-    if (this.camera && this.controls) this.interaction = new TileInteraction(this, this.scene, this.camera, this.controls);
+    if (this.camera && this.rig) this.interaction = new TileInteraction(this, this.scene, this.camera, this.rig);
     if (this.promotion && this.camera) this.unbindPromotion = bindTilePromotion(this.renderer.domElement, this, this.camera,
       () => this.interaction?.canPromote() ?? true);
   }

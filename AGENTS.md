@@ -17,7 +17,7 @@
 |---|---|---|---|
 | tile-floaters | [HANDOFF.md](HANDOFF.md) | `src/tiles/`, `vite.config.js`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
 | frame-drag | [docs/frame-drag/HANDOFF.md](docs/frame-drag/HANDOFF.md) | `src/tiles/`, `src/scene/`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
-| scene-ui | [docs/scene-ui/HANDOFF.md](docs/scene-ui/HANDOFF.md) | `src/ui/`, `src/scene/cameraFlight.js`, `index.html`, `src/main.js`, `src/tiles/TileInteraction.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
+| scene-ui | [docs/scene-ui/HANDOFF.md](docs/scene-ui/HANDOFF.md) | `src/ui/`, `src/scene/cameraFlight.js`, `src/scene/cameraRig.js`, `src/scene/stationPoses.js`, `index.html`, `src/main.js`, `src/tiles/TileInteraction.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
 
 ## Перевірки фази
 
