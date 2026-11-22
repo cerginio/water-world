@@ -144,8 +144,8 @@ export function makePromotionDescriptor(field, ids, state0, state1) {
   const size = bounds.getSize(new THREE.Vector3()).max(new THREE.Vector3(0.001, 0.001, 0.001));
   // Equal-volume cells: their centroid is the centre of buoyancy. Put it under
   // the centre of mass so flat water gives no capsizing torque.
-  const samples = footprintSamples(footprint).map(p => p.sub(center));
-  const drift = samples.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(samples.length);
+  const samples = footprintSamples(footprint).map(sample => sample.sub(center));
+  const drift = samples.reduce((s, sample) => s.add(sample), new THREE.Vector3()).divideScalar(samples.length);
   for (const sample of samples) { sample.x -= drift.x; sample.z -= drift.z; }
   field.group.updateWorldMatrix(true, false);
   const positionWorld = center.clone().applyMatrix4(field.group.matrixWorld);

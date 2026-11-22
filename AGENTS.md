@@ -15,5 +15,21 @@
 
 | тема | HANDOFF.md | код | інваріанти |
 |---|---|---|---|
-| tile-floaters | [HANDOFF.md](HANDOFF.md) | `src/tiles/`, `vite.config.js`, `src/main.js` | — |
-| frame-drag | [docs/frame-drag/HANDOFF.md](docs/frame-drag/HANDOFF.md) | `src/tiles/`, `src/scene/`, `src/main.js` | — |
+| tile-floaters | [HANDOFF.md](HANDOFF.md) | `src/tiles/`, `vite.config.js`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
+| frame-drag | [docs/frame-drag/HANDOFF.md](docs/frame-drag/HANDOFF.md) | `src/tiles/`, `src/scene/`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
+
+## Перевірки фази
+
+Порядок: **guard → focused → probe** ([TESTING.md](TESTING.md#рівні-прогону)).
+`npm run guard` (< 2 с) — перед кожним комітом фази; лише він має право
+блокувати. Повний прогін — не доказ і не місце, з якого починати. Звіт фази
+дає числа **окремо по рівнях**: guard, `npm test`, назва й час кожної проби.
+
+Baseline OWNER-3, OWNER-4 і TYPES-1 лише опускаються: фаза, що прибрала
+писаря камери чи сонця або помилку типів, опускає планку в тому ж коміті
+(`npm run guard -- --baseline` друкує нові числа, `npm run typecheck -- --baseline`).
+
+Фаза, що виправила регресію **і має для неї механізм** (мутацію, яка валить
+перевірку), додає рядок у [INVARIANTS.md](INVARIANTS.md) —
+`invariant-guard:add`. Фаза, що прийняла рішення без механізму, додає його в
+[DECISIONS.md](DECISIONS.md). Фаза без того й іншого не додає нічого.

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
-const density = +(process.env.TILES_DENSITY ?? 100);
+const fixtureDensity = +(process.env.TILES_DENSITY ?? 100);
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 64, height: 64 } });
@@ -79,7 +79,7 @@ try {
       return { kind, n, size: Math.max(desc.size.x, desc.size.z), samples: desc.samples.length,
         above: r(above), vy: r(vy), tilt: +tilt.toFixed(1), spin: r(spin), drift: r(drift) };
     });
-  }, density);
+  }, fixtureDensity);
   console.table(rows);
   // The wave's own maxima: vertical speed A·ω = 0.94 m/s, slope rate A·k·ω = 0.24 rad/s.
   for (const row of rows) {
@@ -91,5 +91,5 @@ try {
     // A plate wider than half a wavelength bridges crest and trough: its centre sits off the local surface.
     if (row.size < 6) assert(row.above <= 0.3, `${label} rides ${row.above} m above its pose`);
   }
-  console.log(`PASS T5 floating: ${rows.length} fixture groups, density ${density}, |vy|<=1.1 m/s, spin<=0.4 rad/s, tilt to surface<=10deg, drift<=0.5 m`);
+  console.log(`PASS T5 floating: ${rows.length} fixture groups, density ${fixtureDensity}, |vy|<=1.1 m/s, spin<=0.4 rad/s, tilt to surface<=10deg, drift<=0.5 m`);
 } finally { await browser.close(); }

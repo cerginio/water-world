@@ -11,28 +11,28 @@ const INNER = 1;        // m, scaled by camera height
 const OUTER = 3000;     // m, then one flat skirt
 const SKIRT = 60000;
 
-function buildGrid(ANGULAR) {
-  const q = 1 + (2 * Math.PI) / ANGULAR;
+function buildGrid(angular) {
+  const q = 1 + (2 * Math.PI) / angular;
   const radii = [];
   // a few coarser-ratio rings inside INNER so the surface right at the lens isn't one
   // flat fan when the camera sits on the waterline
   for (let r = INNER / 16; r < INNER * 0.99; r *= 1.12) radii.push(r);
   for (let r = INNER; r < OUTER; r *= q) radii.push(r);
   radii.push(SKIRT);
-  const verts = new Float32Array((1 + radii.length * ANGULAR) * 3);
+  const verts = new Float32Array((1 + radii.length * angular) * 3);
   let v = 3; // vertex 0 = centre
   for (const r of radii) {
-    for (let a = 0; a < ANGULAR; a++) {
-      const t = (a / ANGULAR) * Math.PI * 2;
+    for (let a = 0; a < angular; a++) {
+      const t = (a / angular) * Math.PI * 2;
       verts[v++] = Math.cos(t) * r; verts[v++] = 0; verts[v++] = Math.sin(t) * r;
     }
   }
   const idx = [];
-  for (let a = 0; a < ANGULAR; a++) idx.push(0, 1 + ((a + 1) % ANGULAR), 1 + a);
+  for (let a = 0; a < angular; a++) idx.push(0, 1 + ((a + 1) % angular), 1 + a);
   for (let ring = 0; ring < radii.length - 1; ring++) {
-    const i0 = 1 + ring * ANGULAR, i1 = i0 + ANGULAR;
-    for (let a = 0; a < ANGULAR; a++) {
-      const b = (a + 1) % ANGULAR;
+    const i0 = 1 + ring * angular, i1 = i0 + angular;
+    for (let a = 0; a < angular; a++) {
+      const b = (a + 1) % angular;
       idx.push(i0 + a, i0 + b, i1 + a, i0 + b, i1 + b, i1 + a);
     }
   }
@@ -797,3 +797,6 @@ export class OceanSurface {
     camera.getWorldDirection(u.uCamForward.value);
   }
 }
+
+// Shader sources for the sampler budget check (BUDGET-1, INVARIANTS.md); the material uses the same strings.
+export const WATER_SHADERS = { vertex: VERT, fragment: FRAG };

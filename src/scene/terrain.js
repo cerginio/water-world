@@ -377,5 +377,5 @@ export function createTerrain({ sky, caustics, floatShadow, water, absorption, r
   const group = new THREE.Group();
   group.add(ground, rocks);
   for (const o of [ground, rocks]) o.layers.enable(reflectionLayer);
-  return { group, uniforms, shoreRocks, geometry, patchProp: (m) => patch(m, uniforms, 'prop') };
+  return { group, uniforms, shoreRocks, geometry, patchProp: (material) => patch(material, uniforms, 'prop') };
 }

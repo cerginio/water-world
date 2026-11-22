@@ -94,7 +94,7 @@ export class TilePromotion {
     const f = this.field;
     if (!f.sim) return null;
     const ids = promotionMembers(f.rest, id);
-    if (!ids.length || ids.some(id => (f.sim.rest1.image.data[id * 4 + 3] & 2) !== 0)) return null;
+    if (!ids.length || ids.some(member => (f.sim.rest1.image.data[member * 4 + 3] & 2) !== 0)) return null;
     // Synchronous snapshot is confined to the gesture. Read only occupied rows;
     // the two attachments come from the exact target used by the ID pass.
     const firstRow = Math.floor(Math.min(...ids) / 512);
@@ -104,8 +104,8 @@ export class TilePromotion {
       state0.subarray(firstRow * 512 * 4), undefined, 0);
     f.renderer.readRenderTargetPixels(f.sim.target, 0, firstRow, 512, endRow - firstRow,
       state1.subarray(firstRow * 512 * 4), undefined, 1);
-    if (ids.some(id => ![...state0.subarray(id * 4, id * 4 + 4),
-      ...state1.subarray(id * 4, id * 4 + 4)].every(Number.isFinite))) throw new Error('Invalid GPU tile snapshot');
+    if (ids.some(member => ![...state0.subarray(member * 4, member * 4 + 4),
+      ...state1.subarray(member * 4, member * 4 + 4)].every(Number.isFinite))) throw new Error('Invalid GPU tile snapshot');
     const desc = makePromotionDescriptor(f, ids, state0, state1);
     let body;
     try {

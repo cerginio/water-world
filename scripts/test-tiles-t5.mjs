@@ -160,30 +160,30 @@ assert.equal(field.promotion.target, null);
   const fl = new Floaters({ scene: new T.Scene(), heightAt: () => -100, patchMaterial() {} });
   const plateDesc = { object: new T.Group(), volume: 0.1, size: new T.Vector3(2, 0.1, 2), density: 100, follow: true, cellHeight: 0.1,
     samples: [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([x, z]) => new T.Vector3(x, 0, z)) };
-  const plate = fl.addDescriptor(plateDesc, new T.Vector3(0, -0.3, 0), 0, () => {});
-  plate.quat.setFromAxisAngle(new T.Vector3(1, 0, 0), 0.5);
-  plate.ready = true;
+  const plateBody = fl.addDescriptor(plateDesc, new T.Vector3(0, -0.3, 0), 0, () => {});
+  plateBody.quat.setFromAxisAngle(new T.Vector3(1, 0, 0), 0.5);
+  plateBody.ready = true;
   const draft = 0.1 * (0.5 - 100 / 1025);
   let peak = -Infinity, rate = 0;
   for (let s = 0; s < 240 * 5; s++) {
-    fl.integrate(plate, 1 / 240);
-    peak = Math.max(peak, plate.pos.y); rate = Math.max(rate, plate.angVel.length());
+    fl.integrate(plateBody, 1 / 240);
+    peak = Math.max(peak, plateBody.pos.y); rate = Math.max(rate, plateBody.angVel.length());
   }
-  assert(Math.abs(plate.pos.y - draft) < 1e-3, `plate settles at its draft: ${plate.pos.y}`);
+  assert(Math.abs(plateBody.pos.y - draft) < 1e-3, `plate settles at its draft: ${plateBody.pos.y}`);
   assert(peak < draft + 0.02, `no leap above the draft: ${peak}`);
-  assert(new T.Vector3(0, 1, 0).applyQuaternion(plate.quat).y > Math.cos(0.01));
+  assert(new T.Vector3(0, 1, 0).applyQuaternion(plateBody.quat).y > Math.cos(0.01));
   assert(rate < 3, `levels without flutter: ${rate} rad/s`);
   // A sloped water plane: the plate tilts to it (<=20 deg clamp), not further.
-  plate.water.set([0.2, 0, 0, 0, 0.2, 0, 0, 0, -0.2, 0, 0, 0, -0.2, 0, 0, 0]);
-  for (let s = 0; s < 240 * 5; s++) fl.integrate(plate, 1 / 240);
-  const tilt = Math.acos(new T.Vector3(0, 1, 0).applyQuaternion(plate.quat).y);
+  plateBody.water.set([0.2, 0, 0, 0, 0.2, 0, 0, 0, -0.2, 0, 0, 0, -0.2, 0, 0, 0]);
+  for (let s = 0; s < 240 * 5; s++) fl.integrate(plateBody, 1 / 240);
+  const tilt = Math.acos(new T.Vector3(0, 1, 0).applyQuaternion(plateBody.quat).y);
   assert(Math.abs(tilt - Math.atan(0.2)) < 0.01, `tilts to the water slope: ${tilt}`);
   // Dropped from above: free fall, then the usual entry impact, then it follows.
-  plate.water.fill(0); plate.pos.set(0, 3, 0); plate.vel.set(0, 0, 0); plate.wet = true;
+  plateBody.water.fill(0); plateBody.pos.set(0, 3, 0); plateBody.vel.set(0, 0, 0); plateBody.wet = true;
   const before = fl.impacts.length;
-  for (let s = 0; s < 240 * 3; s++) fl.integrate(plate, 1 / 240);
+  for (let s = 0; s < 240 * 3; s++) fl.integrate(plateBody, 1 / 240);
   assert.equal(fl.impacts.length, before + 1);
-  assert(Math.abs(plate.pos.y - draft) < 0.01);
+  assert(Math.abs(plateBody.pos.y - draft) < 0.01);
   // Heavier than water: no follower, the ordinary integrator lets it sink.
   const sinker = fl.addDescriptor({ ...plateDesc, object: new T.Group(), density: 1100 }, new T.Vector3(10, 0, 0), 0, () => {});
   sinker.ready = true;

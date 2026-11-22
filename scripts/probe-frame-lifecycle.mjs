@@ -45,14 +45,14 @@ try {
         const result=update.call(this,dt);if(active)fd5.cpu.push(performance.now()-start);return result;};
     });
     let point = await page.evaluate(()=>fd5.find());
-    const result = await page.evaluate(async point=>{
+    const result = await page.evaluate(async at=>{
       const t=app.tiles,r=app.renderer,gl=r.getContext(),ext=gl.getExtension('WEBGL_debug_renderer_info');
-      const cold=t.interaction.picker.pick(app.camera,point.x,point.y),coldMs=t.interaction.picker.lastMs;
+      const cold=t.interaction.picker.pick(app.camera,at.x,at.y),coldMs=t.interaction.picker.lastMs;
       if(!cold)throw Error('Cold query missed projected tile');
       const warm=[];
       for(let i=0;i<40;i++){
         await new Promise(requestAnimationFrame);
-        t.interaction.picker.pick(app.camera,point.x,point.y);warm.push(t.interaction.picker.lastMs);
+        t.interaction.picker.pick(app.camera,at.x,at.y);warm.push(t.interaction.picker.lastMs);
       }
       const samplers=material=>{
         const p=r.properties.get(material).currentProgram.program;
@@ -142,7 +142,7 @@ try {
         function root(shadow){
           t.group.updateWorldMatrix(true,true);t.syncShadow();t.shadowGroup.updateWorldMatrix(true,true);
           const scene=new T.Scene();scene.add(new T.AmbientLight(0xffffff,2));
-          for(const e of t.boundsEntries.filter(e=>e.frameIndex===f.index)){
+          for(const e of t.boundsEntries.filter(entry=>entry.frameIndex===f.index)){
             const source=shadow?e.proxy:e.mesh,copy=source.clone(false);
             copy.matrixAutoUpdate=false;copy.matrix.copy(source.matrixWorld);copy.layers.enable(1);scene.add(copy);
           }
@@ -207,7 +207,7 @@ try {
     if(!mobile){
       result.noneBenchmark=await page.evaluate(()=>runBenchmark(8,{shot:'Golden hour',warmup:2}));
       assert.equal(result.noneBenchmark.tiles.count,0);
-      assert(!Object.keys(result.noneBenchmark.passes).some(k=>/^tile/.test(k)));
+      assert(!Object.keys(result.noneBenchmark.passes).some(k=>k.startsWith('tile')));
     }
     // Actual loss/restoration (not a synthetic context event).
     await page.evaluate(async()=>{await app.tiles.load('story-8-frames-hibrid');app.views.Tiles();});

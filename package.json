@@ -11,7 +11,12 @@
     "test:portability": "node scripts/test-portability.mjs",
     "deploy": "node scripts/deploy-netlify.mjs",
     "deploy:prod": "node scripts/deploy-netlify.mjs --prod",
-    "deploy:check": "node scripts/deploy-netlify.mjs --dry-run"
+    "deploy:check": "node scripts/deploy-netlify.mjs --dry-run",
+    "guard": "node scripts/audit/guard.mjs",
+    "test": "vitest run",
+    "lint": "oxlint src scripts build",
+    "typecheck": "node scripts/audit/typecheck.mjs",
+    "typecheck:report": "node scripts/audit/typecheck.mjs --report"
   },
   "keywords": [],
   "author": "",
@@ -24,8 +29,11 @@
   "devDependencies": {
     "magic-string": "1.4.5",
     "netlify-cli": "27.20.0",
+    "oxlint": "1.85.0",
     "playwright": "1.65.1",
-    "vite": "^8.3.5"
+    "typescript": "7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "5.1.0"
   },
   "type": "module",
   "engines": { "node": ">=24 <25" },

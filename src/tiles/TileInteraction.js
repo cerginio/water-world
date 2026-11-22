@@ -189,8 +189,8 @@ export class TileInteraction {
     if(!this.field.terrainContact.steepBounds.length){
       const b=g.frame.bounds,margin=this.field.sim.uniforms.uTileMotionLimit.value+this.contactMargin;
       const inside=[[b.min.x,b.min.y],[b.max.x,b.min.y],[b.max.x,b.max.y],[b.min.x,b.max.y]].every(([x,z])=>{
-        const p=new THREE.Vector3(x+g.frame.offset.x,0,z+g.frame.offset.z).applyMatrix4(this.field.group.matrixWorld).add(target.clone().sub(g.frame.world));
-        return Math.max(Math.abs(p.x),Math.abs(p.z))+margin<=ISLAND_SIZE/2;
+        const corner=new THREE.Vector3(x+g.frame.offset.x,0,z+g.frame.offset.z).applyMatrix4(this.field.group.matrixWorld).add(target.clone().sub(g.frame.world));
+        return Math.max(Math.abs(corner.x),Math.abs(corner.z))+margin<=ISLAND_SIZE/2;
       });
       if(inside){g.validation=(g.validation??0)+1;g.target.copy(target);this.limited=false;return;}
     }
@@ -211,7 +211,7 @@ export class TileInteraction {
       const minX=b.minX+Math.min(g.frame.world.x,target.x)-margin,maxX=b.maxX+Math.max(g.frame.world.x,target.x)+margin;
       const minZ=b.minZ+Math.min(g.frame.world.z,target.z)-margin,maxZ=b.maxZ+Math.max(g.frame.world.z,target.z)+margin;
       if(Math.max(Math.abs(minX),Math.abs(maxX),Math.abs(minZ),Math.abs(maxZ))<=ISLAND_SIZE/2 &&
-        !this.field.terrainContact.steepBounds.some(b=>b.maxX>=minX&&b.minX<=maxX&&b.maxZ>=minZ&&b.minZ<=maxZ)){
+        !this.field.terrainContact.steepBounds.some(cell=>cell.maxX>=minX&&cell.minX<=maxX&&cell.maxZ>=minZ&&cell.minZ<=maxZ)){
         g.validation=(g.validation??0)+1;g.target.copy(target);this.limited=false;return;
       }
     }

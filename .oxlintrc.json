@@ -1,0 +1,50 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "ignorePatterns": [
+        "**/_archive/**",
+        "**/dist/**",
+        "**/.build-qa/**",
+        "**/node_modules/**",
+        "**/*.min.js"
+    ],
+    "env": { "browser": true, "node": true, "es2024": true },
+
+    "categories": {
+        "correctness": "error",
+        "suspicious": "warn",
+        "perf": "off",
+        "style": "off"
+    },
+
+    "rules": {
+        "no-unused-vars": ["warn", {
+            "argsIgnorePattern": "^_",
+            "ignoreRestSiblings": true
+        }],
+
+        "eslint/no-shadow": "warn",
+        "eslint/no-await-in-loop": "warn",
+        "eslint/preserve-caught-error": "warn",
+
+        "unicorn/no-new-array": "off",
+        "unicorn/no-useless-spread": "off",
+        "unicorn/no-useless-fallback-in-spread": "off",
+        "unicorn/no-array-sort": "off",
+        "unicorn/no-array-reverse": "off",
+        "unicorn/prefer-add-event-listener": "off",
+        "unicorn/consistent-function-scoping": "off",
+        "eslint/no-underscore-dangle": "off",
+        "oxc/no-map-spread": "off"
+    },
+
+    "overrides": [
+        {
+            "files": ["scripts/**"],
+            "rules": {
+                // Проби й збірки навмисно послідовні: кроки Playwright, кадри,
+                // збірки в переміщених теках. Паралельність тут — дефект.
+                "eslint/no-await-in-loop": "off"
+            }
+        }
+    ]
+}

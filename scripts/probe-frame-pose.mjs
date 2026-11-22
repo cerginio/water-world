@@ -174,10 +174,10 @@ try {
         sim.update(matrix, 1 / 60, params);
         // Mode changes use the existing velocity convention, without teleporting.
         const transitions = [];
-        for (const placed of [1, 0, 1, 0]) {
+        for (const poseZ of [1, 0, 1, 0]) {
           const before = read(0);
           const velocity = read(2);
-          frames[index].pose.z = placed; sim.syncFrames();
+          frames[index].pose.z = poseZ; sim.syncFrames();
           sim.update(matrix, 1e-8, params);
           const after = read(0);
           const afterVelocity = read(2);
@@ -212,10 +212,10 @@ try {
   assert.equal(report.physics.results[2].texture, true);
 
   report.release = await page.evaluate(() => {
-    const t = app.tiles, frame = t.frameRegistry.get(fd1.id), world = frame.world.clone();
+    const t = app.tiles, entry = t.frameRegistry.get(fd1.id), world = entry.world.clone();
     const version = t.sim.target.texture.version;
-    t.releaseFrame(frame.id);
-    return { mode: frame.mode, worldError: frame.world.distanceTo(world), unchanged: version === t.sim.target.texture.version };
+    t.releaseFrame(entry.id);
+    return { mode: entry.mode, worldError: entry.world.distanceTo(world), unchanged: version === t.sim.target.texture.version };
   });
   assert.equal(report.release.mode, 'inherited'); assert.ok(report.release.worldError < 1e-8); assert.equal(report.release.unchanged, true);
 

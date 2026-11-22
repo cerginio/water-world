@@ -86,12 +86,12 @@ try{
       for(const transparent of [false,true])for(const top of [1,0]){
         t.placeFrameOnTop(frames[top]);
         meshes.forEach((m,i)=>{
-          const source=t.group.children.find(m=>m.userData.frameIndex===frames[i].index)??t.boundsEntries.find(e=>e.frameIndex===frames[i].index).mesh;
-          m.renderOrder=source.renderOrder;
+          const original=t.group.children.find(child=>child.userData.frameIndex===frames[i].index)??t.boundsEntries.find(e=>e.frameIndex===frames[i].index).mesh;
+          m.renderOrder=original.renderOrder;
           m.material.dispose();
           m.material=new THREE.MeshBasicMaterial({color:i?0x0000ff:0xff0000,toneMapped:false,
             transparent,depthWrite:!transparent,opacity:transparent?0.7:1,
-            polygonOffset:source.material.polygonOffset,polygonOffsetFactor:source.material.polygonOffsetFactor,polygonOffsetUnits:source.material.polygonOffsetUnits});
+            polygonOffset:original.material.polygonOffset,polygonOffsetFactor:original.material.polygonOffsetFactor,polygonOffsetUnits:original.material.polygonOffsetUnits});
         });
         const prev=r.getRenderTarget(),color=r.getClearColor(new THREE.Color()),alpha=r.getClearAlpha();
         r.setClearColor(0,1);r.setRenderTarget(target);r.clear();r.render(scene,camera);r.readRenderTargetPixels(target,2,2,1,1,buffer);
@@ -174,7 +174,13 @@ try{
   assert.equal(await page.evaluate(()=>app.tiles.interaction.highlight.style.display),'none','Hover must not select');
   await page.mouse.click(report.real.grab.x,report.real.grab.y);
   await page.waitForTimeout(50);
-  const corners=await page.evaluate(()=>app.tiles.interaction.outline.getAttribute('points'));
+  // Click selects the grabbed frame and draws its SVG outline from four world corners (FD4).
+  const clicked=await page.evaluate(()=>({points:app.tiles.interaction.outline.getAttribute('points'),
+    display:app.tiles.interaction.highlight.style.display,selected:app.tiles.interaction.selected?.index,frame:fd4.frame.index}));
+  const corners=(clicked.points??'').trim().split(/\s+/).map(c=>c.split(',').map(Number));
+  assert.equal(clicked.display,'block','Click must show the frame outline');
+  assert.equal(clicked.selected,clicked.frame,'Click must select the grabbed frame');
+  assert(corners.length===4&&corners.every(c=>c.length===2&&c.every(Number.isFinite)),`Outline needs 4 finite corners: ${clicked.points}`);
   // The next press follows a click immediately: it must start a drag, even
   // inside the browser's double-click time window.
   await page.mouse.down();
@@ -188,6 +194,7 @@ try{
   assert(report.selection.selected===2);assert(report.selection.rank>0);assert(report.selection.movement>1);
   assert(report.selection.box.width>10&&report.selection.box.height>10);
   const fixed=await page.evaluate(()=>app.tiles.interaction.outline.getAttribute('points'));
+  assert.notEqual(fixed,clicked.points,'The outline must follow the dragged frame');
   await page.waitForTimeout(400);
   report.stable=await page.evaluate(()=>({points:app.tiles.interaction.outline.getAttribute('points'),fill:app.tiles.interaction.outline.getAttribute('fill'),
     wireframe:app.tiles.group.children.some(m=>m.material.wireframe),promotions:app.tiles.promotion.active.size}));
@@ -220,8 +227,8 @@ try{
       if(!grab)throw new Error('No tile in mountain view');
       // The shipped island may have no >55 degree dry triangles. Introduce a
       // matching visible/contact fixture, without changing product source.
-      let dry=terrain.steepBounds.some(cell=>[1/3,2/3].some(f=>{
-        const p=terrain.at(cell.minX+terrain.step*f,cell.minZ+terrain.step*f);
+      let dry=terrain.steepBounds.some(cell=>[1/3,2/3].some(frac=>{
+        const p=terrain.at(cell.minX+terrain.step*frac,cell.minZ+terrain.step*frac);
         return p.height>10&&p.normal.y<Math.cos(55*Math.PI/180);
       }));
       fd4.steepFixture=!dry;

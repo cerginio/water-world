@@ -146,11 +146,11 @@ export class TileFrameQuery {
     field.renderer.compile(this.reduce.mesh,field.camera);
     this.targets=[];
     let width=512,height=sim.height;
-    do {
+    for(;;){
       this.targets.push(new THREE.WebGLRenderTarget(width,height,{type:THREE.FloatType,depthBuffer:false,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter}));
       if(width===1&&height===1)break;
       width=Math.ceil(width/4);height=Math.ceil(height/4);
-    }while(true);
+    }
   }
 
   async query(frame,delta=new THREE.Vector2(),waterHeight=0){

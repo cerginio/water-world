@@ -589,6 +589,8 @@ async function gpuFence() {
     let status;
     while ((status = gl.clientWaitSync(s, 0, 0)) === gl.TIMEOUT_EXPIRED) {
       if (performance.now() > deadline || gl.isContextLost()) throw new Error('GPU fence timeout/context lost');
+      // Опитування GPU fence послідовне за природою: наступна спроба лише після паузи.
+      // oxlint-disable-next-line eslint/no-await-in-loop
       await new Promise((r) => setTimeout(r, 1));
     }
     if (status === gl.WAIT_FAILED) throw new Error('GPU fence failed');
@@ -661,10 +663,10 @@ function updateHud(now) {
   $('pMs').textContent = `${(1000 / fps).toFixed(2)} ms/frame`;
   fpsHistory.push(fps);
   if (fpsHistory.length > 40) fpsHistory.shift();
-  const { width: w, height: h } = graph.canvas, lo = Math.min(...fpsHistory) * 0.9, hi = Math.max(...fpsHistory) * 1.05;
-  graph.clearRect(0, 0, w, h);
+  const { width: cw, height: ch } = graph.canvas, lo = Math.min(...fpsHistory) * 0.9, hi = Math.max(...fpsHistory) * 1.05;
+  graph.clearRect(0, 0, cw, ch);
   graph.beginPath();
-  fpsHistory.forEach((v, i) => graph.lineTo((w * i) / Math.max(1, fpsHistory.length - 1), h - (h * (v - lo)) / (hi - lo || 1)));
+  fpsHistory.forEach((v, i) => graph.lineTo((cw * i) / Math.max(1, fpsHistory.length - 1), ch - (ch * (v - lo)) / (hi - lo || 1)));
   graph.strokeStyle = '#2cc9ff';
   graph.lineWidth = 3;
   graph.stroke();

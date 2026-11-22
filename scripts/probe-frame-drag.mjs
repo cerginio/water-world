@@ -148,7 +148,7 @@ try {
     for (let i = 0; i < 25; i++) { t.interaction.picker.pick(app.camera, p.x, p.y); samples.push(t.interaction.picker.lastMs); }
     samples.sort((a, b) => a - b);
     return { p50: samples[12], p95: samples[23], bytes: t.interaction.picker.bytes,
-      frameDraws: t.interaction.picker.proxies.filter(p => p.tile).length,
+      frameDraws: t.interaction.picker.proxies.filter(proxy => proxy.tile).length,
       originalParts: t.group.children.length };
   });
   report.interactionCpu = await page.evaluate(() => {
@@ -231,18 +231,18 @@ try {
   await mobile.waitForTimeout(1500);
   report.mobileProfile = await mobile.evaluate(() => {
     const t = app.tiles, rect = app.renderer.domElement.getBoundingClientRect();
-    let hit = null, point;
+    let hit = null, hitPoint;
     for (let y = rect.height * 0.35; !hit && y < rect.height * 0.75; y += 18)
       for (let x = 30; !hit && x < rect.width - 30; x += 18) {
-        hit = t.interaction.picker.pick(app.camera, x, y); point = { x, y };
+        hit = t.interaction.picker.pick(app.camera, x, y); hitPoint = { x, y };
       }
     if (!hit) throw new Error('No mobile profile hit');
     const samples = [];
     for (let i = 0; i < 25; i++) {
-      t.interaction.picker.pick(app.camera, point.x, point.y); samples.push(t.interaction.picker.lastMs);
+      t.interaction.picker.pick(app.camera, hitPoint.x, hitPoint.y); samples.push(t.interaction.picker.lastMs);
     }
     samples.sort((a, b) => a - b);
-    return { point, profile: t.profile, p50: samples[12], p95: samples[23], dpr: devicePixelRatio,
+    return { point: hitPoint, profile: t.profile, p50: samples[12], p95: samples[23], dpr: devicePixelRatio,
       drawingWidth: app.renderer.domElement.width, cssWidth: rect.width };
   });
   assert.equal(report.mobileProfile.profile, 'mobile');
