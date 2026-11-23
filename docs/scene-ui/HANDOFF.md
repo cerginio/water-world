@@ -2,9 +2,9 @@
 
 Стан на 2026-11-23. Гілка `master`. Фази з
 [SCENE-UI-SPEC.md](../../SCENE-UI-SPEC.md) (далі — «спека»). U0 і U1 закрито
-(коміти закриття фаз), U2 і U3 — теж; U4 відкрита.
+(коміти закриття фаз), U2, U3 і U4 — теж. Усі фази плану закрито.
 
-> **Далі:** U4 — квадрат мілини на телефоні: float-текстури → half-float (пункт 5).
+> **Далі:** фаз у плані немає — наступну визначає власник (відкриті питання нижче).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -36,34 +36,10 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    `viewport-fit=cover`, `lang` рейки.~~ — ЗАКРИТО 2026-11-23: [QA.md](QA.md) → U3,
    проба `scripts/probe-scene-mobile.mjs`; FPS на Nord 4 (QA-U3-4) — очі власника.
 
-5. **U4 — квадрат мілини на телефоні: float-текстури без лінійної фільтрації**
-   (виправлення регресії; рішення власника 2026-11-23 — окрема фаза в кінці).
-   - Інцидент: на телефоні власника (Chrome Android, `OES_texture_float_linear`
-     **немає** в списку розширень webglreport, 2026-11-23) навколо острова видно
-     квадрат ~1800 × 1800 м зі світлою гладкою «мілиною» без смуг прибою і різкою
-     межею з відкритим океаном. Видно зі станції «Острів» (U1), але рендер U1 не
-     змінювала — дефект старший. На desktop (розширення є) квадрата немає.
-   - Механізм: `FloatType` + `LinearFilter` без `OES_texture_float_linear` —
-     неповна текстура, читається як 0 → `shoreSample().x` = 0 → глибина 0 у всій
-     карті берега (`uShoreExtent` 1800), поза картою шейдер і так повертає −60.
-   - Що змінити: текстури [shoreMap.js:67-69](../../src/water/shoreMap.js#L67-L69)
-     (`floatTex`: shore, travel), [:308-309](../../src/water/shoreMap.js#L308-L309)
-     (surf) і heightMap [terrainGeometry.js:29-30](../../src/scene/terrainGeometry.js#L29-L30)
-     → `HalfFloatType` (фільтрація half-float — ядро WebGL2). Точність half: глибина
-     ±60 м — крок ~3 см; SDF до 1e4 — крок ~8 м, у шейдері лише порівнюється з
-     порогами 70–180 м. Перевірити, що `travel.tau` і `shoal` не виходять за
-     65 504 і не втрачають потрібної точності. Альтернатива (ручна білінійна
-     в шейдері) — гірша: фрагмент води на межі 16/16 семплерів (BUDGET-1).
-   - Закриття: guard — нове правило через `invariant-guard:add` (інцидент є,
-     механізм є): `DataTexture`/`RenderTarget` з `FloatType` і `LinearFilter` —
-     порушення; мутація — повернути `FloatType` у `floatTex` → guard падає.
-     Focused — юніт на форму текстур (тип half, фільтр linear). Проба — без
-     розширення в браузері не відтворити (desktop його має) → до/після скріншоти
-     станції «Острів» на desktop (вигляд не змінився) + драфт-деплой і очі власника
-     на телефоні: квадрата немає, прибій біля острова є.
-   - Чернетка QA: `qa:open` драфт-URL на телефоні → `qa:action` «Острів» →
-     `qa:inspect` вода навколо острова → `qa:expected` бірюзова мілина тільки біля
-     берега, смуги прибою, плавний перехід у синій океан без прямої межі й кута.
+~~5. **U4 — квадрат мілини на телефоні: float-текстури без лінійної фільтрації**
+   (виправлення регресії): карти берега й heightMap → half-float через
+   `engine/halfTexture.js`, guard TEX-1.~~ — ЗАКРИТО 2026-11-23: [QA.md](QA.md) → U4,
+   проба `scripts/probe-scene-shore.mjs`; квадрат на телефоні (QA-U4-1) — очі власника.
 
 ### Відкриті питання
 
@@ -88,8 +64,8 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (U3, 2026-11-23): guard зелений (OWNER-3 0 + власник 9, OWNER-4 6,
-TYPES-1 21); `npm test` 55/55; проби `probe-scene-mobile`, `probe-scene-frame`,
+Baseline (U4, 2026-11-23): guard зелений (OWNER-3 0 + власник 9, OWNER-4 6,
+TEX-1 16 `FloatType`, TYPES-1 21); `npm test` 63/63; проби `probe-scene-shore`,
 `probe-scene-rail`, `probe-scene-ui` PASS.
 
 | підсистема | де | контракт | перевірка |
@@ -103,6 +79,7 @@ TYPES-1 21); `npm test` 55/55; проби `probe-scene-mobile`, `probe-scene-fra
 | станції й рейка | [src/scene/stationPoses.js](../../src/scene/stationPoses.js) (`islandPose`, `shorePose`, `storyPose`); [src/ui/stationRail.js](../../src/ui/stationRail.js) (`createStationRail`, `onStation`); пози — `stationPoses` у [main.js:279](../../src/main.js#L279); `app.stations` | спека §4.1–4.5: `go(id)` → `true` на прибутті; ● на станції, ◎ після відведення (> 5 % / > 8°); reduced motion — згасання до opacity 1, `rig.place`, проявлення; uk/en за `navigator.languages`; `frame` активна ⟺ `frames.count() > 0`, `nextFrame`/`prevFrame`, свайп по вузлу, підпис «Мить N/M» | `probe-scene-rail`, `probe-scene-frame` |
 | станція «Мить» | [src/scene/frameFocus.js](../../src/scene/frameFocus.js) (`createFrameFocus`, `stepFrame`, `frameRestCenter`, `frameCorners`); `fitPose` у `stationPoses.js`; `storyFrames` у [main.js](../../src/main.js); `app.stations.focus` | спека §4.3: порядок `tiles.frames`, з іншої станції — кадр у фокусі; поза — rest-коробка кадру, центр — GPU-середина (drift) раз на 250 мс; `follow` лише в drift | `tests/cameraFlight.test.js`, `probe-scene-frame` |
 | кадри історії | `tiles.frames`, `TileFrames.entries` (`world`, `bounds`, `mode`); центр поля — `tiles.center`; `TileField.frameFootprint(frame)` — GPU-коробка кадру (1×1 readback, читання в черзі) | drift рухає тайли лише на GPU, `entry.world` не змінюється; `tiles.place()` скасовує drag — станції його не викликають | `probe-frame-drag`, `probe-scene-frame` |
+| текстури берега | `halfTexture` у [src/engine/halfTexture.js](../../src/engine/halfTexture.js); `floatTex` і `surfShelter` у [src/water/shoreMap.js](../../src/water/shoreMap.js); `buildTerrain` у [terrainGeometry.js](../../src/scene/terrainGeometry.js) | INVARIANTS TEX-1: лінійно фільтровані дані — `HalfFloatType` (`Uint16Array`), `FloatType` — лише з `NearestFilter`; CPU-копії (`data`, `travelData`) лишаються Float32 | guard TEX-1, `tests/shoreTextures.test.js`, `probe-scene-shore` |
 | бенчмарк / API | `runBenchmark` [main.js:607](../../src/main.js#L607), `window.app` [main.js:641](../../src/main.js#L641) | `runBenchmark({ shot })` ставить дев-шот через `rig.place` (переліт скасовується) | `probe-scene-ui` |
 
 ## Головні виміряні факти
@@ -118,7 +95,11 @@ TYPES-1 21); `npm test` 55/55; проби `probe-scene-mobile`, `probe-scene-fra
 - [`deploy-netlify.mjs`, сайт за іменем] `edge-of-elements` за іменем — «Not Found», за ID працює; `npm run deploy -- --site …` на Windows губить `--site` → `NETLIFY_SITE_ID=2a006d8a-…`. (U1)
 - [`env(safe-area-inset-*)` у Playwright] Chromium не емулює вирізи — завжди 0 → відступ над жестовою смугою перевіряє лише власник на телефоні. (U3)
 - [проба, що чекає `stations.current`] DOM рейки оновлює цикл кадру (`update`) — `current` уже `shore`, а `aria-current` ще ні → чекати сам атрибут. (U3)
-- [телефон власника, Chrome Android] `OES_texture_float_linear` немає, `EXT_color_buffer_float` є → float-текстури з `LinearFilter` читаються як 0; desktop-проба цього не бачить (у неї розширення є). (U1, → U4)
+- [телефон власника, Chrome Android] `OES_texture_float_linear` немає, `EXT_color_buffer_float` є → float-текстури з `LinearFilter` читаються як 0; лінійно фільтровані дані — `halfTexture()`. (U1, U4)
+- [desktop, розширення сховане через `getExtension`] GPU однаково фільтрує float32 — квадрат не відтворюється, three лише попереджає → проба `probe-scene-shore` ловить причину трекером WebGL (float32 + лінійний фільтр у draw), не вигляд. (U4)
+- [попередження three «Unable to use linear filtering…»] не називає текстуру, у прод-збірці стек мініфіковано → розрізняти текстури лише на рівні викликів WebGL. (U4)
+- [`DataUtils.toHalfFloat`] похибка до 1 ulp (2⁻¹⁰ відносно), не 0.5 → допуски юнітів на half — 2⁻¹⁰. (U4)
+- [half-float, карта берега] `tau` у смузі прибою −21…52 с: похибка ≤ 0.031 с (фаза ≤ 2.6° при λ 30 м); на суші до −162 с — похибка 0.125 с, хвиль там немає. Конверсія RGBA 512² — 15 мс на desktop. (U4)
 
 ### Камера й `main.js`
 
