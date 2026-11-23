@@ -5,6 +5,7 @@ import { TerrainContact } from '../scene/TerrainContact.js';
 import { TileSim } from './TileSim.js';
 import { TileFrames } from './TileFrames.js';
 import { TileInteraction } from './TileInteraction.js';
+import { TileFrameQuery } from './TileFrameQuery.js';
 import { TilePromotion, bindTilePromotion } from './TilePromotion.js';
 import { patchTileMaterial } from './TileMaterial.js';
 import { tileMotionLimit, tileBounds, applyTileBounds, fieldShadowBody } from './tileBounds.js';
@@ -269,6 +270,24 @@ export class TileField {
     return frame;
   }
 
+  /**
+   * World XZ box of a frame's tiles as the GPU has them now (drift included), or null
+   * when no model is built. One 1×1 async readback; reads queue one after another.
+   * @returns {Promise<{ minX: number, maxX: number, minZ: number, maxZ: number } | null>}
+   */
+  frameFootprint(frame) {
+    const read = async () => {
+      if (!this.sim || !this.rest) return null;
+      this.footprintQuery ??= new TileFrameQuery(this, 2);
+      const b = await this.footprintQuery.query(frame);
+      if (!b || b[0] < -1e19) return null;
+      return { minX: -b[0], minZ: -b[1], maxX: b[2], maxZ: b[3] };
+    };
+    const next = (this.footprintRead ?? Promise.resolve()).then(read, read);
+    this.footprintRead = next.catch(() => null);
+    return next;
+  }
+
   releaseFrame(frameId) {
     this.syncFrames();
     const frame = this.frameRegistry.get(frameId);
@@ -309,6 +328,8 @@ export class TileField {
     if (!keepLifecycle) { this.lifecycle?.abort(); this.lifecycle = null; }
     this.interaction?.dispose();
     this.interaction = null;
+    this.footprintQuery?.dispose();
+    this.footprintQuery = null;
     this.unbindPromotion?.();
     this.unbindPromotion = null;
     this.promotion?.clear();

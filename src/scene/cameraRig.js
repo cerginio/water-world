@@ -25,10 +25,12 @@ export class CameraRig {
     this.water = water;
     this.locks = new Set();
     this.flight = null;
+    this.following = null;
     this.keys = new Set();
     this.listeners = new Set();
     this._pose = { position: new THREE.Vector3(), target: new THREE.Vector3() };
     this._move = new THREE.Vector3();
+    this._shift = new THREE.Vector3();
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
   }
@@ -60,8 +62,9 @@ export class CameraRig {
     return { position: this.camera.position.clone(), target: this.controls.target.clone() };
   }
 
-  /** Puts the camera at a pose at once; stops a flight. */
+  /** Puts the camera at a pose at once; stops a flight and a follow. */
   place(position, target) {
+    this.following = null;
     this._endFlight();
     this.camera.position.copy(position);
     this.controls.target.copy(target);
@@ -98,6 +101,7 @@ export class CameraRig {
    * @param {{ onProgress?: (share: number) => void }} [options]
    */
   flyTo(to, { onProgress } = {}) {
+    this.following = null;
     const previous = this.flight;
     const flight = createFlight(this.pose(), to, { ground: this.ground, water: this.water });
     flight.elapsed = 0;
@@ -117,9 +121,36 @@ export class CameraRig {
     return flight.done;
   }
 
-  /** Stops a flight where it is; the controls are the person's at once. */
+  /** Stops a flight or a follow where it is; the controls are the person's at once. */
   interrupt() {
+    this.following = null;
     if (this.flight) this._endFlight(false);
+  }
+
+  // --- follow -----------------------------------------------------------------------
+
+  /**
+   * Keeps the orbit target on a moving point (a drifting frame, SCENE-UI-SPEC §4.3):
+   * camera and target shift together by at most `speed` m/s towards `aim()`, so the view
+   * neither turns nor zooms. Ends on interrupt() (the person's first touch), place() and
+   * flyTo(). `aim()` may return null — nothing to follow this frame.
+   * @param {() => (THREE.Vector3 | null)} aim
+   * @param {{ speed?: number, onShift?: (delta: THREE.Vector3) => void }} [options]
+   */
+  follow(aim, { speed = 2, onShift } = {}) {
+    this.following = { aim, speed, onShift };
+  }
+
+  _stepFollow(dt) {
+    const f = this.following, aim = f.aim();
+    if (!aim || this.locks.size) return;
+    const shift = this._shift.copy(aim).sub(this.controls.target);
+    const most = f.speed * dt, length = shift.length();
+    if (length < 1e-6) return;
+    if (length > most) shift.multiplyScalar(most / length);
+    this.camera.position.add(shift);
+    this.controls.target.add(shift);
+    f.onShift?.(shift);
   }
 
   _endFlight(arrived = false) {
@@ -195,6 +226,7 @@ export class CameraRig {
   update(dt) {
     if (this.flight) this._stepFlight(dt);
     else {
+      if (this.following) this._stepFollow(dt);
       this.controls.update();
       this._moveKeys(dt);
     }

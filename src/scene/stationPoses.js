@@ -60,6 +60,29 @@ export function shorePose({ heightAt, coast, out, look }) {
 }
 
 /**
+ * Moves the camera along its line of sight until the farthest of `points` stands at
+ * `share` of the half-screen. Under a tilt the near half of a box looks bigger than the
+ * far half, and `storyPose` alone let a small frame's near edge leave the screen.
+ */
+export function fitPose(pose, points, { fov, aspect, share = 1 / 1.3, steps = 6 }) {
+  const lens = new THREE.PerspectiveCamera(fov, aspect, 0.01, 1e6);
+  const out = pose.position.clone().sub(pose.target), p = new THREE.Vector3();
+  for (let i = 0; i < steps; i++) {
+    lens.position.copy(pose.target).add(out);
+    lens.lookAt(pose.target);
+    lens.updateMatrixWorld();
+    let most = 0;
+    for (const q of points) {
+      p.copy(q).project(lens);
+      most = Math.max(most, Math.abs(p.x), Math.abs(p.y));
+    }
+    if (!(most > 0) || !Number.isFinite(most)) break;
+    out.multiplyScalar(most / share);
+  }
+  return { position: pose.target.clone().add(out), target: pose.target.clone() };
+}
+
+/**
  * Story: the whole field read as in Tilecraft — 35° off the vertical, from the field's
  * +z side, so source x reads right and y down. `margin` is the room around the field.
  */

@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { createFlight, flightDuration, liftHeight, smootherstep } from '../src/scene/cameraFlight.js';
 import { CameraRig } from '../src/scene/cameraRig.js';
 import { islandHeight } from '../src/scene/islandHeight.js';
-import { islandRadius, islandPose, shorePose, storyPose } from '../src/scene/stationPoses.js';
+import { fitPose, islandRadius, islandPose, shorePose, storyPose } from '../src/scene/stationPoses.js';
 import { onStation, railLanguage } from '../src/ui/stationRail.js';
+import { frameRestCenter, stepFrame } from '../src/scene/frameFocus.js';
 
 // SCENE-UI-SPEC §4.4: duration, lift, bounds and zero speed at the ends of a flight;
 // the camera owner's locks (TD2); the station poses of §4.2.
@@ -147,6 +148,48 @@ describe('CameraRig', () => {
     expect([rig.flying, rig.controls.enabled]).toEqual([false, true]);
   });
 
+  test('follow: camera and target shift together, at most `speed` m/s', () => {
+    const rig = make();
+    const aim = v(110, 0, 0), shifts = [];
+    const p0 = rig.camera.position.clone(), offset = p0.clone().sub(rig.controls.target);
+    rig.follow(() => aim, { speed: 2, onShift: (d) => shifts.push(d.length()) });
+    for (let i = 0; i < 60; i++) rig.update(1 / 60);
+    expect(rig.controls.target.x).toBeCloseTo(12, 6);   // 1 s at 2 m/s
+    expect(rig.camera.position.clone().sub(rig.controls.target).distanceTo(offset)).toBeLessThan(1e-6);
+    expect(Math.max(...shifts)).toBeLessThanOrEqual(2 / 60 + 1e-9);
+    for (let i = 0; i < 6000; i++) rig.update(1 / 60);
+    expect(rig.controls.target.distanceTo(aim)).toBeLessThan(1e-6);   // arrives, no overshoot
+  });
+
+  test('follow ends on the first touch, on place() and on a new flight', () => {
+    const rig = make();
+    rig.follow(() => v(110, 0, 0));
+    rig.interrupt();
+    rig.update(1);
+    expect([rig.following, rig.controls.target.x]).toEqual([null, 10]);
+    rig.follow(() => v(110, 0, 0));
+    rig.place(v(0, 50, 0), v(10, 0, 0));
+    expect(rig.following).toBe(null);
+    rig.follow(() => v(110, 0, 0));
+    rig.flyTo(pose(v(300, 60, 0), v(310, 0, 0)));
+    expect(rig.following).toBe(null);
+  });
+
+  test('follow waits while a lock is held and when there is nothing to aim at', () => {
+    const rig = make();
+    let aim = null;
+    rig.follow(() => aim);
+    rig.update(1);
+    expect(rig.controls.target.x).toBe(10);
+    aim = v(110, 0, 0);
+    const drag = rig.lock('frame-drag');
+    rig.update(1);
+    expect(rig.controls.target.x).toBe(10);
+    rig.release(drag);
+    rig.update(1);
+    expect(rig.controls.target.x).toBeCloseTo(12, 9);
+  });
+
   test('the ground clamp holds after every update', () => {
     const rig = make();
     rig.place(v(0, -10, 0), v(10, -10, 0));
@@ -197,6 +240,43 @@ describe('station poses', () => {
     expect(p.position.x).toBeCloseTo(500, 9);   // yaw 0: from the +z side
     const tilt = Math.atan2(p.position.z - 200, p.position.y);
     expect(THREE.MathUtils.radToDeg(tilt)).toBeCloseTo(35, 9);
+  });
+});
+
+describe('frames', () => {
+  test('stepFrame: next after the last is the first, previous before the first is the last', () => {
+    expect([stepFrame(null, 8, 1), stepFrame(0, 8, 1), stepFrame(7, 8, 1)]).toEqual([0, 1, 0]);
+    expect([stepFrame(null, 8, -1), stepFrame(0, 8, -1), stepFrame(5, 8, -1)]).toEqual([7, 7, 4]);
+    expect([stepFrame(0, 1, 1), stepFrame(0, 1, -1), stepFrame(null, 0, 1)]).toEqual([0, 0, -1]);
+  });
+
+  test('fitPose: the farthest corner of a tilted small frame stands at 1/1.3 of the half-screen', () => {
+    const fov = 50, aspect = 1400 / 1000;
+    const corners = [];
+    for (const x of [-4, 4]) for (const z of [-3, 3]) for (const y of [0, 0.4]) corners.push(v(300 + x, y, -330 + z));
+    const start = storyPose({ center: v(300, 0, -330), extent: { x: 8, y: 6 }, yawDeg: 0, fov, aspect });
+    const fitted = fitPose(start, corners, { fov, aspect });
+    const camera = new THREE.PerspectiveCamera(fov, aspect, 0.01, 1e6);
+    const ndc = (pose) => {
+      camera.position.copy(pose.position);
+      camera.lookAt(pose.target);
+      camera.updateMatrixWorld();
+      return Math.max(...corners.map((c) => { const p = c.clone().project(camera); return Math.max(Math.abs(p.x), Math.abs(p.y)); }));
+    };
+    expect(ndc(start)).toBeGreaterThan(1 / 1.3 + 0.02);   // storyPose alone: the near edge too big
+    expect(ndc(fitted)).toBeCloseTo(1 / 1.3, 3);
+    // same direction: only the distance changes
+    const dir = (p) => p.position.clone().sub(p.target).normalize();
+    expect(dir(fitted).angleTo(dir(start))).toBeLessThan(1e-9);
+    expect(fitted.target.equals(start.target)).toBe(true);
+  });
+
+  test('frameRestCenter: the tile box centre through the field matrix', () => {
+    const entry = { bounds: new THREE.Box2(new THREE.Vector2(2, -4), new THREE.Vector2(6, 0)), offset: v(1, 0, 3) };
+    const matrix = new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(100, 0, 50);
+    const c = frameRestCenter(entry, matrix);
+    // local (5, 0, 1) turned 90° about y → (1, 0, -5), then moved
+    expect(c.toArray().map((x) => +x.toFixed(9))).toEqual([101, 0, 45]);
   });
 });
 

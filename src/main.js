@@ -26,6 +26,7 @@ import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
+import { createFrameFocus } from './scene/frameFocus.js';
 import { createStationRail } from './ui/stationRail.js';
 
 const REFLECT_LAYER = 1;
@@ -289,13 +290,13 @@ const stationPoses = {
     return field && storyPose({ center: field.center, extent: field.extent, yawDeg: tiles.params.fieldYaw,
       fov: camera.fov, aspect: camera.aspect });
   },
-  frame: () => null,   // U2
 };
+const storyFrames = createFrameFocus({ tiles, camera });
 const stations = createStationRail({
   rig,
   poseOf: (id) => stationPoses[id]?.() ?? null,
-  isActive: (id) => (id === 'story' ? tiles.loaded : id !== 'frame'),
-  hasStory: () => tiles.loaded,
+  frames: storyFrames,
+  isActive: (id) => (id === 'story' ? tiles.loaded : id === 'frame' ? storyFrames.count() > 0 : true),
 });
 
 let fSun = null;
@@ -642,7 +643,7 @@ window.app = {
   camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
   camWater: () => camWater, markSun: () => (sunDirty = true), techPanels,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
-    get current() { return stations.current; }, get last() { return stations.last; } },
+    get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
 };
 
 // --- HUD + loop ------------------------------------------------------------------

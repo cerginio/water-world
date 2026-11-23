@@ -151,7 +151,7 @@ try {
   // --- tiles: story and a frame grabbed mid-flight (п.1, 2, 3) ---------------------------
   const tpage = await open(desktop, '?tiles=story-8-frames-hibrid', { tiles: true });
   report.railTiles = (await rail(tpage)).map((n) => [n.id, n.disabled]);
-  assert.deepEqual(report.railTiles, [['island', 'false'], ['shore', 'false'], ['story', 'false'], ['frame', 'true']]);
+  assert.deepEqual(report.railTiles, [['island', 'false'], ['shore', 'false'], ['story', 'false'], ['frame', 'false']]);
   for (const [start, id] of [[null, 'island'], [null, 'story'], [null, 'shore'], [null, 'story']]) {
     const from = (await tpage.evaluate(() => app.stations.current)) ?? 'Tiles';
     const name = `${from}→${id}`;
