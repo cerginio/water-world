@@ -26,7 +26,7 @@
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
 | [OWNER-3](#owner-3--камеру-пише-лише-її-власник) | камеру/`controls` пише лише `src/scene/cameraRig.js` | guard-static, baseline 0 | ✓ |
-| [OWNER-4](#owner-4--писарі-сонця-не-множаться) | записи `env.params` поза модулем оточення не ростуть: `main.js` 6 | guard-static, baseline 6 ↓ | борг |
+| [OWNER-4](#owner-4--писарі-сонця-не-множаться) | `env.params` пише лише `env.set()` модуля оточення; поза ним 0 записів | guard-static, baseline 0 | ✓ |
 | [OWNER-5](#owner-5--глобали-пише-лише-корінь-композиції) | `window.*` / `globalThis.*` / `self.*` пише лише `src/main.js` | guard-static, baseline 0 | ✓ |
 | [BUDGET-1](#budget-1--семплери-води-в-мінімумах-webgl2) | вода: фрагмент ≤ 16, вершина ≤ 16, разом ≤ 32 семплерів | guard-static | 16/16 |
 | [TEX-1](#tex-1--float-текстури-без-лінійної-фільтрації) | `FloatType` — лише з `NearestFilter`; лінійно фільтровані дані — half float (`engine/halfTexture.js`) | guard-static + проба `probe-scene-shore` | ✓ |
@@ -73,10 +73,10 @@
 `water/` уже злиплися (TD13) — небо не повинне.
 
 **Механізм.** guard-static, `BOUNDARY-2 environment-portable`. Правило дивиться
-туди, куди треба: без `src/environment/index.js` або з менш ніж 7 файлами в
-папці (`ENV_MIN_FILES`) воно падає.
+туди, куди треба: без `src/environment/index.js` або з менш ніж 8 файлами в
+папці (`ENV_MIN_FILES`, з MOOD-WEATHER M1a — разом із `mood.js`) воно падає.
 
-**Перевірюване твердження.** `✓ BOUNDARY-2 environment-portable — 7 файл(ів) src/environment/`.
+**Перевірюване твердження.** `✓ BOUNDARY-2 environment-portable — 8 файл(ів) src/environment/`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
@@ -182,7 +182,8 @@
 **Формулювання.** Записи в `env.params` (до SCENE-ENVIRONMENT E1 — `sky.params`;
 regex ловить обидва імені) поза власником `src/environment/index.js`
 (присвоєння, `Object.assign(env.params…)`, прив'язка GUI `.add(env.params…)`)
-не перевищують baseline: `src/main.js` 6. Baseline лише опускається.
+— 0. Шоти, слайдери Controls (геттер/сеттер `sunUi`) і `app.mood` пишуть
+через `env.set()` (MOOD-WEATHER M1a опустив baseline 6 → 0).
 
 **Походження.** ARCHITECTURE.md TD3, огляд 2026-11-22: сонце пишуть 5
 GUI-слайдерів і `setSun` у кожному шоті. Віджет часу доби й погоди
@@ -192,12 +193,13 @@ GUI-слайдерів і `setSun` у кожному шоті. Віджет ча
 **Механізм.** guard-static, `OWNER-4 sun-writers`, baseline у `SUN_BASELINE`;
 власник `src/environment/index.js` (`SUN_OWNER`, до E1 — `sky.js`) не рахується.
 
-**Перевірюване твердження.** `✓ OWNER-4 sun-writers — 6 запис(ів) у 1 файл(ах), baseline 6`.
+**Перевірюване твердження.** `✓ OWNER-4 sun-writers — 0 запис(ів) у 0 файл(ах), baseline 0`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
 | `src/tiles/TileField.js` + `export function dusk(sky) { sky.params.elevation = 3; }` | ✓ проходить — дефект | ✗ `TileField.js: 1 запис(ів) — файл не в baseline` |
 | `src/tiles/TileField.js` + `export function dusk(env) { env.params.elevation = 3; }` (E1) | — | ✗ `TileField.js: 1 запис(ів) — файл не в baseline` |
+| `src/main.js` `setSun` + `env.params.elevation = elevation;` (M1a, baseline 0) | — | ✗ `src/main.js: 1 запис(ів) — файл не в baseline; сонце пишуть лише через env.set()` |
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `SUN_WRITE`, `SUN_BASELINE`.
 

@@ -5,8 +5,9 @@ import { OceanSim, defaultOceanParams } from './water/OceanSim.js';
 import { OceanSurface } from './water/OceanSurface.js';
 import { bakeShoreMap } from './water/shoreMap.js';
 import { bakeWaterTextures } from './water/bakeTextures.js';
-import { createEnvironment, measureEnvironment } from './environment/index.js';
+import { createEnvironment, measureEnvironment, MOOD_MAP_V1, SUN_PATH_V1, sampleMood, sunAt } from './environment/index.js';
 import { bindSunLight } from './environment-bindings/hostBinding.js';
+import { bindSea, WATER_PRESETS } from './environment-bindings/seaBinding.js';
 import { bindPanelCopy } from './ui/perfCopy.js';
 import { createTerrain, heroRock } from './scene/terrain.js';
 import { islandHeight } from './scene/islandHeight.js';
@@ -164,12 +165,10 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-let sunDirty = true;
 const applySunLight = bindSunLight(env, sunLight, renderer);
 function applySun() {
   env.update();
   applySunLight();
-  sunDirty = false;
 }
 
 // --- camera presets -----------------------------------------------------------------
@@ -179,9 +178,12 @@ function coast(bearingDeg) {
   while (r < 800 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 2;
   return new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r);
 }
-function sunBearing() { return Math.atan2(env.sun.direction.z, env.sun.direction.x); }
+// The shots and the story field face the sunset azimuth (SUN_PATH_V1.setAzimuth, 205°), not
+// wherever the sun is now: the time of day must not move them (MOOD-WEATHER-SPEC §2.2, §6 p.10).
+// atan2(dir.z, dir.x) of the sun at that azimuth, at any elevation.
+const SET_BEARING = THREE.MathUtils.degToRad(90 - SUN_PATH_V1.setAzimuth);
 function setSun(elevation, azimuth) {
-  Object.assign(env.params, { elevation, azimuth });
+  env.set({ elevation, azimuth });
   fSun?.controllers.forEach((c) => c.updateDisplay());
   applySun();
 }
@@ -191,13 +193,13 @@ const setShot = (px, py, pz, tx, ty, tz) => rig.place(shotPosition.set(px, py, p
 const views = {
   'Golden hour': () => {
     setSun(3.5, 205);
-    const b = sunBearing(), c = coast(THREE.MathUtils.radToDeg(b) + 18);
+    const b = SET_BEARING, c = coast(THREE.MathUtils.radToDeg(b) + 18);
     setShot(c.x + Math.cos(b) * 120, 5, c.y + Math.sin(b) * 120, c.x + Math.cos(b) * 400, 0, c.y + Math.sin(b) * 400);
   },
   'Breakers': () => {
     setSun(38, 205);
     // from 10 m over the clear outer shelf, looking down across the break line to the beach
-    const b = sunBearing() + 1.9, c = coast(THREE.MathUtils.radToDeg(b));
+    const b = SET_BEARING + 1.9, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
     setShot(c.x + out.x * 48 - side.x * 35, 10, c.y + out.y * 48 - side.y * 35,
       c.x + out.x * 20 - side.x * 10, 0, c.y + out.y * 20 - side.y * 10);
@@ -205,7 +207,7 @@ const views = {
   'Lagoon': () => {
     setSun(50, 205);
     // the wide, flat shelf on the island's south-west: 1-2 m turquoise shallows, sand bars, soft swash
-    const b = sunBearing() - 1.48, c = coast(THREE.MathUtils.radToDeg(b));
+    const b = SET_BEARING - 1.48, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
     setShot(c.x - out.x * 2 + side.x * 25, 16, c.y - out.y * 2 + side.y * 25,
       c.x + out.x * 34 - side.x * 10, 0, c.y + out.y * 34 - side.y * 10);
@@ -218,7 +220,7 @@ const views = {
   },
   'Open ocean': () => {
     setSun(14, 205);
-    const b = sunBearing() + 0.5;
+    const b = SET_BEARING + 0.5;
     setShot(Math.cos(b) * 1500, 9, Math.sin(b) * 1500, Math.cos(b) * 2400, 0, Math.sin(b) * 2400 + 600);
   },
   'Aerial': () => {
@@ -227,7 +229,7 @@ const views = {
   },
   'Flotsam': () => {
     setSun(40, 205);
-    const b = sunBearing() + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
+    const b = SET_BEARING + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
     setShot(c.x + out.x * 75 + side.x * 10, 9, c.y + out.y * 75 + side.y * 10,
       c.x + out.x * 53.5 - side.x * 8, 0, c.y + out.y * 53.5 - side.y * 8);
@@ -243,7 +245,7 @@ const views = {
   'Underwater': () => {
     setSun(48, 205);
     // on the lee of the island, looking back up the reef slope into the sun (shafts)
-    const a = sunBearing() + Math.PI + 0.3;
+    const a = SET_BEARING + Math.PI + 0.3;
     let r = 200;
     while (r < 1000 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > -9) r += 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -253,12 +255,12 @@ const views = {
 };
 
 // tiles go on open water off the Flotsam coast (spec.md §6.5): from that shot's target
-// outwards until the bed under the whole field is deep enough. The bearing is taken once,
-// so moving the sun later doesn't move the field.
+// outwards until the bed under the whole field is deep enough. The bearing is the fixed
+// SET_BEARING, so the time of day before or after loading doesn't move the field.
 let tilesAnchor = null;
 function storyAnchor() {
   if (!tilesAnchor) {
-    const b = sunBearing() + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
+    const b = SET_BEARING + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b));
     tilesAnchor = { coast: c, start: c.clone().addScaledVector(out, 45), out };
   }
@@ -309,11 +311,14 @@ const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 
 fSun = gui.addFolder('Sun & sky');
-fSun.add(env.params, 'elevation', -2, 70, 0.1).onChange(() => (sunDirty = true));
-fSun.add(env.params, 'azimuth', 0, 360, 0.5).onChange(() => (sunDirty = true));
-fSun.add(env.params, 'sunIntensity', 0, 20, 0.1).onChange(() => (sunDirty = true));
-fSun.add(env.params, 'cloudCoverage', 0, 1, 0.01).onChange(() => (sunDirty = true));
-fSun.add(env.params, 'turbidity', 1, 10, 0.1).onChange(() => (sunDirty = true));
+// the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
+const sunUi = Object.defineProperties({}, Object.fromEntries(['elevation', 'azimuth', 'sunIntensity', 'cloudCoverage', 'turbidity']
+  .map((k) => [k, { get: () => env.params[k], set: (x) => env.set({ [k]: x }) }])));
+fSun.add(sunUi, 'elevation', -2, 70, 0.1);
+fSun.add(sunUi, 'azimuth', 0, 360, 0.5);
+fSun.add(sunUi, 'sunIntensity', 0, 20, 0.1);
+fSun.add(sunUi, 'cloudCoverage', 0, 1, 0.01);
+fSun.add(sunUi, 'turbidity', 1, 10, 0.1);
 
 const op = ocean.params, dirty = () => (ocean.dirty = true);
 const fWave = gui.addFolder('Waves');
@@ -338,19 +343,7 @@ fShore.add(shoreUi, 'steepness', 0, 1.5, 0.01).onChange(setShore);
 fShore.add(spray.params, 'amount', 0, 3, 0.01).name('spray');
 fShore.add(spray.params, 'size', 0.2, 3, 0.01).name('spray size');
 
-// Water colour presets (linear RGB). The look comes from the per-channel absorption
-// (1/m: the channel absorbed least is the colour you see through shallow water), the
-// in-scatter colour (deep water, underside, underwater fog), the tint of thin foam and
-// the underwater scattering (turbidity). 'clear' is the default look.
-const WATER_PRESETS = {
-  clear: { absorption: [0.40, 0.062, 0.032], scatter: [0.0, 0.05, 0.08], foam: [0.62, 0.78, 0.82], turbidity: 0.03 },
-  tropical: { absorption: [0.36, 0.045, 0.06], scatter: [0.0, 0.085, 0.085], foam: [0.66, 0.86, 0.84], turbidity: 0.02 },
-  'toxic green': { absorption: [0.45, 0.1, 1.1], scatter: [0.05, 0.1, 0.004], foam: [0.74, 0.84, 0.42], turbidity: 0.08 },
-  purple: { absorption: [0.22, 0.85, 0.1], scatter: [0.05, 0.0, 0.09], foam: [0.8, 0.66, 0.88], turbidity: 0.04 },
-  'rust orange': { absorption: [0.1, 0.34, 1.2], scatter: [0.11, 0.035, 0.004], foam: [0.9, 0.72, 0.55], turbidity: 0.1 },
-  'murky brown': { absorption: [0.55, 0.62, 0.9], scatter: [0.045, 0.045, 0.022], foam: [0.78, 0.74, 0.6], turbidity: 0.25 },
-};
-
+// Water colour presets: WATER_PRESETS in environment-bindings/seaBinding.js
 const fWater = gui.addFolder('Water');
 const w = {
   preset: 'clear',
@@ -497,6 +490,42 @@ fQ.add(quality, 'reflections');
 fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).onFinishChange(makeTargets);
 [fWave, fShore, fWater, fFloat, fPost].forEach((f) => f.close());
 
+// --- mood weather (MOOD-WEATHER-SPEC; M1a: the debug API, no widget) -------------------
+// app.mood.set(v, a, t) puts the world in that state at once (sky re-baked); until the first
+// set the world is the Controls' own (custom). The sun goes through env.set like every writer.
+const applySea = bindSea({ ocean, surface, spray, underwater, terrain });
+const moodState = { t: 0.1, v: 1, a: -1, flow: false, custom: true };
+const clampTo = (x, lo, hi, name) => {
+  if (typeof x !== 'number' || !Number.isFinite(x)) throw new Error(`app.mood.set: ${name} must be a number`);
+  return Math.min(hi, Math.max(lo, x));
+};
+const moodApi = {
+  /** @param {number} v valence −1…1 @param {number} a arousal −1…1 @param {number} [t] day 0…1 */
+  set(v, a, t = moodState.t) {
+    moodState.v = clampTo(v, -1, 1, 'v');
+    moodState.a = clampTo(a, -1, 1, 'a');
+    moodState.t = clampTo(t, 0, 1, 't');
+    const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a), sun = sunAt(SUN_PATH_V1, moodState.t);
+    env.set({ elevation: sun.elevation, azimuth: sun.azimuth,
+      sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity });
+    applySun();
+    const water = applySea(m.sea);
+    Object.assign(post.params, m.grade);
+    // the Controls mirror the world (their next change would otherwise write stale values back)
+    shoreUi.amplitude = su.uShoreWave.value.x;
+    absorptionBase.fromArray(water.absorption);
+    w.clarity = water.clarity;
+    w.scatter = '#' + new THREE.Color().fromArray(water.scatter).getHexString();
+    gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    moodState.custom = false;
+    return moodApi.state();
+  },
+  state() {
+    const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
+    return { ...moodState, map: MOOD_MAP_V1.version, anchor: m.anchor, words: m.words };
+  },
+};
+
 // --- frame ---------------------------------------------------------------------
 const gl = renderer.getContext();
 const timer = new GpuTimer(gl);
@@ -507,7 +536,7 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
   timer.reset();
   // Render targets survive as JS objects, but their GPU contents do not.
   ocean.dirty = true;
-  sunDirty = true;
+  env.set({});
   floatShadow.ready = false;
   tex.foam.dispose();
   tex.foam = bakeWaterTextures(renderer).foam;
@@ -519,7 +548,7 @@ function renderFrame(dt) {
   elapsed += dt;
   timer.beginFrame();
   // inside the timer's frame, so a sky change shows as its own `sky` line (E0)
-  if (sunDirty) { timer.begin('sky'); applySun(); }
+  if (env.dirty) { timer.begin('sky'); applySun(); }
 
   // latest water heights (1-3 frames old) drive the camera test and the floaters
   if (query.resultCount > 0) camWater = query.result[0];
@@ -684,7 +713,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
 window.app = {
   still,
   camera, controls, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
-  camWater: () => camWater, markSun: () => (sunDirty = true), techPanels, measureEnvironment: measureSky,
+  camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
 };

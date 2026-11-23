@@ -75,7 +75,7 @@ function ruleEngineLeaf(files) {
  */
 const ENV_DIR = 'src/environment/';
 const ENV_ENTRY = `${ENV_DIR}index.js`;
-const ENV_MIN_FILES = 7;   // index, atmosphere, skyBake, skyBackground, sun, measure, fullscreen
+const ENV_MIN_FILES = 8;   // index, atmosphere, skyBake, skyBackground, sun, measure, fullscreen, mood
 
 function ruleEnvironmentPortable(files) {
   const failures = [];
@@ -190,9 +190,8 @@ const CAMERA_WRITE = new RegExp([
  * не рахується.
  */
 const SUN_OWNER = 'src/environment/index.js';
-const SUN_BASELINE = {
-  'src/main.js': 6,
-};
+// MOOD-WEATHER M1a: 0 — shots, the Controls sliders and app.mood write through env.set()
+const SUN_BASELINE = {};
 const SUN_WRITE = /\b(?:sky|env)\.params\.\w+\s*=(?!=)|Object\.assign\(\s*(?:sky|env)\.params\b|\.add\(\s*(?:sky|env)\.params\b/g;
 
 function baselineRule(id, files, re, baseline, skip, hint) {
@@ -353,7 +352,7 @@ async function main() {
   if (!ownerWrites) camera.failures.push(`${CAMERA_OWNER}: жодного запису камери — правило дивиться не туди`);
   camera.note = `${camera.note}; власник ${CAMERA_OWNER} — ${ownerWrites}`;
   const sun = baselineRule('OWNER-4 sun-writers', files, SUN_WRITE, SUN_BASELINE, SUN_OWNER,
-    'сонце пише віджет часу доби (MOOD-WEATHER M1)');
+    'сонце пишуть лише через env.set() (MOOD-WEATHER M1a)');
   const results = [ruleEngineLeaf(files), ruleEnvironmentPortable(files), ruleTilecraftEntry(files),
     ruleOneLoop(files), ruleOneRendererGui(files), camera, sun, ruleGlobals(files),
     ruleFloatFilter(files), await ruleWaterSamplers()];

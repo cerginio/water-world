@@ -4,11 +4,15 @@ import { createSkyBackground } from './skyBackground.js';
 import { updateSun } from './sun.js';
 
 export { measureEnvironment } from './measure.js';
+export { MOOD_MAP_V1, SUN_PATH_V1, sampleMood, sunAt } from './mood.js';
 
 // scene-environment: sky, sun and the baked environment cube for any three host
 // (SCENE-ENVIRONMENT-SPEC §5). Imports only three and its own folder (guard BOUNDARY-2); no RAF,
 // no camera, no DOM — the host calls update() when the params change and lights its own scene
 // from env.sun (src/environment-bindings/hostBinding.js in Ultra-Water).
+//
+// One writer (guard OWNER-4): the host changes the params only through env.set(), which marks
+// the sky dirty; the host calls update() once per frame while env.dirty.
 //
 // Identity is the contract: env.cube, env.sun.direction and env.sun.color are created once and
 // written in place, so materials hold them as uniforms.
@@ -32,8 +36,17 @@ export function createEnvironment(renderer, { cubeSize = 1024, params } = {}) {
   const cube = bake.cubeRT.texture;
 
   const env = {
-    /** the sky params; the host writes them, then calls update() */
-    params: p,
+    /** the sky params, read-only for the host: write through set() */
+    params: /** @type {Readonly<SkyParams>} */ (p),
+    /** set() since the last update() */
+    dirty: true,
+    /** the only writer of the sky params; unknown keys are ignored */
+    set(/** @type {Partial<SkyParams>} */ next) {
+      for (const k of /** @type {(keyof SkyParams)[]} */ (Object.keys(DEFAULT_SKY_PARAMS))) {
+        if (next[k] !== undefined && Number.isFinite(next[k])) p[k] = next[k];
+      }
+      env.dirty = true;
+    },
     sun: { direction, color },
     cube,
     cubeTarget: bake.cubeRT,
@@ -41,7 +54,7 @@ export function createEnvironment(renderer, { cubeSize = 1024, params } = {}) {
     background: createSkyBackground(cube, direction, color),
 
     // one sky change = the three steps below (split so measureEnvironment can time them apart)
-    update() { env.bakeLuts(env.updateSun()); env.bakeCube(); },
+    update() { env.bakeLuts(env.updateSun()); env.bakeCube(); env.dirty = false; },
     /** CPU only: sun direction and colour from params; returns the atmosphere coefficients */
     updateSun: () => updateSun(p, direction, color),
     /** @param {ReturnType<typeof updateSun>} c */

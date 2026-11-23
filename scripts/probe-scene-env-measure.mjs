@@ -30,12 +30,12 @@ try {
   // a sun change -> the `sky` label (only where the timer extension exists)
   const timerAvailable = await page.evaluate(() => app.timer.available);
   const sunBefore = await page.evaluate(() => app.env.sun.direction.toArray());
-  await page.evaluate(() => { app.env.params.elevation += 0.5; app.markSun(); });
+  await page.evaluate(() => { app.env.set({ elevation: app.env.params.elevation + 0.5 }); });
   if (timerAvailable) {
     await page.waitForFunction(() => 'sky' in app.timer.ms, {}, { timeout: 10000 });
     await page.waitForFunction(() => /\n\s+sky\s/.test(document.getElementById('hud').textContent), {}, { timeout: 10000 });
   }
-  await page.evaluate(() => { app.env.params.elevation -= 0.5; app.markSun(); });
+  await page.evaluate(() => { app.env.set({ elevation: app.env.params.elevation - 0.5 }); });
   await page.waitForTimeout(300);
   const sunRestored = await page.evaluate(() => app.env.sun.direction.toArray());
   sunRestored.forEach((v, i) => assert.ok(Math.abs(v - sunBefore[i]) < 1e-6, `sunDir restored: ${sunRestored} vs ${sunBefore}`));
