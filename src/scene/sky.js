@@ -158,8 +158,15 @@ export class SkySystem {
     this.background.renderOrder = 1000;
   }
 
+  // the three steps of a sky change; split so measureEnvironment can time them apart
   update() {
-    const p = this.params, r = this.renderer;
+    this.bakeLuts(this.updateSun());
+    this.bakeCube();
+  }
+
+  // CPU only: sun direction and colour from params -> atmosphere coefficients
+  updateSun() {
+    const p = this.params;
     const phi = THREE.MathUtils.degToRad(90 - p.elevation);
     const theta = THREE.MathUtils.degToRad(p.azimuth);
     this.sunDir.setFromSphericalCoords(1, phi, theta);
@@ -170,19 +177,34 @@ export class SkySystem {
     const T = transmittance(c, OBSERVER_ALTITUDE, Math.max(this.sunDir.y, 0));
     const fade = THREE.MathUtils.smoothstep(p.elevation, -2, 2);
     this.sunColor.set(T[0], T[1], T[2]).multiplyScalar(p.sunIntensity * fade);
+    return c;
+  }
 
+  // the three atmosphere LUTs
+  bakeLuts(c) {
+    const r = this.renderer;
     const target = r.getRenderTarget(), face = r.getActiveCubeFace(), mip = r.getActiveMipmapLevel();
-    this.atmosphere.update(r, c, this.sunDir.y, Math.PI * p.sunIntensity);
+    this.atmosphere.update(r, c, this.sunDir.y, Math.PI * this.params.sunIntensity);
+    r.setRenderTarget(target, face, mip);
+  }
+
+  // six cube faces + mip chain; PMREM is rebuilt lazily by three on the next render that uses the cube
+  bakeCube() { this.bakeCubeInto(this.cubeRT); }
+
+  // the same bake into any cube target (E0 measures PMREM from a smaller copy)
+  bakeCubeInto(cubeRT) {
+    const p = this.params, r = this.renderer;
+    const target = r.getRenderTarget(), face = r.getActiveCubeFace(), mip = r.getActiveMipmapLevel();
     const u = this.cubePass.material.uniforms;
     u.uCloudCoverage.value = p.cloudCoverage;
     // three builds the mip chain after a render into the cube, so only after the last face
     for (let f = 0; f < 6; f++) {
       u.uFace.value = f;
-      this.cube.generateMipmaps = f === 5;
-      r.setRenderTarget(this.cubeRT, f);
+      cubeRT.texture.generateMipmaps = f === 5;
+      r.setRenderTarget(cubeRT, f);
       r.render(this.cubePass.mesh, this.camera);
     }
     r.setRenderTarget(target, face, mip);
-    this.cube.needsPMREMUpdate = true;
+    cubeRT.texture.needsPMREMUpdate = true;
   }
 }

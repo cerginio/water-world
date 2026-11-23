@@ -24,6 +24,11 @@
       font: 600 12px system-ui, sans-serif; color: #071018; background: #2cc9ff;
     }
     #pUncap.on { color: #ebebeb; background: #424242; }
+    #pSky { margin-top: 4px; }
+    /* double tap copies the panel text (src/ui/perfCopy.js); no double-tap zoom here */
+    #perf { touch-action: manipulation; }
+    #perf[data-copied="ok"] { outline: 2px solid #2cc9ff; }
+    #perf[data-copied="fail"] { outline: 2px solid #ff5a4a; }
     #hud { margin-top: 8px; font: 10px/1.35 ui-monospace, Consolas, monospace; white-space: pre; opacity: 0.75; }
     #hud:empty { display: none; }
     /* phones (class set by main.js): smaller, and down at the bottom, clear of the settings panel */
@@ -101,6 +106,7 @@
     <div class="pRow"><b id="pFps">–</b><i>FPS</i><span><em id="pMode">VSYNC</em><br><span id="pMs"></span></span></div>
     <canvas id="pGraph" width="456" height="48"></canvas>
     <button id="pUncap" type="button" title="Render frames back-to-back instead of once per display refresh, so the counter shows what this machine can do. The screen still updates at its own rate.">Uncap FPS</button>
+    <button id="pSky" type="button" title="Time one sky change step by step: atmosphere LUTs, cube faces, PMREM, sun shadow, ocean spectrum (SCENE-ENVIRONMENT E0). The scene pauses for a few seconds.">Measure sky</button>
     <div id="hud"></div>
   </div>
   <script type="module" src="/src/main.js"></script>

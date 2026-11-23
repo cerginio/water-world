@@ -6,6 +6,8 @@ import { OceanSurface } from './water/OceanSurface.js';
 import { bakeShoreMap } from './water/shoreMap.js';
 import { bakeWaterTextures } from './water/bakeTextures.js';
 import { SkySystem } from './scene/sky.js';
+import { measureEnvironment } from './scene/measureEnvironment.js';
+import { bindPanelCopy } from './ui/perfCopy.js';
 import { createTerrain, heroRock } from './scene/terrain.js';
 import { islandHeight } from './scene/islandHeight.js';
 import { PlanarReflection } from './engine/PlanarReflection.js';
@@ -517,8 +519,9 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
 function renderFrame(dt) {
   if (gl.isContextLost()) return;
   elapsed += dt;
-  if (sunDirty) applySun();
   timer.beginFrame();
+  // inside the timer's frame, so a sky change shows as its own `sky` line (E0)
+  if (sunDirty) { timer.begin('sky'); applySun(); }
 
   // latest water heights (1-3 frames old) drive the camera test and the floaters
   if (query.resultCount > 0) camWater = query.result[0];
@@ -639,9 +642,20 @@ async function runBenchmark(frames = 300, { shot, warmup = 20 } = {}) {
   } finally { timer.keep = false; benchmarking = false; }
 }
 window.runBenchmark = runBenchmark;
+
+// SCENE-ENVIRONMENT E0: cost of one sky change by step, render loop paused like the benchmark
+/** @param {{ repeats?: number }} [options] */
+async function measureSky({ repeats } = {}) {
+  if (benchmarking) return null;
+  benchmarking = true;
+  try {
+    await gpuFence();
+    return await measureEnvironment({ renderer, sky, ocean, scene, camera, light: sunLight, fence: gpuFence, repeats });
+  } finally { benchmarking = false; }
+}
 window.app = {
   camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
-  camWater: () => camWater, markSun: () => (sunDirty = true), techPanels,
+  camWater: () => camWater, markSun: () => (sunDirty = true), techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
 };
@@ -655,6 +669,17 @@ $('pGpu').textContent = (() => {
   const raw = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown GPU';
   return raw.split(', ')[1]?.replace(/ \(0x.*$/, '') || raw;   // "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x2504) ...)"
 })();
+bindPanelCopy($('perf'));   // double tap copies the panel text (phones can't select it)
+// E0: the owner's phone has no devtools — the button prints the step table into the HUD
+$('pSky').onclick = async () => {
+  bench = 'measuring sky…';
+  const m = await measureSky();
+  if (!m) return;
+  bench = `sky change (ms, ${m.repeats}×): lut ${m.lut.toFixed(2)}  cube ${m.cube.toFixed(2)}  pmrem ${m.pmrem.toFixed(2)}  pmrem256 ${m.pmrem256.toFixed(2)}`
+    + `
+  shadow ${m.shadow.toFixed(2)}  spectrum ${m.spectrum.toFixed(2)}  (${m.viewport.width}×${m.viewport.height})`;
+  console.log(bench);
+};
 uncapButton.onclick = () => {
   uncapped = !uncapped;
   uncapButton.textContent = uncapped ? 'Cap to display' : 'Uncap FPS';
