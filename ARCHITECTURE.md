@@ -65,9 +65,10 @@ main.js ──► tiles ──► water, scene, engine
 - `scene/` і `water/` залежать одне від одного: `terrain.js` імпортує
   `OceanSurface` і `Caustics` (спільний GLSL і uniforms води), а
   `OceanSurface`, `UnderwaterPass` імпортують `scene/floaterShadow.js`.
-- `scene/atmosphere.js` і `scene/sky.js` залежать лише від
-  `engine/fullscreen.js`. Це природна межа майбутнього модуля оточення
-  (SCENE-ENVIRONMENT §5).
+- Модуль оточення `src/environment/` (небо, атмосфера, сонце, куб;
+  SCENE-ENVIRONMENT §5, з E1) залежить лише від `three` і своєї папки
+  (власна копія `fullscreen.js`); сонце → світло й тінь —
+  `src/environment-bindings/hostBinding.js`. Guard BOUNDARY-2.
 
 ### 2.2. Кадр рендеру
 
@@ -87,8 +88,8 @@ main.js ──► tiles ──► water, scene, engine
 |---|---|---|
 | Камера й `controls.target` | шоти `views`, `moveCamera` (WASD), `clampCamera`, OrbitControls у `main.js`; `TileInteraction` ([TileInteraction.js:156](src/tiles/TileInteraction.js#L156)) | Чотири писарі |
 | `controls.enabled` | `TileInteraction` зберігає й відновлює своє значення ([:151](src/tiles/TileInteraction.js#L151), [:258](src/tiles/TileInteraction.js#L258), [:274](src/tiles/TileInteraction.js#L274)) | Без токена чи причини блокування |
-| Сонце (`sky.params`) | GUI-слайдери, `setSun` у кожному шоті | 21 місце звертання поза `sky.js` |
-| Куб неба, `sunDir`, `sunColor` | `SkySystem` | Передаються **за посиланням** у воду, рельєф, підводний прохід, каустики й тінь; заміна об'єкта мовчки рве зв'язок |
+| Сонце (`env.params`) | GUI-слайдери, `setSun` у кожному шоті | 6 записів поза модулем оточення (OWNER-4) |
+| Куб неба, `env.sun.direction`, `env.sun.color` | `createEnvironment` ([src/environment/index.js](src/environment/index.js)) | Передаються **за посиланням** у воду, рельєф, підводний прохід, каустики й тінь; заміна об'єкта мовчки рве зв'язок |
 | Параметри океану | GUI (`ocean.dirty`) | Один писар |
 | `window.app` | `main.js` | Неявний публічний API: його читають проби |
 
@@ -105,7 +106,7 @@ main.js ──► tiles ──► water, scene, engine
 | TD4 | Рівнів прогону немає | §1 | Нема дешевої перевірки під час роботи; єдиний доказ — проби по 44–103 с | A | Закрито 2026-11-22: [TESTING.md](TESTING.md). Бюджети й коди виходу проб — TD10.
 | TD5 | Ідентичність спільних об'єктів неба — неявний контракт | §2.3 | Виділення модуля (E1) може замінити `cube`/`sunDir` новим об'єктом: вода й рельєф мовчки лишаться на старому | B |
 | TD6 | Фрагментний шейдер води на межі 16 семплерів | [OceanSurface.js:61](src/water/OceanSurface.js#L61), [main.js:36](src/main.js#L36), коміт `9a34841` | Будь-яка нова текстура у воді (дощ, хмарні тіні) не скомпілюється на частині GPU | B |
-| TD7 | Зміна неба = повне перепікання (6 × 1024² + mip + PMREM + тінь 4096²) без дроселя й замірів | [sky.js:161](src/scene/sky.js#L161), [main.js:186](src/main.js#L186) | Плавні переходи й плин дня (M2) | B |
+| TD7 | Зміна неба = повне перепікання (6 × 1024² + mip + PMREM + тінь 4096²) без дроселя й замірів | [environment/index.js:44](src/environment/index.js#L44), [main.js:169](src/main.js#L169) | Плавні переходи й плин дня (M2) | B |
 | TD8 | Поле історії ставиться за поточним азимутом сонця | [main.js:286](src/main.js#L286) | Час доби до завантаження тайлів зсуне кадри (MOOD §2.2) | B |
 | TD9 | `window.app` — API для проб без перевірки ключів | [main.js:635](src/main.js#L635) | Перейменування ключа ламає проби лише на рівні probe, через хвилини | B |
 | TD10 | Проби: зашитий `localhost:5199`, бюджетів немає, код виходу при таймауті не перевірено | `scripts/probe-*.mjs` | Убитий прогін може читатися як успіх; FD4: «перший запуск перевищив startup timeout 60 с» | B |
@@ -113,7 +114,7 @@ main.js ──► tiles ──► water, scene, engine
 | TD12 | Немає типів (JSDoc / `checkJs`) | — | Клас «виклик замість значення» ловиться лише в браузері | C |
 | TD13 | Взаємна залежність `scene/` ↔ `water/` | §2.1 | Ускладнює перенесення частин, крім оточення | C |
 | TD14 | Тайли без туману | [TileMaterial.js](src/tiles/TileMaterial.js) | Кадри «висять» у серпанку (якір A7) | C |
-| TD15 | Назви: пакет `gelatin-game-engine`, GUI «Gelatin Water», README «Ultra Water», світ «Edge of the Elements»; `EDGE-OF-THE-ELEMENTS-SPEC.md` поза git | `package.json`, `git status` | Плутанина в документах і збірці | C |
+| TD15 | Назви: пакет `gelatin-game-engine`, README «Ultra Water», світ «Edge of the Elements» (з 2026-11-23 — і заголовок вкладки та GUI); `EDGE-OF-THE-ELEMENTS-SPEC.md` поза git | `package.json`, `git status` | Плутанина в документах і збірці | C |
 
 ### 3.1. Що закрити перед `spec-to-handoff`
 

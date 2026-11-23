@@ -110,7 +110,7 @@ TEX-1 16 `FloatType`, TYPES-1 21); `npm test` 63/63.
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
-| писарі сонця | `setSun` [main.js:183](../../src/main.js#L183) (шоти), `fSun.add(sky.params…)` [main.js:312](../../src/main.js#L312) (5 слайдерів) | INVARIANTS OWNER-4: 6 записів, baseline лише опускається | guard OWNER-4 |
+| писарі сонця | `setSun` [main.js:183](../../src/main.js#L183) (шоти), `fSun.add(env.params…)` [main.js:312](../../src/main.js#L312) (5 слайдерів) | INVARIANTS OWNER-4: 6 записів, baseline лише опускається | guard OWNER-4 |
 | поле історії | `storyAnchor`, `placeTiles` у [main.js:259](../../src/main.js#L259) | кут поля = `sunBearing() + 1.2`, кешується при першому виклику (`tilesAnchor`) | `probe-scene-rail` |
 | слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні | `probe-scene-mobile` |
 | пресети води | `WATER_PRESETS`, `applyPreset` у [main.js:345](../../src/main.js#L345); прибій — `shoreUi`/`setShore` ([main.js:331](../../src/main.js#L331)) | канали `sea` спеки §5 мапляться сюди | — |
@@ -118,6 +118,9 @@ TEX-1 16 `FloatType`, TYPES-1 21); `npm test` 63/63.
 ## Головні виміряні факти
 
 ### Сонце й поле історії
+
+- [писати сонце після scene-environment E1] параметри сонця — `env.params` (`createEnvironment`, [src/environment/index.js](../../src/environment/index.js)), у консолі `app.env`; OWNER-4 рахує й `env.params`, і `sky.params` → новий писар іде через оточення, `mood.js` лягає в `src/environment/` під BOUNDARY-2. (E1)
+- [знімки під якорями] `?still` + `app.still({ shot: 'Tiles' })` дає кадр без часу, детермінований до Δ 0 (`probe-scene-env-identity`) → брати його для знімків §6 п.5, а не живий цикл. (E1)
 
 - [зміна часу доби до завантаження тайлів] `storyAnchor` кешує кут із `sunBearing()` при першому виклику → без прив'язки до сталих 205° поле історії стане туди, куди було сонце в цю мить. (план)
 - [`setSun` у шотах] шоти ставлять сонце відносно `sunBearing()` ([main.js:194–261](../../src/main.js#L194)) → один писар сонця в M1a має лишити шоти на тих самих позах камери. (план)
