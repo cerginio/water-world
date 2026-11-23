@@ -1,6 +1,6 @@
 // SCENE-UI U3 (SCENE-UI-SPEC §4.6): the station rail on a phone. Per viewport: the rail
 // spans the width with 16 px margins and stands 16 px over the bottom, a free slot for
-// the round weather button (56 px) on its right, every touch target ≥ 44×44 px, the rail,
+// the round weather button (56 px, MOOD-WEATHER M1b) on its right, every touch target ≥ 44×44 px, the rail,
 // the F2/F3 strip and a bottom #perf do not overlap. Then: aria (nav label, buttons,
 // aria-current on the station only), a keyboard Tab shows a visible focus ring and Enter
 // flies, a tap flies, the labels and `lang` follow the browser's language (uk / en).
@@ -54,7 +54,8 @@ try {
         return { name: b.dataset.station ?? b.textContent, width: Math.round(x.width), height: Math.round(x.height) };
       });
       return { strip, perf, mobile: document.body.classList.contains('mobile'), inner: [innerWidth, innerHeight], rail, slot,
-        slotFree: slotHit?.tagName === 'CANVAS', slotInView: slot.right <= innerWidth,
+        slotFree: Boolean(slotHit?.closest('#moodPad .mood-button')), slotInView: slot.right <= innerWidth,
+        weather: rect(document.querySelector('#moodPad .mood-button')),
         targets, overlaps: [overlap(rail, strip), overlap(rail, perf), overlap(strip, perf)],
         stripInView: strip.top >= 0 && perf.top >= 0,
         lang: railEl.lang, labels: [...railEl.querySelectorAll('.label')].map((l) => l.textContent),
@@ -68,7 +69,9 @@ try {
     assert.ok(near(r.rail.left, MARGIN), `${vp.name}: rail left ${r.rail.left}`);
     assert.ok(near(r.rail.bottom, vp.height - MARGIN), `${vp.name}: rail bottom ${r.rail.bottom}`);
     assert.ok(near(r.rail.right, vp.width - MARGIN - WEATHER - GAP), `${vp.name}: rail right ${r.rail.right}`);
-    assert.ok(r.slotInView && r.slotFree, `${vp.name}: the weather slot is free and on screen`);
+    // since MOOD-WEATHER M1b the slot holds the weather button (56 px, 8 px right of the rail)
+    assert.ok(r.slotInView && r.slotFree, `${vp.name}: the weather button stands in the slot, on screen`);
+    assert.ok(near(r.weather.left, r.slot.left) && near(r.weather.width, WEATHER) && near(r.weather.height, WEATHER), `${vp.name}: weather button ${JSON.stringify(r.weather)} vs slot ${JSON.stringify(r.slot)}`);
     for (const t of r.targets) assert.ok(t.width >= TOUCH && t.height >= TOUCH, `${vp.name}: ${t.name} ${t.width}×${t.height}`);
     assert.deepEqual(r.overlaps, [0, 0, 0], `${vp.name}: rail / strip / perf overlap`);
     assert.ok(r.stripInView, `${vp.name}: strip and perf on screen`);

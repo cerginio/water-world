@@ -30,7 +30,8 @@ import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
 import { createFrameFocus } from './scene/frameFocus.js';
-import { createStationRail } from './ui/stationRail.js';
+import { createStationRail, railLanguage } from './ui/stationRail.js';
+import { createMoodPad } from './environment/ui/moodPad.js';
 
 const REFLECT_LAYER = 1;
 
@@ -490,34 +491,45 @@ fQ.add(quality, 'reflections');
 fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).onFinishChange(makeTargets);
 [fWave, fShore, fWater, fFloat, fPost].forEach((f) => f.close());
 
-// --- mood weather (MOOD-WEATHER-SPEC; M1a: the debug API, no widget) -------------------
+// --- mood weather (MOOD-WEATHER-SPEC §4; M1b: the widget, transitions come in M2) ----------
 // app.mood.set(v, a, t) puts the world in that state at once (sky re-baked); until the first
 // set the world is the Controls' own (custom). The sun goes through env.set like every writer.
+// The widget (src/environment/ui/moodPad.js) moves the sea and the grade while a finger moves
+// and re-bakes the sky on release; a hand change in the mood's Controls folders makes the
+// state custom again (spec §4.5) until the widget's next touch.
 const applySea = bindSea({ ocean, surface, spray, underwater, terrain });
 const moodState = { t: 0.1, v: 1, a: -1, flow: false, custom: true };
 const clampTo = (x, lo, hi, name) => {
   if (typeof x !== 'number' || !Number.isFinite(x)) throw new Error(`app.mood.set: ${name} must be a number`);
   return Math.min(hi, Math.max(lo, x));
 };
+/** the world from moodState; `sky` false skips the sun and the sky bake (a finger still moving) */
+function applyMood({ sky }) {
+  const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
+  if (sky) {
+    const sun = sunAt(SUN_PATH_V1, moodState.t);
+    env.set({ elevation: sun.elevation, azimuth: sun.azimuth,
+      sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity });
+    applySun();
+  }
+  const water = applySea(m.sea);
+  Object.assign(post.params, m.grade);
+  // the Controls mirror the world (their next change would otherwise write stale values back)
+  shoreUi.amplitude = su.uShoreWave.value.x;
+  absorptionBase.fromArray(water.absorption);
+  w.clarity = water.clarity;
+  w.scatter = '#' + new THREE.Color().fromArray(water.scatter).getHexString();
+  gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  moodState.custom = false;
+}
 const moodApi = {
   /** @param {number} v valence −1…1 @param {number} a arousal −1…1 @param {number} [t] day 0…1 */
   set(v, a, t = moodState.t) {
     moodState.v = clampTo(v, -1, 1, 'v');
     moodState.a = clampTo(a, -1, 1, 'a');
     moodState.t = clampTo(t, 0, 1, 't');
-    const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a), sun = sunAt(SUN_PATH_V1, moodState.t);
-    env.set({ elevation: sun.elevation, azimuth: sun.azimuth,
-      sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity });
-    applySun();
-    const water = applySea(m.sea);
-    Object.assign(post.params, m.grade);
-    // the Controls mirror the world (their next change would otherwise write stale values back)
-    shoreUi.amplitude = su.uShoreWave.value.x;
-    absorptionBase.fromArray(water.absorption);
-    w.clarity = water.clarity;
-    w.scatter = '#' + new THREE.Color().fromArray(water.scatter).getHexString();
-    gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    moodState.custom = false;
+    applyMood({ sky: true });
+    moodPad.sync();
     return moodApi.state();
   },
   state() {
@@ -525,6 +537,22 @@ const moodApi = {
     return { ...moodState, map: MOOD_MAP_V1.version, anchor: m.anchor, words: m.words };
   },
 };
+const moodPad = createMoodPad({
+  get: () => moodState,
+  input: ({ t, v, a }, final) => {
+    if (final) { moodApi.set(v, a, t); return; }
+    Object.assign(moodState, { t, v, a });
+    applyMood({ sky: false });
+  },
+  language: railLanguage([...navigator.languages, navigator.language]),
+});
+// the folders the mood writes, and the dev shots (they set the sun): a hand change there is «custom»
+const moodFolders = new Set([fSun, fWave, fShore, fWater, fPost]);
+gui.onChange(({ controller }) => {
+  if (moodState.custom || !(moodFolders.has(controller.parent) || controller === viewController)) return;
+  moodState.custom = true;
+  moodPad.sync();
+});
 
 // --- frame ---------------------------------------------------------------------
 const gl = renderer.getContext();
