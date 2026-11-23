@@ -4,7 +4,7 @@
 [MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a і M1b закрито
 й закомічено; QA — [QA.md](QA.md).
 
-> **Далі:** scene-environment E2 ([docs/scene-environment/HANDOFF.md](../scene-environment/HANDOFF.md)); M2 цієї теми — лише після E2.
+> **Далі:** M2 — плавні переходи; scene-environment E2 закрито 2026-11-23 (`env.setState(next, { tau })`, `update(dt)` — [docs/scene-environment/HANDOFF.md](../scene-environment/HANDOFF.md), рядок «час неба»).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
