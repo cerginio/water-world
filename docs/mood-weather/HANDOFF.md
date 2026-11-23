@@ -1,11 +1,10 @@
 # Handoff: mood-weather — віджет погоди-настрою й часу доби
 
 Стан на 2026-11-23. Гілка `master`. Фази з
-[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). Жодну
-фазу ще не почато; тема чекає на **scene-environment E1**
-([docs/scene-environment/HANDOFF.md](../scene-environment/HANDOFF.md)).
+[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a закрито
+й закомічено; QA — [QA.md](QA.md).
 
-> **Далі:** M1a — після закриття scene-environment E1 (до того не починати).
+> **Далі:** M1b — віджет.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -34,7 +33,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 Стан у QA до M4 ставиться через `app.mood.set()` (рішення власника
 2026-11-23: URL `?mood=`/`?day=` — у M4, як у спеці).
 
-1. **M1a — дані, прив'язки й один писар сонця, без UI** (спека §2.2, §3, §5).
+~~1. **M1a — дані, прив'язки й один писар сонця, без UI** (спека §2.2, §3, §5).
    `src/environment/mood.js` (`MOOD_MAP_V1`, `sampleMood` білінійно,
    `SUN_PATH_V1`, `sunAt`); `src/environment-bindings/seaBinding.js` (sea →
    `OceanSim`, `surface.uniforms`, `spray`, `WATER_PRESETS`, туман); поле
@@ -49,7 +48,8 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      після завантаження тайлів не зсуває поле (§6 п.10); знімки `Tiles` під
      9 якорями × `t` 0.05 / 0.5 / 0.95 — білий ≥ 0.55, чорний ≤ 0.25 sRGB
      (§6 п.5). Провал підлоги — калібрування якорів з власником, не
-     підкручування критерію.
+     підкручування критерію.~~ — ЗАКРИТО 2026-11-23; підлога §6 п.5 не
+     тримається (5/27) — відкрите питання нижче.
 
 2. **M1b — віджет** (спека §4.1, §4.2 без змісту, §4.3 без плину, §4.5).
    `src/environment/ui/moodPad.js`: кругла кнопка 56 px у слоті
@@ -97,30 +97,48 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 - **Спека §8:** назви якорів і слова (п.1) — потрібні до M3; тривалість плину
   дня 20 хв (п.2) — до M3b.
-- **Застаріле посилання в спеці §2.2:** поле історії прив'язане до сонця не
-  в main.js:286, а в `storyAnchor` ([main.js:261](../../src/main.js#L261)).
-- **Підлога читабельності (§6 п.5) зі стартовими параметрами §3.2 не
-  виміряна:** якщо M1a її не тримає, параметри якорів калібрує власник.
+- **Застаріле посилання в спеці §2.2:** «main.js:286» — тепер `storyAnchor`
+  ([main.js:261](../../src/main.js#L261)) на `SET_BEARING`; передумову виконано
+  в M1a.
+- **Підлога читабельності (§6 п.5) не тримається — рішення власника.** Білі
+  тайли 0.70–0.84 скрізь; чорні 0.175–0.427, гірше опівдні й у серпанку; світ
+  без настрою — 0.274. Варіанти: калібрувати якорі (вода опівдні темніша),
+  переписати критерій для кольорових тайлів (контраст), інша фікстура. Таблиця —
+  [QA.md](QA.md) «Відомі провали M1a». До рішення `probe-mood-m1a` виходить з
+  кодом 1 на частині readable; anchors і field — зелені.
 - **Заміри на Nord 4** (M2 §6 п.8) і записи екрана (§6 п.3) — лише власник.
 
 ## Що зроблено і працює
 
-Baseline (до M1a, 2026-11-23, з handoff scene-ui U4): guard зелений (OWNER-4 6,
-TEX-1 16 `FloatType`, TYPES-1 21); `npm test` 63/63.
+Baseline (M1a, 2026-11-23): guard зелений (OWNER-4 0, BOUNDARY-2 8 файлів, TEX-1 16,
+TYPES-1 21); `npm test` 92/92; `probe-scene-env-identity` Δ 0; `probe-mood-m1a`
+anchors + field PASS, readable 5/27 (відкрите питання).
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
-| писарі сонця | `setSun` [main.js:183](../../src/main.js#L183) (шоти), `fSun.add(env.params…)` [main.js:312](../../src/main.js#L312) (5 слайдерів) | INVARIANTS OWNER-4: 6 записів, baseline лише опускається | guard OWNER-4 |
-| поле історії | `storyAnchor`, `placeTiles` у [main.js:259](../../src/main.js#L259) | кут поля = `sunBearing() + 1.2`, кешується при першому виклику (`tilesAnchor`) | `probe-scene-rail` |
+| дані настрою | [src/environment/mood.js](../../src/environment/mood.js) (`MOOD_MAP_V1`, `sampleMood`, `SUN_PATH_V1`, `sunAt`), реекспорт з `environment/index.js` | спека §3.2, §3.3, §2.2; слова й назви — ключі локалі; вода — ваги пресетів | `tests/mood.test.js`, guard BOUNDARY-2 |
+| писар сонця | `env.set()`/`env.dirty` в [index.js](../../src/environment/index.js); `setSun` [main.js:185](../../src/main.js#L185), `sunUi` (геттер/сеттер) [main.js:313](../../src/main.js#L313) | `env.params` пише лише `env.set`; `renderFrame` перепікає при `env.dirty` | guard OWNER-4 (baseline 0) |
+| канали моря | `bindSea`, `mixWater`, `WATER_PRESETS` у [seaBinding.js](../../src/environment-bindings/seaBinding.js) | × — від значень на старті хоста; вода змішується в лінійному RGB; поглинання ÷ clarity | `probe-mood-m1a` anchors |
+| `app.mood` | `moodApi` [main.js:502](../../src/main.js#L502) (`set(v, a, t)`, `state()`) | миттєво: небо + море + грейдинг + дзеркало Controls; до першого `set` — `custom: true`; на старті світ не чіпає | `probe-mood-m1a` anchors |
+| поле історії й шоти | `SET_BEARING` [main.js:184](../../src/main.js#L184), `storyAnchor` [main.js:261](../../src/main.js#L261) | кут = азимут заходу 205°, не поточне сонце | `probe-mood-m1a` field, `probe-scene-env-identity` |
 | слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні | `probe-scene-mobile` |
-| пресети води | `WATER_PRESETS`, `applyPreset` у [main.js:345](../../src/main.js#L345); прибій — `shoreUi`/`setShore` ([main.js:331](../../src/main.js#L331)) | канали `sea` спеки §5 мапляться сюди | — |
+| пресети води в Controls | `w`, `setWater`, `applyPreset` у [main.js](../../src/main.js) (папка Water); прибій — `shoreUi`/`setShore` | GUI читає `WATER_PRESETS` з seaBinding; `app.mood.set` оновлює `absorptionBase`, `w.clarity`, `w.scatter`, `shoreUi` | — |
 
 ## Головні виміряні факти
 
 ### Сонце й поле історії
 
-- [писати сонце після scene-environment E1] параметри сонця — `env.params` (`createEnvironment`, [src/environment/index.js](../../src/environment/index.js)), у консолі `app.env`; OWNER-4 рахує й `env.params`, і `sky.params` → новий писар іде через оточення, `mood.js` лягає в `src/environment/` під BOUNDARY-2. (E1)
+- [писати сонце після scene-environment E1] параметри сонця — `env.params` (`createEnvironment`, [src/environment/index.js](../../src/environment/index.js)), у консолі `app.env`; OWNER-4 рахує й `env.params`, і `sky.params` → писати лише `env.set()` (baseline 0 з M1a); `mood.js` лежить у `src/environment/` під BOUNDARY-2. (E1, M1a)
 - [знімки під якорями] `?still` + `app.still({ shot: 'Tiles' })` дає кадр без часу, детермінований до Δ 0 (`probe-scene-env-identity`) → брати його для знімків §6 п.5, а не живий цикл. (E1)
 
-- [зміна часу доби до завантаження тайлів] `storyAnchor` кешує кут із `sunBearing()` при першому виклику → без прив'язки до сталих 205° поле історії стане туди, куди було сонце в цю мить. (план)
-- [`setSun` у шотах] шоти ставлять сонце відносно `sunBearing()` ([main.js:194–261](../../src/main.js#L194)) → один писар сонця в M1a має лишити шоти на тих самих позах камери. (план)
+- [кут поля історії] прив'язка до поточного сонця при `t = 0.05` до завантаження зсуває поле на 937 м → лише `SET_BEARING`; `probe-mood-m1a` field ловить. (M1a)
+- [шоти після M1a] `SET_BEARING` = `atan2(dir.z, dir.x)` сонця на 205° за будь-якої висоти → пози камери ті самі, identity Δ 0. (M1a)
+- [`app.mood.set` у шоті] шот кличе `setSun` і перезаписує висоту й азимут → у пробах спершу шот, потім `set`. (M1a)
+
+### Проба читабельності (§6 п.5)
+
+- [тайли `story-8-frames-hibrid`] кольорові картинки; рівно білих 916, рівно чорних 5 962 з 23 678 → міряти маскою альбедо (рендери як є / `material.color` 0 / колір тайлів 1), не порогом луми — Otsu ділив кольори, не біле й чорне. (M1a)
+- [два кадри `app.still` при dt 1e-6] не однакові: зерно post 1–3/255 на канал, відблиски до 180/255 → допуск max(9, 0.15·(W−C)) і ерозія 1 px; маска з різниці кадрів «по альбедо» лише як «дорівнює», не як відношення (тонмапінг нелінійний). (M1a)
+- [чорні тайли] тло картинок урівень з водою: їхня лума — це вода над ними, росте з відбиттям неба (опівдні 0.29–0.43) → калібрування якорів зачіпає воду, не тайли. (M1a)
+- [білих тайлів у кадрі] під частиною якорів < 300 px інтер'єру (A3, A6, A9) → проба рахує провалом; міняти фікстуру чи поріг — разом із рішенням про критерій. (M1a)
+- [`PROBE_CASES=default,A9`] один якір readable ≈ 30 с замість 257 с; числа між прогонами ±0.03 (стан автоекспозиції). (M1a)

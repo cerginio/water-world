@@ -88,7 +88,7 @@ main.js ──► tiles ──► water, scene, engine
 |---|---|---|
 | Камера й `controls.target` | шоти `views`, `moveCamera` (WASD), `clampCamera`, OrbitControls у `main.js`; `TileInteraction` ([TileInteraction.js:156](src/tiles/TileInteraction.js#L156)) | Чотири писарі |
 | `controls.enabled` | `TileInteraction` зберігає й відновлює своє значення ([:151](src/tiles/TileInteraction.js#L151), [:258](src/tiles/TileInteraction.js#L258), [:274](src/tiles/TileInteraction.js#L274)) | Без токена чи причини блокування |
-| Сонце (`env.params`) | GUI-слайдери, `setSun` у кожному шоті | 6 записів поза модулем оточення (OWNER-4) |
+| Сонце (`env.params`) | лише `env.set()` модуля оточення; кличуть шоти (`setSun`), слайдери Controls, `app.mood` | 0 записів поза модулем (OWNER-4, з MOOD-WEATHER M1a) |
 | Куб неба, `env.sun.direction`, `env.sun.color` | `createEnvironment` ([src/environment/index.js](src/environment/index.js)) | Передаються **за посиланням** у воду, рельєф, підводний прохід, каустики й тінь; заміна об'єкта мовчки рве зв'язок |
 | Параметри океану | GUI (`ocean.dirty`) | Один писар |
 | `window.app` | `main.js` | Неявний публічний API: його читають проби |
