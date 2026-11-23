@@ -2,9 +2,9 @@
 
 Стан на 2026-11-23. Гілка `master`. Фази з
 [SCENE-UI-SPEC.md](../../SCENE-UI-SPEC.md) (далі — «спека»). U0 і U1 закрито
-(коміти закриття фаз), U2 — теж; U3–U4 відкриті.
+(коміти закриття фаз), U2 і U3 — теж; U4 відкрита.
 
-> **Далі:** U3 — мобільний профіль, a11y, i18n, телефон (спека §4.6, §4.7 п.8).
+> **Далі:** U4 — квадрат мілини на телефоні: float-текстури → half-float (пункт 5).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -31,18 +31,10 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    за дрейфом ≤ 2 м/с через `rig.follow` до першого дотику.~~ — ЗАКРИТО
    2026-11-23: [QA.md](QA.md) → U2, проба `scripts/probe-scene-frame.mjs`.
 
-4. **U3 — мобільний профіль, a11y, i18n, телефон** (спека §4.6, §4.7 п.8).
-   - Контракт: рейка на всю ширину з відступами 16 px над
-     `safe-area-inset-bottom`; смужка F2/F3 і ввімкнена `#perf` — над рейкою
-     (уже так з U1: `--rail-top` в [index.html](../../index.html), проба
-     перекриття = 0); вузли `<button>` з `aria-label` і `aria-current="location"`
-     (уже є), видимий фокус (`:focus-visible` є, перевірити очима); місце під
-     круглу кнопку погоди праворуч від рейки (саму кнопку робить MOOD-WEATHER).
-   - Закриття: проба в mobile-профілі (перекриття прямокутників рейки,
-     смужки й `#perf` = 0, зони дотику ≥ 44×44 px, aria-атрибути). П.8 —
-     замір FPS на OnePlus Nord 4 під час перельоту проти статичної камери в
-     тій самій точці; це робить власник, desktop mobile-профіль його не
-     замінює.
+~~4. **U3 — мобільний профіль, a11y, i18n, телефон** (спека §4.6, §4.7 п.8):
+   рейка на телефоні на всю ширину з відступами 16 px і місцем під кнопку погоди,
+   `viewport-fit=cover`, `lang` рейки.~~ — ЗАКРИТО 2026-11-23: [QA.md](QA.md) → U3,
+   проба `scripts/probe-scene-mobile.mjs`; FPS на Nord 4 (QA-U3-4) — очі власника.
 
 5. **U4 — квадрат мілини на телефоні: float-текстури без лінійної фільтрації**
    (виправлення регресії; рішення власника 2026-11-23 — окрема фаза в кінці).
@@ -96,14 +88,15 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (U2, 2026-11-23): guard зелений (OWNER-3 0 + власник 9, OWNER-4 6,
-TYPES-1 21); `npm test` 55/55; проби `probe-scene-frame`, `probe-scene-rail`,
-`probe-frame-drag`, `probe-scene-ui` PASS.
+Baseline (U3, 2026-11-23): guard зелений (OWNER-3 0 + власник 9, OWNER-4 6,
+TYPES-1 21); `npm test` 55/55; проби `probe-scene-mobile`, `probe-scene-frame`,
+`probe-scene-rail`, `probe-scene-ui` PASS.
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
 | технічні панелі | [src/ui/techPanels.js](../../src/ui/techPanels.js) (`createTechPanels`, `panelsFromUrl`, `TripleTap`, `isEditing`); `app.techPanels` | спека §3: сховані від старту, F2/F3 без модифікаторів і не в полі вводу, `?controls`/`?fps`/`?debug`, смужка `#techStrip` на три дотики — над рейкою; стан не зберігається | `tests/techPanels.test.js`, `scripts/probe-scene-ui.mjs` |
-| HUD `#perf` | [index.html](../../index.html), `updateHud` у [main.js](../../src/main.js) | схований `#perf` → жодних DOM-записів; лічильник FPS, `GpuTimer`, `autoResolution`, `runBenchmark` від видимості не залежать | `probe-scene-ui` |
+| HUD `#perf` | [index.html](../../index.html), `updateHud` у [main.js](../../src/main.js) | схований `#perf` → жодних DOM-записів; лічильник FPS, `GpuTimer`, `autoResolution`, `runBenchmark` від видимості не залежать; на телефоні над смужкою, при висоті ≤ 500 px — угорі ліворуч | `probe-scene-ui`, `probe-scene-mobile` |
+| мобільний профіль рейки | `.mobile #stationRail`, `--rail-top`, `--weather-slot` в [index.html](../../index.html); клас `mobile` — [main.js:49](../../src/main.js#L49) | спека §4.6: рейка 16 px від лівого краю й низу (+ safe-area, `viewport-fit=cover`), праворуч слот 56 + 8 px під погоду (MOOD-WEATHER §4.1); зони дотику ≥ 44×44; рейка/смужка/`#perf` не перекриваються; `lang` рейки = мова підписів | `probe-scene-mobile` |
 | lil-gui «Gelatin Water» | `new GUI` у [main.js](../../src/main.js) (OWNER-2) | видимістю керує `techPanels`; список `camera` — дев-шоти (`views`, [main.js:190](../../src/main.js#L190)), кожен викликає `setSun` і ставить камеру через `rig.place` | `probe-scene-ui` |
 | власник камери | [src/scene/cameraRig.js](../../src/scene/cameraRig.js) (`CameraRig`: `lock`/`release`, `place`, `flyTo`, `follow`, `interrupt`, `holdStill`, `bind`, `update`); `app.rig`; створення — [main.js:60](../../src/main.js#L60) | INVARIANTS OWNER-3: єдиний писар `camera`/`controls`; `controls.enabled` ⟺ немає lock-ів; WASD, межа рельєф+0.8, переліт і `follow` (зсув камери й target разом, ≤ speed м/с, на lock-ах стоїть) — тут; pointerdown на canvas (window capture), колесо, WASD зупиняють переліт і `follow` | guard OWNER-3, `tests/cameraFlight.test.js` |
 | переліт | [src/scene/cameraFlight.js](../../src/scene/cameraFlight.js) (`createFlight`, `flightDuration`, `liftHeight`, `smootherstep`) | спека §4.4; без DOM; годинник — `dt` кадру; вода +1 м з рампою на першу/останню чверть (старт під водою не стрибає) | `tests/cameraFlight.test.js`, `probe-scene-rail` |
@@ -123,6 +116,8 @@ TYPES-1 21); `npm test` 55/55; проби `probe-scene-frame`, `probe-scene-rail
 - [headless-стенд, AMD 890M, статична камера] 4–8 кадрів > 100 мс за 5 с, найгірший 750 мс, з тайлами й без, як і під час перельоту → ривки — стенд, не переліт; переліт 5 с за `dt` триває 5.6–7.9 с на стіні. (U1)
 - [`npm run deploy`] netlify-cli падає `Cannot read properties of undefined (reading 'Intrinsic')`: піднятий `ts-api-utils` бере typescript 7.0.2 проєкту замість 5.9.3 (Node 25 ні до чого) → драфт: `npx -y netlify-cli@27.20.0 deploy --no-build --dir <repo>/dist --site 2a006d8a-c00b-48e1-b2f1-241af4c0c95d` **з теки поза репо** (з репо `npx` бере локальний зламаний бінарник); стійкий фікс — `overrides` `ts-api-utils` → `typescript@5.9.3`, потребує згоди власника. (U1)
 - [`deploy-netlify.mjs`, сайт за іменем] `edge-of-elements` за іменем — «Not Found», за ID працює; `npm run deploy -- --site …` на Windows губить `--site` → `NETLIFY_SITE_ID=2a006d8a-…`. (U1)
+- [`env(safe-area-inset-*)` у Playwright] Chromium не емулює вирізи — завжди 0 → відступ над жестовою смугою перевіряє лише власник на телефоні. (U3)
+- [проба, що чекає `stations.current`] DOM рейки оновлює цикл кадру (`update`) — `current` уже `shore`, а `aria-current` ще ні → чекати сам атрибут. (U3)
 - [телефон власника, Chrome Android] `OES_texture_float_linear` немає, `EXT_color_buffer_float` є → float-текстури з `LinearFilter` читаються як 0; desktop-проба цього не бачить (у неї розширення є). (U1, → U4)
 
 ### Камера й `main.js`
@@ -132,5 +127,6 @@ TYPES-1 21); `npm test` 55/55; проби `probe-scene-frame`, `probe-scene-rail
 - [`TileInteraction`] бере `rig.lock('frame-drag')` у `down()` і відпускає свій токен у `finish`/`cancel` → переліт, перерваний pointerdown-ом на кадрі, віддає керування drag-у, після відпускання `controls.enabled` = true (проба: захоплення на 80 % перельоту). (U1)
 - [`tiles.place()`] скасовує поточний drag і синхронізує кадри → пози станцій читають `tiles.center`, не `placeTiles()`. (U1)
 - [кадр у drift, поза чи стеження] `entry.world` не рухається — тайли пливуть лише на GPU → центр брати з `tiles.frameFootprint(frame)`; за 30 с кадр зсувається на 6.3 м, `follow` іде за ним на 6.2 м зі швидкістю ≤ 2.03 м/с. (U2)
+- [телефон горизонтально, 915×412, `?fps` + смужка] `#perf` заввишки 282 px над смужкою (верх 268) вилазить за екран → `@media (max-height: 500px)` ставить його вгору. (U3)
 - [reduced motion, `setTimeout(250)`] таймер спрацьовує при opacity 0.93 — 7 % стрибка видно → рейка чекає `transitionend` (запасний таймер 400 мс). (U1)
 - Браузерні проби потребують запущеного стенду; `playwright` є в `node_modules` проєкту, `PLAYWRIGHT_MODULE` — лише якщо його немає (див. [docs/frame-drag/HANDOFF.md](../frame-drag/HANDOFF.md)); startup timeout — 120 с (ARCHITECTURE TD10).
