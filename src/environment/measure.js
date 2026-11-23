@@ -4,9 +4,12 @@ import * as THREE from 'three';
 // two GPU fences, so it works without EXT_disjoint_timer_query (phones) and counts the GPU work.
 // The render loop must be paused by the caller. Steps:
 //   lut      — the three atmosphere LUTs
+//   face     — one cube face 1024², no mips (E2: the sky's cost per frame while it moves = lut + face)
 //   cube     — six cube faces 1024² + mip chain
-//   pmrem    — three's PMREM of the cube, forced by a tiny probe render (minus the same render without it)
-//   pmrem256 — the same PMREM from a 256² bake of the same sky, own generator (a candidate for spec §4)
+//   pmrem    — three's PMREM of the 1024² cube, forced by a tiny probe render (minus the same render
+//              without it); since E2 nothing renders it — kept as the E0 reference
+//   pmrem256, pmrem64, pmrem32 — the same PMREM from a smaller bake of the same sky, own generator;
+//              bake256… — that bake (E2: the IBL is pmrem64 + bake64, every cycle of faces while moving)
 //   shadow   — the host's sun shadow map, via a 1×1 scene render (minus the same render without it)
 //   + `steps`: the host's own work on a sky change, by name (Ultra-Water: spectrum — OceanSim.updateSpectrum)
 // Params are not changed, so the sky, the shadow and the host's state end exactly as they were.
@@ -39,21 +42,30 @@ export async function measureEnvironment({ renderer, env, scene, camera, light, 
   try {
     const c = env.updateSun();
     const lut = await time(() => env.bakeLuts(c));
+    const oneFace = await time(() => env.bakeFace(0));
     const cube = await time(() => env.bakeCube());
     const pmremWith = await time(into(() => { env.cube.needsPMREMUpdate = true; renderer.render(probe, probeCam); }));
     const pmremBase = await time(into(() => renderer.render(probe, probeCam)));
-    // E0 candidate for spec §4: PMREM from a 256² copy of the cube (three sizes PMREM by its source).
-    // Its own generator: three's shared one reuses the cached target with the last size's meshes and
-    // shaders, so a 256² run in between makes the scene's 1024² PMREM wrong (and ~1 ms) until reload.
-    const small = new THREE.WebGLCubeRenderTarget(256, {
-      type: THREE.HalfFloatType, generateMipmaps: true, depthBuffer: false,
-      minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
-    });
-    env.bakeCubeInto(small);
-    const gen = new THREE.PMREMGenerator(renderer);
-    let smallPmrem = null;
-    const pmrem256 = await time(() => { smallPmrem = gen.fromCubemap(small.texture, smallPmrem); });
-    smallPmrem?.dispose(); gen.dispose(); small.dispose();
+    // PMREM from a smaller bake of the same sky, each size its own generator: three's shared one
+    // reuses the cached target with the last size's meshes and shaders, so another size in between
+    // makes the scene's PMREM wrong (and ~1 ms) until reload. 256² — the IBL at rest (E0); 64², 32² —
+    // candidates for the IBL while the sky moves (E2 QA: the sand under shallow water jumped at rest).
+    /** @type {Record<string, number>} */
+    const pmremBySize = {};
+    for (const size of [256, 64, 32]) {
+      const small = new THREE.WebGLCubeRenderTarget(size, {
+        type: THREE.HalfFloatType, generateMipmaps: true, depthBuffer: false,
+        minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+      });
+      env.bakeCubeInto(small);
+      const gen = new THREE.PMREMGenerator(renderer);
+      let smallPmrem = null;
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      pmremBySize[`pmrem${size}`] = await time(() => { smallPmrem = gen.fromCubemap(small.texture, smallPmrem); });
+      // oxlint-disable-next-line eslint/no-await-in-loop
+      pmremBySize[`bake${size}`] = await time(() => env.bakeCubeInto(small));
+      smallPmrem?.dispose(); gen.dispose(); small.dispose();
+    }
     const shadowWith = await time(into(() => { renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera); }));
     const shadowBase = await time(into(() => renderer.render(scene, camera)));
     // draw calls of one scene render with and without the shadow pass: shows the shadow really re-rendered
@@ -73,9 +85,9 @@ export async function measureEnvironment({ renderer, env, scene, camera, light, 
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     // the host's steps sit next to the module's (m.spectrum), typed as Record<string, number>
     return Object.assign({
-      lut, cube,
+      lut, face: oneFace, cube,
       pmrem: Math.max(pmremWith - pmremBase, 0),
-      pmrem256,
+      ...pmremBySize,
       shadow: Math.max(shadowWith - shadowBase, 0),
       repeats,
       raw: { pmremWith, pmremBase, shadowWith, shadowBase, shadowCalls },
@@ -84,7 +96,6 @@ export async function measureEnvironment({ renderer, env, scene, camera, light, 
   } finally {
     renderer.setRenderTarget(target, face, mip);
     renderer.shadowMap.needsUpdate = true;
-    env.cube.needsPMREMUpdate = true;
     tiny.dispose();
     probe.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
   }

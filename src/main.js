@@ -85,7 +85,8 @@ const surface = new OceanSurface(ocean, shore, env, floatShadow.uniforms);
 surface.uniforms.uFoamTex.value = tex.foam;
 
 const scene = new THREE.Scene();
-scene.environment = env.cube;
+// the IBL: PMREM of a 64² bake, re-made every cycle of cube faces while the sky moves (E2); the water reads env.cube
+scene.environment = env.envMap;
 scene.add(env.background);
 const terrain = createTerrain({
   env, caustics: caustics.uniforms, floatShadow: floatShadow.uniforms, water: surface.uniforms,
@@ -167,9 +168,9 @@ function resize() {
 window.addEventListener('resize', resize);
 
 const applySunLight = bindSunLight(env, sunLight, renderer);
+// at once: what env.set() asked for (shots, sliders, app.mood) is baked and lit before returning
 function applySun() {
-  env.update();
-  applySunLight();
+  applySunLight(env.update(0), 0);
 }
 
 // --- camera presets -----------------------------------------------------------------
@@ -564,7 +565,7 @@ renderer.domElement.addEventListener('webglcontextrestored', () => {
   timer.reset();
   // Render targets survive as JS objects, but their GPU contents do not.
   ocean.dirty = true;
-  env.set({});
+  env.restoreContext();
   floatShadow.ready = false;
   tex.foam.dispose();
   tex.foam = bakeWaterTextures(renderer).foam;
@@ -575,8 +576,9 @@ function renderFrame(dt) {
   if (gl.isContextLost()) return;
   elapsed += dt;
   timer.beginFrame();
-  // inside the timer's frame, so a sky change shows as its own `sky` line (E0)
-  if (env.dirty) { timer.begin('sky'); applySun(); }
+  // inside the timer's frame, so a sky change shows as its own `sky` line (E0); while the sky
+  // moves (env.setState with τ) one cube face a frame, the IBL and a full shadow at rest (E2)
+  if (env.dirty) { timer.begin('sky'); applySunLight(env.update(dt), dt); }
 
   // latest water heights (1-3 frames old) drive the camera test and the floaters
   if (query.resultCount > 0) camWater = query.result[0];
@@ -740,7 +742,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
 }
 window.app = {
   still,
-  camera, controls, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
+  camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -761,7 +763,7 @@ $('pSky').onclick = async () => {
   bench = 'measuring sky…';
   const m = await measureSky();
   if (!m) return;
-  bench = `sky change (ms, ${m.repeats}×): lut ${m.lut.toFixed(2)}  cube ${m.cube.toFixed(2)}  pmrem ${m.pmrem.toFixed(2)}  pmrem256 ${m.pmrem256.toFixed(2)}`
+  bench = `sky change (ms, ${m.repeats}×): lut ${m.lut.toFixed(2)}  face ${m.face.toFixed(2)}  cube ${m.cube.toFixed(2)}  pmrem ${m.pmrem.toFixed(2)}  pmrem256 ${m.pmrem256.toFixed(2)}  pmrem64 ${m.pmrem64.toFixed(2)}`
     + `
   shadow ${m.shadow.toFixed(2)}  spectrum ${m.spectrum.toFixed(2)}  (${m.viewport.width}×${m.viewport.height})`;
   console.log(bench);

@@ -130,22 +130,23 @@ export class SkyBake {
     r.setRenderTarget(target, face, mip);
   }
 
-  // six cube faces + mip chain into any cube target; PMREM is rebuilt lazily by three on the
-  // next render that uses the cube
+  // six cube faces + mip chain into any cube target
   bakeCubeInto(cubeRT, cloudCoverage) {
+    // three builds the mip chain after a render into the cube, so only after the last face
+    for (let f = 0; f < 6; f++) this.bakeFaceInto(cubeRT, f, cloudCoverage, f === 5);
+  }
+
+  // one face (E2: one per frame while the sky moves); `mips` rebuilds the whole cube's mip chain
+  bakeFaceInto(cubeRT, f, cloudCoverage, mips) {
     const r = this.renderer;
     const target = r.getRenderTarget(), face = r.getActiveCubeFace(), mip = r.getActiveMipmapLevel();
     const u = this.cubePass.material.uniforms;
     u.uCloudCoverage.value = cloudCoverage;
-    // three builds the mip chain after a render into the cube, so only after the last face
-    for (let f = 0; f < 6; f++) {
-      u.uFace.value = f;
-      cubeRT.texture.generateMipmaps = f === 5;
-      r.setRenderTarget(cubeRT, f);
-      r.render(this.cubePass.mesh, this.camera);
-    }
+    u.uFace.value = f;
+    cubeRT.texture.generateMipmaps = mips;
+    r.setRenderTarget(cubeRT, f);
+    r.render(this.cubePass.mesh, this.camera);
     r.setRenderTarget(target, face, mip);
-    cubeRT.texture.needsPMREMUpdate = true;
   }
 
   dispose() {

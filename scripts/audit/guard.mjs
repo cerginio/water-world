@@ -75,7 +75,7 @@ function ruleEngineLeaf(files) {
  */
 const ENV_DIR = 'src/environment/';
 const ENV_ENTRY = `${ENV_DIR}index.js`;
-const ENV_MIN_FILES = 8;   // index, atmosphere, skyBake, skyBackground, sun, measure, fullscreen, mood
+const ENV_MIN_FILES = 9;   // index, atmosphere, skyBake, skyBackground, sun, state, measure, fullscreen, mood
 
 function ruleEnvironmentPortable(files) {
   const failures = [];

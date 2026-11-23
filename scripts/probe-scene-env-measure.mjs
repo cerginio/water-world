@@ -1,6 +1,6 @@
 // SCENE-ENVIRONMENT E0: the cost of one sky change, step by step.
-// - `?fps`: after a sun change the GPU timer has its own `sky` line (the HUD lists timer.ms);
-// - app.measureEnvironment() returns six finite numbers (lut, cube, pmrem, pmrem256, spectrum > 0; shadow ≥ 0);
+// - `?fps`: while the sun moves every frame opens a GPU timer `sky` label (its time in the HUD only reported);
+// - app.measureEnvironment() returns seven finite numbers (lut, face, cube, pmrem, pmrem256, spectrum > 0; shadow ≥ 0);
 // - a second measurement sees the same PMREM cost (the shared PMREMGenerator is not disturbed);
 // - after measuring, the sky is unchanged: sunDir and the HUD still work, no page errors.
 // - the «Measure sky» button (#pSky, the phone path) prints the table into the HUD;
@@ -14,7 +14,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
 const BASE = process.env.PROBE_BASE ?? 'http://localhost:5199/';
 const REPEATS = Number(process.env.PROBE_REPEATS ?? 10);
 const START_TIMEOUT = 120000;
-const STEPS = ['lut', 'cube', 'pmrem', 'pmrem256', 'shadow', 'spectrum'];
+const STEPS = ['lut', 'face', 'cube', 'pmrem', 'pmrem256', 'pmrem64', 'bake64', 'shadow', 'spectrum'];
 const t0 = performance.now();
 const browser = await chromium.launch({ headless: true, args: ['--use-angle=d3d11'] });
 const errors = [];
@@ -30,13 +30,24 @@ try {
   // a sun change -> the `sky` label (only where the timer extension exists)
   const timerAvailable = await page.evaluate(() => app.timer.available);
   const sunBefore = await page.evaluate(() => app.env.sun.direction.toArray());
-  await page.evaluate(() => { app.env.set({ elevation: app.env.params.elevation + 0.5 }); });
+  const elevation0 = await page.evaluate(() => app.env.params.elevation);
+  // a move (E2): the frame opens a `sky` label every frame of it. Headless ANGLE loses most timer
+  // queries (waiting for timer.ms.sky timed out before E2 too), so the label is caught where it is
+  // begun; whether its time reached the HUD is only reported.
+  await page.evaluate(() => {
+    const t = app.timer, begin = t.begin;
+    window.__labels = new Set();
+    t.begin = (label) => { window.__labels.add(label); begin.call(t, label); };
+  });
+  await page.evaluate((e) => { app.env.setState({ elevation: e + 0.5 }, { tau: 1 }); }, elevation0);
+  let skyInHud = 'no timer extension';
   if (timerAvailable) {
-    await page.waitForFunction(() => 'sky' in app.timer.ms, {}, { timeout: 10000 });
-    await page.waitForFunction(() => /\n\s+sky\s/.test(document.getElementById('hud').textContent), {}, { timeout: 10000 });
+    await page.waitForFunction(() => window.__labels.has('sky'), {}, { timeout: 10000 });
+    skyInHud = await page.waitForFunction(() => /\n\s+sky\s/.test(document.getElementById('hud').textContent), {}, { timeout: 5000 })
+      .then(() => 'yes', () => 'no (headless timer queries lost)');
   }
-  await page.evaluate(() => { app.env.set({ elevation: app.env.params.elevation - 0.5 }); });
-  await page.waitForTimeout(300);
+  await page.evaluate((e) => { app.env.set({ elevation: e }); }, elevation0);
+  await page.waitForFunction(() => !app.env.dirty, {}, { timeout: 10000 });   // baked in the next frame
   const sunRestored = await page.evaluate(() => app.env.sun.direction.toArray());
   sunRestored.forEach((v, i) => assert.ok(Math.abs(v - sunBefore[i]) < 1e-6, `sunDir restored: ${sunRestored} vs ${sunBefore}`));
 
@@ -65,7 +76,7 @@ try {
   await page.waitForFunction(() => document.getElementById('perf').dataset.copied, {}, { timeout: 5000 });
   const copied = await page.evaluate(async () => ({ flag: document.getElementById('perf').dataset.copied, text: await navigator.clipboard.readText() }));
   assert.equal(copied.flag, 'ok', 'panel copy reports success');
-  assert.match(copied.text, /sky change \(ms, \d+×\): lut [\d.]+ +cube [\d.]+ +pmrem [\d.]+/, 'clipboard has the Measure sky line');
+  assert.match(copied.text, /sky change \(ms, \d+×\): lut [\d.]+ +face [\d.]+ +cube [\d.]+ +pmrem [\d.]+/, 'clipboard has the Measure sky line');
   assert.match(copied.text, /ANGLE|WebGL|Radeon|Mozilla/, 'clipboard has the GPU / browser line');
   const gpu = await page.evaluate(() => {
     const ext = app.renderer.getContext().getExtension('WEBGL_debug_renderer_info');
@@ -73,7 +84,7 @@ try {
   });
   assert.deepEqual(errors, [], 'no page errors');
 
-  console.log(`GPU: ${gpu}; viewport ${m.viewport.width}x${m.viewport.height}; cube ${m.cubeSize}², shadow ${m.shadowSize}²; repeats ${m.repeats}; timer ext ${timerAvailable}`);
+  console.log(`GPU: ${gpu}; viewport ${m.viewport.width}x${m.viewport.height}; cube ${m.cubeSize}², shadow ${m.shadowSize}²; repeats ${m.repeats}; timer ext ${timerAvailable}; sky line in HUD: ${skyInHud}`);
   console.log('| крок | мс |\n|---|---|');
   for (const k of STEPS) console.log(`| ${k} | ${m[k].toFixed(2)} |`);
   console.log(`| разом (зміна неба) | ${['lut', 'cube', 'pmrem', 'shadow'].reduce((a, k) => a + m[k], 0).toFixed(2)} |`);
