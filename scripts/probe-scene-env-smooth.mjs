@@ -2,7 +2,7 @@
 // One page with ?still&desktop (no render loop; app.still() renders frames at a fixed dt). The sky is put
 // at A9 in the morning at once, then env.setState() sends it to A1 at noon with τ = TAU s. A recorder
 // around env.update() logs every tick. Checked:
-//   - update() returns { sunChanged, cubeChanged, moving, faces, pmrem };
+//   - update() returns { sunChanged, cubeChanged, moving, faces, pmrem, drift } (drift: E2b);
 //   - every sky param moves monotonically toward its target, and the sun's angle to its final
 //     direction never grows; 95 % of the elevation is done after 3τ;
 //   - while moving no frame re-bakes more than one cube face; the IBL (PMREM of the small bake)
@@ -42,7 +42,9 @@ try {
     const m = await import('/src/environment/index.js');
     const sky = (v, a, t) => {
       const s = m.sampleMood(m.MOOD_MAP_V1, v, a).sky, sun = m.sunAt(m.SUN_PATH_V1, t);
-      return { elevation: sun.elevation, azimuth: sun.azimuth, sunIntensity: s.sunIntensity, cloudCoverage: s.cloudCoverage, turbidity: s.turbidity };
+      // cloudSpeed 0: the E2 contract is the move of the sky state; the drift of the clouds (E2b)
+      // re-bakes the cube on its own and has its own probe (probe-scene-env-clouds)
+      return { elevation: sun.elevation, azimuth: sun.azimuth, sunIntensity: s.sunIntensity, cloudCoverage: s.cloudCoverage, turbidity: s.turbidity, cloudSpeed: 0 };
     };
     return { from: sky(1, -1, 0.1), to: sky(-1, 1, 0.5) };
   });
@@ -100,7 +102,7 @@ try {
 
   // the shape of update()
   assert.ok(log.length > 10, `ticks recorded: ${log.length}`);
-  assert.equal(log[0].keys, 'cubeChanged,faces,moving,pmrem,sunChanged', 'update() result keys');
+  assert.equal(log[0].keys, 'cubeChanged,drift,faces,moving,pmrem,sunChanged', 'update() result keys');
 
   // monotonic params and sun
   const keys = Object.keys(to);

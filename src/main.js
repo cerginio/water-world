@@ -314,12 +314,13 @@ const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').on
 
 fSun = gui.addFolder('Sun & sky');
 // the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
-const sunUi = Object.defineProperties({}, Object.fromEntries(['elevation', 'azimuth', 'sunIntensity', 'cloudCoverage', 'turbidity']
+const sunUi = Object.defineProperties({}, Object.fromEntries(['elevation', 'azimuth', 'sunIntensity', 'cloudCoverage', 'cloudSpeed', 'turbidity']
   .map((k) => [k, { get: () => env.params[k], set: (x) => env.set({ [k]: x }) }])));
 fSun.add(sunUi, 'elevation', -2, 70, 0.1);
 fSun.add(sunUi, 'azimuth', 0, 360, 0.5);
 fSun.add(sunUi, 'sunIntensity', 0, 20, 0.1);
 fSun.add(sunUi, 'cloudCoverage', 0, 1, 0.01);
+fSun.add(sunUi, 'cloudSpeed', 0, 5, 0.05);
 fSun.add(sunUi, 'turbidity', 1, 10, 0.1);
 
 const op = ocean.params, dirty = () => (ocean.dirty = true);
@@ -531,7 +532,7 @@ const sunOnPath = (t) => {
 /** moodState → targets; `smooth` false puts the world there at once */
 function applyMood({ smooth }) {
   const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
-  const sky = { sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity };
+  const sky = { sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity, cloudSpeed: m.sky.cloudSpeed };
   const sun = sunAt(SUN_PATH_V1, moodState.t);
   moodState.custom = false;
   if (!smooth) {
@@ -638,8 +639,9 @@ function renderFrame(dt) {
   // the mood's move first: its day lands in the sky update below (spec §4.4)
   if (moodMove) stepMood(dt);
   // inside the timer's frame, so a sky change shows as its own `sky` line (E0); while the sky
-  // moves (env.setState with τ) one cube face a frame, the IBL and a full shadow at rest (E2)
-  if (env.dirty) { timer.begin('sky'); applySunLight(env.update(dt), dt); }
+  // moves (env.setState with τ) one cube face a frame, the IBL and a full shadow at rest (E2);
+  // drifting clouds tick it every frame and re-bake the cube now and then (E2b)
+  if (env.active) { timer.begin('sky'); applySunLight(env.update(dt), dt); }
 
   // latest water heights (1-3 frames old) drive the camera test and the floaters
   if (query.resultCount > 0) camWater = query.result[0];

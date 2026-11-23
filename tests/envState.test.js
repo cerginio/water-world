@@ -3,7 +3,7 @@ import { SKY_EPS, createSkyState } from '../src/environment/state.js';
 
 // SCENE-ENVIRONMENT E2: τ-smoothing of the sky state (spec §4, §5.3 setState/update).
 
-const params = () => ({ elevation: 3.5, azimuth: 205, turbidity: 2, rayleigh: 1, cloudCoverage: 0.38, sunIntensity: 9 });
+const params = () => ({ elevation: 3.5, azimuth: 205, turbidity: 2, rayleigh: 1, cloudCoverage: 0.38, sunIntensity: 9, cloudSpeed: 1 });
 const run = (s, seconds, dt = 1 / 60) => { for (let t = 0; t < seconds - 1e-9; t += dt) s.step(dt); };
 
 describe('createSkyState', () => {
@@ -69,5 +69,14 @@ describe('createSkyState', () => {
     s.setTarget({ elevation: 3.5 + SKY_EPS.elevation / 2 }, 6);
     expect(s.moving).toBe(false);
     expect(p.elevation).toBe(3.5 + SKY_EPS.elevation / 2);
+  });
+
+  test('E2b: the cloud speed is a sky key and eases like the others', () => {
+    const p = params(), s = createSkyState(p);
+    s.setTarget({ cloudSpeed: 4 }, 6);
+    expect(s.moving).toBe(true);
+    run(s, 18);
+    expect((p.cloudSpeed - 1) / 3).toBeGreaterThanOrEqual(0.95);
+    expect(p.cloudSpeed).toBeLessThan(4);
   });
 });

@@ -61,6 +61,9 @@ try {
     await page.goto(new URL(c.query, BASE).href);
     await page.waitForFunction(() => window.app?.still, {}, { timeout: 120000 });
     if (c.shot === 'Tiles') await page.waitForFunction(() => app.tiles.loaded, {}, { timeout: 120000 });
+    // E2b: the clouds drift with time; the probe compares the code, so they stand still (a build
+    // before E2b ignores the key, and set() re-bakes the same sky)
+    await page.evaluate(() => app.env?.set({ cloudSpeed: 0 }));
     const frame = await page.evaluate(({ shot, frames }) => (window.__seedRandom(0x2545f491), app.still({ shot, frames })), { shot: c.shot, frames: FRAMES });
     // the sun and the cube, through whichever API the build has (before E1: app.sky; after: app.env)
     const env = await page.evaluate((stride) => {

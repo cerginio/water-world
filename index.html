@@ -92,6 +92,9 @@
     /* a phone on its side has no room for #perf over the strip: it goes up, as on desktop */
     @media (max-height: 500px) {
       .mobile #perf, .tech-strip.mobile #perf { top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
+      /* never down onto the rail: a GPU timer line more (E2b: `sky` ticks while the clouds drift)
+         reached it at 412 px; the panel scrolls instead */
+      .mobile #perf { max-height: calc(100% - var(--rail-top) - 16px - env(safe-area-inset-top)); overflow-y: auto; }
     }
     /* mood weather (MOOD-WEATHER-SPEC §4.1, §4.2; src/environment/ui/moodPad.js): a round 56 px
        button right of the rail; open — the sun's arc over the weather window (240 px; on phones a

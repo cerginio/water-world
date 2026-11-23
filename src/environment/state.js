@@ -4,11 +4,12 @@
 // monotonic and 95 % done after 3τ. τ = 0 snaps. Azimuth takes the short way round and stays in
 // [0, 360). Within EPS of the target a key snaps onto it and stops moving.
 
-/** @typedef {'elevation' | 'azimuth' | 'turbidity' | 'rayleigh' | 'cloudCoverage' | 'sunIntensity'} SkyKey */
+/** @typedef {'elevation' | 'azimuth' | 'turbidity' | 'rayleigh' | 'cloudCoverage' | 'sunIntensity' | 'cloudSpeed'} SkyKey */
 
 /** @type {Readonly<Record<SkyKey, number>>} the distance at which a key counts as arrived */
 export const SKY_EPS = Object.freeze({
   elevation: 0.01, azimuth: 0.01, turbidity: 1e-3, rayleigh: 1e-3, cloudCoverage: 1e-4, sunIntensity: 1e-3,
+  cloudSpeed: 1e-3,
 });
 
 const wrap360 = (x) => ((x % 360) + 360) % 360;
