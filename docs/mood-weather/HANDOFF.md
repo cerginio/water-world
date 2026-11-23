@@ -1,10 +1,10 @@
 # Handoff: mood-weather — віджет погоди-настрою й часу доби
 
 Стан на 2026-11-23. Гілка `master`. Фази з
-[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a закрито
+[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a і M1b закрито
 й закомічено; QA — [QA.md](QA.md).
 
-> **Далі:** M1b — віджет.
+> **Далі:** scene-environment E2 ([docs/scene-environment/HANDOFF.md](../scene-environment/HANDOFF.md)); M2 цієї теми — лише після E2.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -51,7 +51,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      підкручування критерію.~~ — ЗАКРИТО 2026-11-23; підлога §6 п.5 не
      тримається (5/27) — відкрите питання нижче.
 
-2. **M1b — віджет** (спека §4.1, §4.2 без змісту, §4.3 без плину, §4.5).
+~~2. **M1b — віджет** (спека §4.1, §4.2 без змісту, §4.3 без плину, §4.5).
    `src/environment/ui/moodPad.js`: кругла кнопка 56 px у слоті
    `--weather-slot` (зарезервувала scene-ui U3); розгорнутий — дуга сонця й
    вікно погоди 240 px (телефон — нижній лист, до 320 px), камінчик тягнеться,
@@ -61,7 +61,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      `app.mood.state()`; перше відкриття — `t = 0.1`, A9 (§6 п.2); у DOM
      віджета немає цифр і `input[type=range]` (§6 п.9); зміна слайдера
      Controls → `custom: true`, наступний дотик → `false`.
-   - QA очима: телефон — лист не перекриває рейку.
+   - QA очима: телефон — лист не перекриває рейку.~~ — ЗАКРИТО 2026-11-23.
 
 3. **M2 — плавні переходи** (спека §4.4). τ 6 с (сонце, світло, небо) і 10 с
    (море) через стан оточення з E2; `updateSpectrum` щокадру під час
@@ -110,18 +110,19 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (M1a, 2026-11-23): guard зелений (OWNER-4 0, BOUNDARY-2 8 файлів, TEX-1 16,
-TYPES-1 21); `npm test` 92/92; `probe-scene-env-identity` Δ 0; `probe-mood-m1a`
-anchors + field PASS, readable 5/27 (відкрите питання).
+Baseline (M1b, 2026-11-23): guard зелений (OWNER-4 0, BOUNDARY-2 9 файлів, TEX-1 16,
+TYPES-1 21); `npm test` 98/98; `probe-mood-m1b` PASS; `probe-scene-env-identity` Δ 0;
+`probe-mood-m1a` anchors + field PASS, readable 5/27 (відкрите питання).
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
 | дані настрою | [src/environment/mood.js](../../src/environment/mood.js) (`MOOD_MAP_V1`, `sampleMood`, `SUN_PATH_V1`, `sunAt`), реекспорт з `environment/index.js` | спека §3.2, §3.3, §2.2; слова й назви — ключі локалі; вода — ваги пресетів | `tests/mood.test.js`, guard BOUNDARY-2 |
 | писар сонця | `env.set()`/`env.dirty` в [index.js](../../src/environment/index.js); `setSun` [main.js:185](../../src/main.js#L185), `sunUi` (геттер/сеттер) [main.js:313](../../src/main.js#L313) | `env.params` пише лише `env.set`; `renderFrame` перепікає при `env.dirty` | guard OWNER-4 (baseline 0) |
 | канали моря | `bindSea`, `mixWater`, `WATER_PRESETS` у [seaBinding.js](../../src/environment-bindings/seaBinding.js) | × — від значень на старті хоста; вода змішується в лінійному RGB; поглинання ÷ clarity | `probe-mood-m1a` anchors |
-| `app.mood` | `moodApi` [main.js:502](../../src/main.js#L502) (`set(v, a, t)`, `state()`) | миттєво: небо + море + грейдинг + дзеркало Controls; до першого `set` — `custom: true`; на старті світ не чіпає | `probe-mood-m1a` anchors |
+| `app.mood` | `applyMood` [main.js:507](../../src/main.js#L507), `moodApi` [main.js:525](../../src/main.js#L525) (`set(v, a, t)`, `state()`) | миттєво: небо + море + грейдинг + дзеркало Controls; `applyMood({ sky: false })` — без сонця й перепікання; до першого `set` — `custom: true`; на старті світ не чіпає | `probe-mood-m1a` anchors |
+| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad`, `gui.onChange` [main.js:540](../../src/main.js#L540) | спека §4.1, §4.2, §4.5: `input(state, final)` — під пальцем море й грейдинг, небо на відпусканні; зміна в папках Sun & sky / Waves / Shore waves / Water / Post або шот → `custom: true`; дотик → `false`; без цифр і `input` | `probe-mood-m1b`, `tests/moodPad.test.js` |
 | поле історії й шоти | `SET_BEARING` [main.js:184](../../src/main.js#L184), `storyAnchor` [main.js:261](../../src/main.js#L261) | кут = азимут заходу 205°, не поточне сонце | `probe-mood-m1a` field, `probe-scene-env-identity` |
-| слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні | `probe-scene-mobile` |
+| слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні; у слоті стоїть кнопка віджета | `probe-scene-mobile` |
 | пресети води в Controls | `w`, `setWater`, `applyPreset` у [main.js](../../src/main.js) (папка Water); прибій — `shoreUi`/`setShore` | GUI читає `WATER_PRESETS` з seaBinding; `app.mood.set` оновлює `absorptionBase`, `w.clarity`, `w.scatter`, `shoreUi` | — |
 
 ## Головні виміряні факти
@@ -134,6 +135,11 @@ anchors + field PASS, readable 5/27 (відкрите питання).
 - [кут поля історії] прив'язка до поточного сонця при `t = 0.05` до завантаження зсуває поле на 937 м → лише `SET_BEARING`; `probe-mood-m1a` field ловить. (M1a)
 - [шоти після M1a] `SET_BEARING` = `atan2(dir.z, dir.x)` сонця на 205° за будь-якої висоти → пози камери ті самі, identity Δ 0. (M1a)
 - [`app.mood.set` у шоті] шот кличе `setSun` і перезаписує висоту й азимут → у пробах спершу шот, потім `set`. (M1a)
+
+### Віджет
+
+- [`border-radius` на зоні дотику] кути заокругленого елемента не ловлять `pointerdown`, а камінчик кутового якоря (A1, A9) стоїть саме там → заокруглення — у `::before`, зона дотику — `::after` з `inset: -11px` (радіус камінчика). (M1b)
+- [lil-gui 0.21 у пробах] класи — `.lil-controller` і `.lil-name`, не `.controller`/`.name` → слайдер у пробі: `input.value`, потім `input` і `change`; `gui.onChange` бачить зміни всіх папок (`controller.parent` — папка). (M1b)
 
 ### Проба читабельності (§6 п.5)
 
