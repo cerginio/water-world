@@ -13,6 +13,7 @@
 ## U4. Квадрат мілини на телефоні — half-float текстури берега
 
 **Прийнято власником через `handoff:next` 2026-11-23.** Драфт: `https://6b040ff80428966ba99f35fd--edge-of-elements.netlify.app/`.
+QA-U4-1 на телефоні власника пройдено 2026-11-23: квадрата мілини немає.
 Guard зелений за 0.37 с (новий TEX-1 — 16 `FloatType`, порушень 0; OWNER-3 0, OWNER-4 6,
 TYPES-1 21). `npm test` 63/63 (8 нових), lint чистий. Проби (AMD Radeon 890M, Chromium
 ANGLE D3D11, `errors=[]`): нова `probe-scene-shore` PASS 19 с на стенді й 21 с на драфті;
@@ -84,7 +85,7 @@ desktop до і після фіксу на око однакові: прибій
 ## U3. Мобільний профіль, доступність, мова
 
 **Прийнято власником через `handoff:next` 2026-11-23.** Драфт-деплой Netlify зроблено
-перед прийманням. Guard зелений за 0.39 с (OWNER-3 0, власник `cameraRig.js`
+перед прийманням. QA-U3-4 (FPS на OnePlus Nord 4) власник пройшов 2026-11-23. Guard зелений за 0.39 с (OWNER-3 0, власник `cameraRig.js`
 — 9 записів; OWNER-4 6; TYPES-1 21). `npm test` 55/55, lint чистий. Проби (AMD Radeon
 890M, Chromium ANGLE D3D11, `errors=[]`): нова `probe-scene-mobile` PASS 18 с;
 регресія `probe-scene-rail` PASS 94 с, `probe-scene-frame` 145 с і `probe-scene-ui` — PASS.
@@ -183,7 +184,8 @@ canvas). Зони дотику: вузли 79×64 / 66×64 / 205×64, кнопк
 - Круглої кнопки погоди немає — лише вільне місце під неї (MOOD-WEATHER M1).
 - Смужка F2/F3 стоїть по центру екрана, а не по центру рейки: на телефоні вона зсунута
   на ~32 px праворуч від середини рейки. Технічний UI, не вирівнював.
-- Жест трьома пальцями на iOS Safari (QA-U0-10) — досі не перевірено.
+- ~~Жест трьома пальцями на iOS Safari (QA-U0-10) — досі не перевірено.~~ Пройдено
+  власником 2026-11-23.
 
 ## U2. Станція «Мить»
 
@@ -463,7 +465,7 @@ lint чистий. Проби (AMD Radeon 890M, Chromium ANGLE D3D11, `errors=[]
 `probe-scene-ui` PASS 43.5 с; регресія `probe-tiles` 49 с, `probe-tiles-drift`
 189 с, `probe-frame-pose` 51 с, `probe-frame-drag` 45 с (`FD2_SKIP_SOAK=1`) — PASS.
 Ручні сценарії на справжньому телефоні й iPhone (QA-U0-7…10) до приймання не
-проганялися.
+проганялися; власник пройшов їх 2026-11-23 — системні жести iOS три пальці не з'їдають.
 
 Автоматично: `node scripts/probe-scene-ui.mjs` (потрібен `PLAYWRIGHT_MODULE`, як у
 [frame-drag QA](../frame-drag/QA.md)) покриває QA-U0-1…QA-U0-8 у Chromium, включно з
