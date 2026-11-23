@@ -30,7 +30,7 @@ async function fly(page, id, start) {
   return page.evaluate(async ({ id: station, start: shotName }) => {
     if (shotName) app.views[shotName]();
     await new Promise((r) => setTimeout(r, 300));
-    const world = () => JSON.stringify({ sky: app.sky.params, ocean: app.ocean.params });
+    const world = () => JSON.stringify({ sky: app.env.params, ocean: app.ocean.params });
     const before = world(), samples = [];
     let on = true;
     const rec = () => {

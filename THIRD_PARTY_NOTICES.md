@@ -18,21 +18,21 @@ the source checkout is not modified. Story variants use Tilecraft's own modifier
 ## three.js
 
 - Source: https://github.com/mrdoob/three.js
-- Used in: `src/scene/sky.js` (cloud layer, adapted from `Sky.js`) and `src/engine/PostFX.js` (AgX tone mapping, same maths as three's `AgXToneMapping` chunk. That chunk is itself based on Filament's AgX, which follows Blender's).
+- Used in: `src/environment/skyBake.js` (cloud layer, adapted from `Sky.js`) and `src/engine/PostFX.js` (AgX tone mapping, same maths as three's `AgXToneMapping` chunk. That chunk is itself based on Filament's AgX, which follows Blender's).
 - Copyright © 2010-2026 three.js authors
 - MIT License
 
 ## Hash without Sine (Dave Hoskins)
 
 - Source: https://www.shadertoy.com/view/4djSRW
-- Used in: `src/engine/PostFX.js` (`hash33`), `src/scene/sky.js` (`gradient`), `src/scene/terrain.js` (`th`, `th3`), `src/water/OceanSurface.js` (`hash12`, shared with `src/water/Spray.js`) and `src/water/bakeTextures.js` (`hash22`)
+- Used in: `src/engine/PostFX.js` (`hash33`), `src/environment/skyBake.js` (`gradient`), `src/scene/terrain.js` (`th`, `th3`), `src/water/OceanSurface.js` (`hash12`, shared with `src/water/Spray.js`) and `src/water/bakeTextures.js` (`hash22`)
 - Copyright (c) 2014 David Hoskins
 - MIT License
 
 ## UnrealEngineSkyAtmosphere (Sébastien Hillaire)
 
 - Source: https://github.com/sebh/UnrealEngineSkyAtmosphere
-- Used in: `src/scene/atmosphere.js`, which follows the structure of this reference implementation of Hillaire 2020, "A Scalable and Production Ready Sky and Atmosphere Rendering Technique".
+- Used in: `src/environment/atmosphere.js`, which follows the structure of this reference implementation of Hillaire 2020, "A Scalable and Production Ready Sky and Atmosphere Rendering Technique".
 - Copyright (c) 2020 Epic Games, Inc.
 - MIT License
 

@@ -1,44 +1,18 @@
 import * as THREE from 'three';
-import { FullscreenQuad, rawPass } from '../engine/fullscreen.js';
-import { Atmosphere, ATMOSPHERE_GLSL, OBSERVER_ALTITUDE, atmosphereCoefficients, transmittance } from './atmosphere.js';
+import { FullscreenQuad, rawPass } from './fullscreen.js';
+import { Atmosphere, ATMOSPHERE_GLSL } from './atmosphere.js';
 
 // Hillaire 2020 atmosphere (atmosphere.js) + clouds baked into a mipmapped HDR cube whenever the
 // sun or sky params change; nothing runs per frame. The cube is the background, the water's
-// reflection/fog source and the terrain IBL. The sun disc is analytic (background shader + water
+// reflection/fog source and the terrain IBL. The sun disc is analytic (skyBackground.js + water
 // specular), so it's left out of the cube; alpha holds the cloud transmittance (1 = clear) so the
 // disc can hide behind clouds.
 //
 // Units: the sky is lit by sun illuminance pi * sunIntensity at the top of the atmosphere, i.e. the
-// cube is radiance in the same units as sunColor (sunColor = E_sun,ground / pi, what main.js feeds
-// the DirectionalLight as pi * sunColor). No extra scale: against the old Preetham cube the +Y face
-// averages ~0.55x at 52 deg sun, ~1.2x at 22 deg and ~3x at 3.5 deg (Preetham's sky dims too fast
-// near the horizon).
-const CUBE_SIZE = 1024;
+// cube is radiance in the same units as the sun colour (sun.js; the host feeds its DirectionalLight
+// pi * color). No extra scale: against the old Preetham cube the +Y face averages ~0.55x at 52 deg
+// sun, ~1.2x at 22 deg and ~3x at 3.5 deg (Preetham's sky dims too fast near the horizon).
 const CLOUD_H = 2.5;   // cloud deck altitude for lighting / aerial perspective (km)
-
-const BG_VERT = /* glsl */`
-out vec3 vDir;
-void main() {
-  vDir = position;
-  vec4 p = projectionMatrix * mat4(mat3(viewMatrix)) * vec4(position, 1.0);
-  gl_Position = p.xyww; // far plane
-}`;
-
-const BG_FRAG = /* glsl */`
-uniform samplerCube uCube;
-uniform vec3 uSunDir;
-uniform vec3 uSunColor;
-in vec3 vDir;
-out vec4 fragColor;
-void main() {
-  vec3 d = normalize(vDir);
-  vec4 sky = textureLod(uCube, vec3(d.x, max(d.y, 0.0), d.z), 0.0);
-  float c = dot(d, uSunDir);
-  // 0.27 deg disc with limb darkening, plus a tight glow; hidden by clouds (cube alpha)
-  float disc = smoothstep(0.999985, 0.999992, c) * (0.6 + 0.4 * smoothstep(0.999985, 1.0, c));
-  vec3 col = sky.rgb + uSunColor * (disc * 900.0 + pow(max(c, 0.0), 2200.0) * 1.5) * step(0.0, d.y) * sky.a;
-  fragColor = vec4(col, 1.0);
-}`;
 
 // One cube face per draw: GL cube-map texel -> world direction (three's cube render targets are
 // sampled with plain world directions).
@@ -124,79 +98,45 @@ void main() {
   fragColor = vec4(col, vis);
 }`;
 
-export class SkySystem {
-  constructor(renderer) {
-    this.renderer = renderer;
-    this.cubeSize = CUBE_SIZE;
-    this.sunDir = new THREE.Vector3(0, 1, 0);
-    this.sunColor = new THREE.Vector3(1, 1, 1);
-    this.params = { elevation: 3.5, azimuth: 205, turbidity: 2, rayleigh: 1, cloudCoverage: 0.38, sunIntensity: 9 };
 
+export class SkyBake {
+  /**
+   * @param {THREE.WebGLRenderer} renderer
+   * @param {number} cubeSize
+   * @param {THREE.Vector3} sunDir   held, not copied
+   * @param {THREE.Vector3} sunColor held, not copied
+   */
+  constructor(renderer, cubeSize, sunDir, sunColor) {
+    this.renderer = renderer;
+    this.sunDir = sunDir;
     this.atmosphere = new Atmosphere();
-    this.cubeRT = new THREE.WebGLCubeRenderTarget(CUBE_SIZE, {
+    this.cubeRT = new THREE.WebGLCubeRenderTarget(cubeSize, {
       type: THREE.HalfFloatType, generateMipmaps: true, depthBuffer: false,
       minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
     });
-    this.cube = this.cubeRT.texture;
     this.cubePass = new FullscreenQuad(rawPass(CUBE_FRAG, {
       ...this.atmosphere.uniforms,
-      uFace: { value: 0 }, uSunDir: { value: this.sunDir }, uSunColor: { value: this.sunColor },
+      uFace: { value: 0 }, uSunDir: { value: sunDir }, uSunColor: { value: sunColor },
       uCloudCoverage: { value: 0 },
     }));
     this.camera = new THREE.Camera();   // unused by the fullscreen vertex shader
-
-    this.background = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.ShaderMaterial({
-        glslVersion: THREE.GLSL3, vertexShader: BG_VERT, fragmentShader: BG_FRAG,
-        uniforms: { uCube: { value: this.cube }, uSunDir: { value: this.sunDir }, uSunColor: { value: this.sunColor } },
-        side: THREE.BackSide, depthWrite: false,
-      }),
-    );
-    this.background.frustumCulled = false;
-    // drawn after the opaque scene at the far plane, so only visible sky pixels shade
-    this.background.renderOrder = 1000;
   }
 
-  // the three steps of a sky change; split so measureEnvironment can time them apart
-  update() {
-    this.bakeLuts(this.updateSun());
-    this.bakeCube();
-  }
-
-  // CPU only: sun direction and colour from params -> atmosphere coefficients
-  updateSun() {
-    const p = this.params;
-    const phi = THREE.MathUtils.degToRad(90 - p.elevation);
-    const theta = THREE.MathUtils.degToRad(p.azimuth);
-    this.sunDir.setFromSphericalCoords(1, phi, theta);
-
-    // sun radiance factor at sea level: sunIntensity x transmittance (same integral as the LUT),
-    // faded out as the disc sinks below the horizon
-    const c = atmosphereCoefficients(p);
-    const T = transmittance(c, OBSERVER_ALTITUDE, Math.max(this.sunDir.y, 0));
-    const fade = THREE.MathUtils.smoothstep(p.elevation, -2, 2);
-    this.sunColor.set(T[0], T[1], T[2]).multiplyScalar(p.sunIntensity * fade);
-    return c;
-  }
-
-  // the three atmosphere LUTs
-  bakeLuts(c) {
+  // the three atmosphere LUTs, for coefficients c (sun.js) and the sun's illuminance
+  bakeLuts(c, sunIntensity) {
     const r = this.renderer;
     const target = r.getRenderTarget(), face = r.getActiveCubeFace(), mip = r.getActiveMipmapLevel();
-    this.atmosphere.update(r, c, this.sunDir.y, Math.PI * this.params.sunIntensity);
+    this.atmosphere.update(r, c, this.sunDir.y, Math.PI * sunIntensity);
     r.setRenderTarget(target, face, mip);
   }
 
-  // six cube faces + mip chain; PMREM is rebuilt lazily by three on the next render that uses the cube
-  bakeCube() { this.bakeCubeInto(this.cubeRT); }
-
-  // the same bake into any cube target (E0 measures PMREM from a smaller copy)
-  bakeCubeInto(cubeRT) {
-    const p = this.params, r = this.renderer;
+  // six cube faces + mip chain into any cube target; PMREM is rebuilt lazily by three on the
+  // next render that uses the cube
+  bakeCubeInto(cubeRT, cloudCoverage) {
+    const r = this.renderer;
     const target = r.getRenderTarget(), face = r.getActiveCubeFace(), mip = r.getActiveMipmapLevel();
     const u = this.cubePass.material.uniforms;
-    u.uCloudCoverage.value = p.cloudCoverage;
+    u.uCloudCoverage.value = cloudCoverage;
     // three builds the mip chain after a render into the cube, so only after the last face
     for (let f = 0; f < 6; f++) {
       u.uFace.value = f;
@@ -206,5 +146,11 @@ export class SkySystem {
     }
     r.setRenderTarget(target, face, mip);
     cubeRT.texture.needsPMREMUpdate = true;
+  }
+
+  dispose() {
+    this.cubeRT.dispose();
+    this.cubePass.material.dispose();
+    this.atmosphere.dispose();
   }
 }

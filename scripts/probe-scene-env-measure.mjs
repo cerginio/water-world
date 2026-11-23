@@ -29,21 +29,21 @@ try {
 
   // a sun change -> the `sky` label (only where the timer extension exists)
   const timerAvailable = await page.evaluate(() => app.timer.available);
-  const sunBefore = await page.evaluate(() => app.sky.sunDir.toArray());
-  await page.evaluate(() => { app.sky.params.elevation += 0.5; app.markSun(); });
+  const sunBefore = await page.evaluate(() => app.env.sun.direction.toArray());
+  await page.evaluate(() => { app.env.params.elevation += 0.5; app.markSun(); });
   if (timerAvailable) {
     await page.waitForFunction(() => 'sky' in app.timer.ms, {}, { timeout: 10000 });
     await page.waitForFunction(() => /\n\s+sky\s/.test(document.getElementById('hud').textContent), {}, { timeout: 10000 });
   }
-  await page.evaluate(() => { app.sky.params.elevation -= 0.5; app.markSun(); });
+  await page.evaluate(() => { app.env.params.elevation -= 0.5; app.markSun(); });
   await page.waitForTimeout(300);
-  const sunRestored = await page.evaluate(() => app.sky.sunDir.toArray());
+  const sunRestored = await page.evaluate(() => app.env.sun.direction.toArray());
   sunRestored.forEach((v, i) => assert.ok(Math.abs(v - sunBefore[i]) < 1e-6, `sunDir restored: ${sunRestored} vs ${sunBefore}`));
 
   const m = await page.evaluate((repeats) => app.measureEnvironment({ repeats }), REPEATS);
   // the shadow is below the timing noise on a desktop GPU (≤ 0.6 ms) — shadowCalls proves it re-renders
   for (const k of STEPS) assert.ok(Number.isFinite(m[k]) && (k === 'shadow' ? m[k] >= 0 : m[k] > 0), `${k} = ${m[k]} (raw ${JSON.stringify(m.raw)})`);
-  const sunAfter = await page.evaluate(() => app.sky.sunDir.toArray());
+  const sunAfter = await page.evaluate(() => app.env.sun.direction.toArray());
   sunAfter.forEach((v, i) => assert.ok(Math.abs(v - sunBefore[i]) < 1e-6, 'measuring does not move the sun'));
 
   // a second run must see the same PMREM cost: three's shared PMREMGenerator, used for another

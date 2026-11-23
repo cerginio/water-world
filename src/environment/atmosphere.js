@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FullscreenQuad, rawPass } from '../engine/fullscreen.js';
+import { FullscreenQuad, rawPass } from './fullscreen.js';
 
 // Physically based atmosphere after Hillaire 2020, "A Scalable and Production Ready Sky and
 // Atmosphere Rendering Technique" (sebh/UnrealEngineSkyAtmosphere): transmittance LUT,
@@ -252,5 +252,10 @@ export class Atmosphere {
     this.transPass.render(renderer, this.transRT);
     this.msPass.render(renderer, this.msRT);
     this.skyPass.render(renderer, this.skyRT);
+  }
+
+  dispose() {
+    for (const rt of [this.transRT, this.msRT, this.skyRT]) rt.dispose();
+    for (const p of [this.transPass, this.msPass, this.skyPass]) p.material.dispose();
   }
 }

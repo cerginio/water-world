@@ -5,8 +5,8 @@ import { OceanSim, defaultOceanParams } from './water/OceanSim.js';
 import { OceanSurface } from './water/OceanSurface.js';
 import { bakeShoreMap } from './water/shoreMap.js';
 import { bakeWaterTextures } from './water/bakeTextures.js';
-import { SkySystem } from './scene/sky.js';
-import { measureEnvironment } from './scene/measureEnvironment.js';
+import { createEnvironment, measureEnvironment } from './environment/index.js';
+import { bindSunLight } from './environment-bindings/hostBinding.js';
 import { bindPanelCopy } from './ui/perfCopy.js';
 import { createTerrain, heroRock } from './scene/terrain.js';
 import { islandHeight } from './scene/islandHeight.js';
@@ -68,7 +68,7 @@ const rig = new CameraRig({
 rig.bind(renderer.domElement, isEditing);
 
 // --- world ------------------------------------------------------------------------
-const sky = new SkySystem(renderer);
+const env = createEnvironment(renderer, { cubeSize: 1024 });
 // the surf rock as a dome in the bake: the fronts wrap round it, break on its face and
 // leave a sheltered lee
 const shore = bakeShoreMap(islandHeight, 1800, 512, (x, z) => {
@@ -79,14 +79,14 @@ const tex = bakeWaterTextures(renderer);
 const ocean = new OceanSim(renderer, defaultOceanParams());
 const caustics = new WaveCaustics(renderer, ocean);
 const floatShadow = new FloaterShadow();
-const surface = new OceanSurface(ocean, shore, sky, floatShadow.uniforms);
+const surface = new OceanSurface(ocean, shore, env, floatShadow.uniforms);
 surface.uniforms.uFoamTex.value = tex.foam;
 
 const scene = new THREE.Scene();
-scene.environment = sky.cube;
-scene.add(sky.background);
+scene.environment = env.cube;
+scene.add(env.background);
 const terrain = createTerrain({
-  sky, caustics: caustics.uniforms, floatShadow: floatShadow.uniforms, water: surface.uniforms,
+  env, caustics: caustics.uniforms, floatShadow: floatShadow.uniforms, water: surface.uniforms,
   absorption: surface.uniforms.uAbsorption.value, reflectionLayer: REFLECT_LAYER,
 });
 scene.add(terrain.group);
@@ -165,12 +165,10 @@ function resize() {
 window.addEventListener('resize', resize);
 
 let sunDirty = true;
+const applySunLight = bindSunLight(env, sunLight, renderer);
 function applySun() {
-  sky.update();
-  sunLight.position.copy(sky.sunDir).multiplyScalar(2000);
-  sunLight.color.setRGB(sky.sunColor.x, sky.sunColor.y, sky.sunColor.z).multiplyScalar(1 / Math.max(sky.sunColor.x, 1e-4));
-  sunLight.intensity = Math.PI * Math.max(sky.sunColor.x, 1e-4);
-  renderer.shadowMap.needsUpdate = true;
+  env.update();
+  applySunLight();
   sunDirty = false;
 }
 
@@ -181,9 +179,9 @@ function coast(bearingDeg) {
   while (r < 800 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 2;
   return new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r);
 }
-function sunBearing() { return Math.atan2(sky.sunDir.z, sky.sunDir.x); }
+function sunBearing() { return Math.atan2(env.sun.direction.z, env.sun.direction.x); }
 function setSun(elevation, azimuth) {
-  Object.assign(sky.params, { elevation, azimuth });
+  Object.assign(env.params, { elevation, azimuth });
   fSun?.controllers.forEach((c) => c.updateDisplay());
   applySun();
 }
@@ -311,11 +309,11 @@ const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 
 fSun = gui.addFolder('Sun & sky');
-fSun.add(sky.params, 'elevation', -2, 70, 0.1).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'azimuth', 0, 360, 0.5).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'sunIntensity', 0, 20, 0.1).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'cloudCoverage', 0, 1, 0.01).onChange(() => (sunDirty = true));
-fSun.add(sky.params, 'turbidity', 1, 10, 0.1).onChange(() => (sunDirty = true));
+fSun.add(env.params, 'elevation', -2, 70, 0.1).onChange(() => (sunDirty = true));
+fSun.add(env.params, 'azimuth', 0, 360, 0.5).onChange(() => (sunDirty = true));
+fSun.add(env.params, 'sunIntensity', 0, 20, 0.1).onChange(() => (sunDirty = true));
+fSun.add(env.params, 'cloudCoverage', 0, 1, 0.01).onChange(() => (sunDirty = true));
+fSun.add(env.params, 'turbidity', 1, 10, 0.1).onChange(() => (sunDirty = true));
 
 const op = ocean.params, dirty = () => (ocean.dirty = true);
 const fWave = gui.addFolder('Waves');
@@ -537,13 +535,13 @@ function renderFrame(dt) {
 
   ocean.update(dt, timer);
   timer.begin('caustics');
-  caustics.update(sky.sunDir);
+  caustics.update(env.sun.direction);
   surface.update(camera, elapsed % 3600);
   if (tiles.loaded) {
     tiles.update(dt, timer);
   }
   timer.begin('floatShadow');
-  floatShadow.update(renderer, floaters.scene, floaters.bodies, sky.sunDir, tiles);
+  floatShadow.update(renderer, floaters.scene, floaters.bodies, env.sun.direction, tiles);
   spray.update();
   timer.begin('query');
   const pts = floaters.collectPoints([camera.position]);
@@ -650,11 +648,42 @@ async function measureSky({ repeats } = {}) {
   benchmarking = true;
   try {
     await gpuFence();
-    return await measureEnvironment({ renderer, sky, ocean, scene, camera, light: sunLight, fence: gpuFence, repeats });
+    return await measureEnvironment({ renderer, env, scene, camera, light: sunLight, fence: gpuFence,
+      steps: { spectrum: () => ocean.updateSpectrum() }, repeats });
   } finally { benchmarking = false; }
 }
+// SCENE-ENVIRONMENT E1: with ?still the loop never starts and app.still() renders `frames` frames
+// at a fixed dt from load (waiting for the GPU and the water readback after each), so two builds
+// give the same pixels. Returns the last frame as RGBA bytes (base64), read before it is shown.
+const stillMode = args.has('still');
+/** @param {{ shot?: string, frames?: number, dt?: number }} [options] */
+async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
+  if (!stillMode) throw new Error('app.still needs ?still');
+  if (!Number.isInteger(frames) || frames < 1 || frames > 600) throw new Error('app.still: frames 1..600');
+  if (shot && !Object.hasOwn(views, shot)) throw new Error(`Unknown shot: ${shot}`);
+  if (shot) { ui.view = shot; views[shot](); viewController.updateDisplay(); }
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const px = new Uint8Array(size.x * size.y * 4);
+  for (let i = 0; i < frames; i++) {
+    rig.update(dt);
+    renderFrame(dt);
+    if (i === frames - 1) {
+      renderer.setRenderTarget(null);
+      gl.readPixels(0, 0, size.x, size.y, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    }
+    // the readback of the water heights lands before the next frame, every time
+    // oxlint-disable-next-line eslint/no-await-in-loop
+    await gpuFence();
+    // oxlint-disable-next-line eslint/no-await-in-loop
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  let bin = '';
+  for (let i = 0; i < px.length; i += 0x8000) bin += String.fromCharCode.apply(null, px.subarray(i, i + 0x8000));
+  return { width: size.x, height: size.y, rgba: btoa(bin), shot: ui.view };
+}
 window.app = {
-  camera, controls, sky, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
+  still,
+  camera, controls, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
   camWater: () => camWater, markSun: () => (sunDirty = true), techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -788,4 +817,4 @@ applySun();
 views[ui.view]();
 // a link with ?tiles opens on the field once it has loaded and been placed
 if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
-requestAnimationFrame(loop);
+if (!stillMode) requestAnimationFrame(loop);

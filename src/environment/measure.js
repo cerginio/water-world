@@ -7,16 +7,21 @@ import * as THREE from 'three';
 //   cube     — six cube faces 1024² + mip chain
 //   pmrem    — three's PMREM of the cube, forced by a tiny probe render (minus the same render without it)
 //   pmrem256 — the same PMREM from a 256² bake of the same sky, own generator (a candidate for spec §4)
-//   shadow   — the 4096² sun shadow map, via a 1×1 scene render (minus the same render without it)
-//   spectrum — OceanSim.updateSpectrum()
-// Params are not changed, so the sky, the shadow and the spectrum end exactly as they were.
+//   shadow   — the host's sun shadow map, via a 1×1 scene render (minus the same render without it)
+//   + `steps`: the host's own work on a sky change, by name (Ultra-Water: spectrum — OceanSim.updateSpectrum)
+// Params are not changed, so the sky, the shadow and the host's state end exactly as they were.
 
-export async function measureEnvironment({ renderer, sky, ocean, scene, camera, light, fence, repeats = 10 }) {
+/**
+ * @param {{ renderer: THREE.WebGLRenderer, env: import('./index.js').Environment, scene: THREE.Scene,
+ *   camera: THREE.Camera, light: THREE.DirectionalLight, fence: () => Promise<void>,
+ *   steps?: Record<string, () => void>, repeats?: number }} options
+ */
+export async function measureEnvironment({ renderer, env, scene, camera, light, fence, steps = {}, repeats = 10 }) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 60) throw new Error('measureEnvironment: repeats 1..60');
   const target = renderer.getRenderTarget(), face = renderer.getActiveCubeFace(), mip = renderer.getActiveMipmapLevel();
   const tiny = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
   const probe = new THREE.Scene();
-  probe.environment = sky.cube;
+  probe.environment = env.cube;
   probe.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 4), new THREE.MeshStandardMaterial({ roughness: 0.5 })));
   const probeCam = new THREE.PerspectiveCamera(60, 1, 0.1, 10);
   probeCam.position.set(0, 0, 3);
@@ -32,10 +37,10 @@ export async function measureEnvironment({ renderer, sky, ocean, scene, camera, 
   const into = (fn) => () => { renderer.setRenderTarget(tiny); fn(); };
 
   try {
-    const c = sky.updateSun();
-    const lut = await time(() => sky.bakeLuts(c));
-    const cube = await time(() => sky.bakeCube());
-    const pmremWith = await time(into(() => { sky.cube.needsPMREMUpdate = true; renderer.render(probe, probeCam); }));
+    const c = env.updateSun();
+    const lut = await time(() => env.bakeLuts(c));
+    const cube = await time(() => env.bakeCube());
+    const pmremWith = await time(into(() => { env.cube.needsPMREMUpdate = true; renderer.render(probe, probeCam); }));
     const pmremBase = await time(into(() => renderer.render(probe, probeCam)));
     // E0 candidate for spec §4: PMREM from a 256² copy of the cube (three sizes PMREM by its source).
     // Its own generator: three's shared one reuses the cached target with the last size's meshes and
@@ -44,7 +49,7 @@ export async function measureEnvironment({ renderer, sky, ocean, scene, camera, 
       type: THREE.HalfFloatType, generateMipmaps: true, depthBuffer: false,
       minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
     });
-    sky.bakeCubeInto(small);
+    env.bakeCubeInto(small);
     const gen = new THREE.PMREMGenerator(renderer);
     let smallPmrem = null;
     const pmrem256 = await time(() => { smallPmrem = gen.fromCubemap(small.texture, smallPmrem); });
@@ -60,21 +65,26 @@ export async function measureEnvironment({ renderer, sky, ocean, scene, camera, 
       return n;
     };
     const shadowCalls = calls(true) - calls(false);
-    const spectrum = await time(() => ocean.updateSpectrum());
+    /** @type {Record<string, number>} */
+    const host = {};
+    // one step at a time: each is timed between its own fences
+    // oxlint-disable-next-line eslint/no-await-in-loop
+    for (const [name, step] of Object.entries(steps)) host[name] = await time(step);
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    return {
+    // the host's steps sit next to the module's (m.spectrum), typed as Record<string, number>
+    return Object.assign({
       lut, cube,
       pmrem: Math.max(pmremWith - pmremBase, 0),
       pmrem256,
       shadow: Math.max(shadowWith - shadowBase, 0),
-      spectrum, repeats,
+      repeats,
       raw: { pmremWith, pmremBase, shadowWith, shadowBase, shadowCalls },
-      cubeSize: sky.cubeSize, shadowSize: light.shadow.mapSize.x, viewport: { width: size.x, height: size.y },
-    };
+      cubeSize: env.cubeSize, shadowSize: light.shadow.mapSize.x, viewport: { width: size.x, height: size.y },
+    }, host);
   } finally {
     renderer.setRenderTarget(target, face, mip);
     renderer.shadowMap.needsUpdate = true;
-    sky.cube.needsPMREMUpdate = true;
+    env.cube.needsPMREMUpdate = true;
     tiny.dispose();
     probe.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
   }

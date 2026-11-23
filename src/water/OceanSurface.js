@@ -725,7 +725,7 @@ void main() {
 }`;
 
 export class OceanSurface {
-  constructor(sim, shore, sky, floatShadow) {
+  constructor(sim, shore, env, floatShadow) {
     this.sim = sim;
     this.uniforms = {
       uDisp0: { value: null }, uDisp1: { value: null }, uDisp2: { value: null },
@@ -747,15 +747,15 @@ export class OceanSurface {
       uSceneDepth: { value: null },
       uReflection: { value: null },
       uReflMatrix: { value: new THREE.Matrix4() },
-      uSkyCube: { value: sky.cube },
-      uSkyMaxLod: { value: Math.log2(sky.cubeSize) },
+      uSkyCube: { value: env.cube },
+      uSkyMaxLod: { value: Math.log2(env.cubeSize) },
       uFoamTex: { value: null },
       uShadowMap: { value: null },
       uShadowMatrix: { value: new THREE.Matrix4() },
       uShadowBias: { value: 1e-5 },
       ...floatShadow,
-      uSunDir: { value: sky.sunDir },
-      uSunColor: { value: sky.sunColor },
+      uSunDir: { value: env.sun.direction },
+      uSunColor: { value: env.sun.color },
       uAbsorption: { value: new THREE.Vector3(0.40, 0.062, 0.032) },
       uScatterColor: { value: new THREE.Color(0.0, 0.05, 0.08) },
       uFoamTint: { value: new THREE.Color(0.62, 0.78, 0.82) },

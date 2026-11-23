@@ -331,15 +331,15 @@ function rockMaps(rocks, extent, size = 512) {
   };
 }
 
-export function createTerrain({ sky, caustics, floatShadow, water, absorption, reflectionLayer = 1 }) {
+export function createTerrain({ env, caustics, floatShadow, water, absorption, reflectionLayer = 1 }) {
   const uniforms = {
     ...floatShadow,
     // shore maps + wave settings for the swash (same objects as the water's)
     ...Object.fromEntries(['uShore', 'uTravel', 'uSurf', 'uShoreExtent', 'uTime', 'uShoreWave', 'uSwellDir'].map((k) => [k, water[k]])),
     ...caustics,
-    uSkyCube: { value: sky.cube },
+    uSkyCube: { value: env.cube },
     uAbsorption: { value: absorption },
-    uSunDirT: { value: sky.sunDir },
+    uSunDirT: { value: env.sun.direction },
     uSunShadowMatrix: { value: new THREE.Matrix4() },   // the sun light's shadow.matrix (main.js)
     uCausticStrength: { value: 1.0 },
     uFogDensity: { value: 1 / 18000 },

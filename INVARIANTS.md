@@ -21,12 +21,12 @@
 | id | інваріант | механізм | стан |
 |---|---|---|---|
 | [BOUNDARY-1](#boundary-1--engine--листок) | `src/engine/` імпортує лише `three` і `engine/` | guard-static, baseline 0 | ✓ |
-| [BOUNDARY-2](#boundary-2--небо-й-атмосфера-переносні) | `sky.js`, `atmosphere.js` імпортують лише `three`, `engine/fullscreen.js` і одне одного | guard-static, baseline 0 | ✓ |
+| [BOUNDARY-2](#boundary-2--небо-й-атмосфера-переносні) | файли `src/environment/**` імпортують лише `three`, `three/*` і свою папку | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортує лише `src/tiles/tilecraftLoader.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
 | [OWNER-3](#owner-3--камеру-пише-лише-її-власник) | камеру/`controls` пише лише `src/scene/cameraRig.js` | guard-static, baseline 0 | ✓ |
-| [OWNER-4](#owner-4--писарі-сонця-не-множаться) | записи `sky.params` поза `sky.js` не ростуть: `main.js` 6 | guard-static, baseline 6 ↓ | борг |
+| [OWNER-4](#owner-4--писарі-сонця-не-множаться) | записи `env.params` поза модулем оточення не ростуть: `main.js` 6 | guard-static, baseline 6 ↓ | борг |
 | [OWNER-5](#owner-5--глобали-пише-лише-корінь-композиції) | `window.*` / `globalThis.*` / `self.*` пише лише `src/main.js` | guard-static, baseline 0 | ✓ |
 | [BUDGET-1](#budget-1--семплери-води-в-мінімумах-webgl2) | вода: фрагмент ≤ 16, вершина ≤ 16, разом ≤ 32 семплерів | guard-static | 16/16 |
 | [TEX-1](#tex-1--float-текстури-без-лінійної-фільтрації) | `FloatType` — лише з `NearestFilter`; лінійно фільтровані дані — half float (`engine/halfTexture.js`) | guard-static + проба `probe-scene-shore` | ✓ |
@@ -60,23 +60,30 @@
 
 ## BOUNDARY-2 — небо й атмосфера переносні
 
-**Формулювання.** `src/scene/sky.js` і `src/scene/atmosphere.js` імпортують лише
-`three`, `src/engine/fullscreen.js` і одне одного.
+**Формулювання.** Кожен файл `src/environment/**` (модуль оточення) імпортує
+лише `three`, `three/*` і відносні шляхи всередині `src/environment/`.
+Прив'язки до Ultra-Water (`src/environment-bindings/`) під правило не
+підпадають. До SCENE-ENVIRONMENT E1 правило стосувалося `src/scene/sky.js` і
+`src/scene/atmosphere.js` (дозволяло `engine/fullscreen.js`); E1 переніс їх у
+модуль із власною копією `fullscreen.js` (рішення власника 2026-11-23 —
+розширити це правило замість окремого `check:environment` зі спеки §5.2).
 
 **Походження.** Межа без інциденту (ARCHITECTURE.md §2.1): це природна межа
 майбутнього модуля оточення (SCENE-ENVIRONMENT-SPEC §5). Сусіди `scene/` ↔
 `water/` уже злиплися (TD13) — небо не повинне.
 
-**Механізм.** guard-static, `BOUNDARY-2 sky-portable`. Розмір набору: рівно 2
-файли (`SKY_FILES`); перейменування файлу валить правило.
+**Механізм.** guard-static, `BOUNDARY-2 environment-portable`. Правило дивиться
+туди, куди треба: без `src/environment/index.js` або з менш ніж 7 файлами в
+папці (`ENV_MIN_FILES`) воно падає.
 
-**Перевірюване твердження.** `✓ BOUNDARY-2 sky-portable — 2 файл(и) неба`.
+**Перевірюване твердження.** `✓ BOUNDARY-2 environment-portable — 7 файл(ів) src/environment/`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
 | `src/scene/sky.js` + `import { WATER_SHADERS } from '../water/OceanSurface.js'` | ✓ проходить — дефект | ✗ `sky.js: import «../water/OceanSurface.js»` |
+| `src/environment/skyBake.js` + `import { WATER_GLSL } from '../water/OceanSurface.js'` (E1) | — | ✗ `skyBake.js: import «../water/OceanSurface.js» — модуль оточення імпортує лише three і свою папку` |
 
-**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleSkyPortable`.
+**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleEnvironmentPortable`.
 
 ## BOUNDARY-3 — Tilecraft лише через завантажувач
 
@@ -172,8 +179,9 @@
 
 ## OWNER-4 — писарі сонця не множаться
 
-**Формулювання.** Записи в `sky.params` поза `src/scene/sky.js`
-(присвоєння, `Object.assign(sky.params…)`, прив'язка GUI `.add(sky.params…)`)
+**Формулювання.** Записи в `env.params` (до SCENE-ENVIRONMENT E1 — `sky.params`;
+regex ловить обидва імені) поза власником `src/environment/index.js`
+(присвоєння, `Object.assign(env.params…)`, прив'язка GUI `.add(env.params…)`)
 не перевищують baseline: `src/main.js` 6. Baseline лише опускається.
 
 **Походження.** ARCHITECTURE.md TD3, огляд 2026-11-22: сонце пишуть 5
@@ -182,13 +190,14 @@ GUI-слайдерів і `setSun` у кожному шоті. Віджет ча
 Ціль M1 — один писар.
 
 **Механізм.** guard-static, `OWNER-4 sun-writers`, baseline у `SUN_BASELINE`;
-власник `sky.js` не рахується.
+власник `src/environment/index.js` (`SUN_OWNER`, до E1 — `sky.js`) не рахується.
 
 **Перевірюване твердження.** `✓ OWNER-4 sun-writers — 6 запис(ів) у 1 файл(ах), baseline 6`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
 | `src/tiles/TileField.js` + `export function dusk(sky) { sky.params.elevation = 3; }` | ✓ проходить — дефект | ✗ `TileField.js: 1 запис(ів) — файл не в baseline` |
+| `src/tiles/TileField.js` + `export function dusk(env) { env.params.elevation = 3; }` (E1) | — | ✗ `TileField.js: 1 запис(ів) — файл не в baseline` |
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `SUN_WRITE`, `SUN_BASELINE`.
 

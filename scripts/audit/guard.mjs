@@ -64,27 +64,31 @@ function ruleEngineLeaf(files) {
   return { id: 'BOUNDARY-1 engine-leaf', failures, note: `${checked} файл(ів) engine/` };
 }
 
-/* ── BOUNDARY-2: небо й атмосфера переносні ───────────────────────────────── */
+/* ── BOUNDARY-2: модуль оточення переносний ──────────────────────────────── */
 
 /**
- * Основа майбутнього модуля оточення (SCENE-ENVIRONMENT-SPEC §5): небо й
- * атмосфера не знають ні води, ні острова, ні тайлів. Дозволено three,
- * engine/fullscreen.js і одне одного.
+ * Модуль оточення (SCENE-ENVIRONMENT-SPEC §5): `src/environment/**` не знає ні
+ * води, ні острова, ні тайлів. Дозволено three, `three/addons/*` і відносні
+ * шляхи всередині папки (рішення власника 2026-11-23: це правило замість
+ * окремого `check:environment`). Прив'язки до Ultra-Water — у
+ * `src/environment-bindings/`, вони під правило не підпадають.
  */
-const SKY_FILES = ['src/scene/atmosphere.js', 'src/scene/sky.js'];
-const SKY_ALLOWED = new Set(['src/engine/fullscreen.js', ...SKY_FILES]);
+const ENV_DIR = 'src/environment/';
+const ENV_ENTRY = `${ENV_DIR}index.js`;
+const ENV_MIN_FILES = 7;   // index, atmosphere, skyBake, skyBackground, sun, measure, fullscreen
 
-function ruleSkyPortable(files) {
+function ruleEnvironmentPortable(files) {
   const failures = [];
-  const present = files.filter(f => SKY_FILES.includes(f.rel));
+  const present = files.filter(f => f.rel.startsWith(ENV_DIR));
   for (const { rel, text } of present) {
     for (const spec of importsOf(text)) {
-      if (isThree(spec) || SKY_ALLOWED.has(resolveFrom(rel, spec))) continue;
-      failures.push(`${rel}: import «${spec}» — небо імпортує лише three, engine/fullscreen.js і своє`);
+      if (isThree(spec) || (spec.startsWith('.') && resolveFrom(rel, spec).startsWith(ENV_DIR))) continue;
+      failures.push(`${rel}: import «${spec}» — модуль оточення імпортує лише three і свою папку`);
     }
   }
-  if (present.length !== SKY_FILES.length) failures.push(`знайдено ${present.length} з ${SKY_FILES.length} файлів неба — оновіть SKY_FILES`);
-  return { id: 'BOUNDARY-2 sky-portable', failures, note: `${present.length} файл(и) неба` };
+  if (!present.some(f => f.rel === ENV_ENTRY)) failures.push(`${ENV_ENTRY} не знайдено — правило дивиться не туди`);
+  if (present.length < ENV_MIN_FILES) failures.push(`${ENV_DIR}: ${present.length} файл(ів), очікувалось ≥ ${ENV_MIN_FILES} — правило дивиться не туди`);
+  return { id: 'BOUNDARY-2 environment-portable', failures, note: `${present.length} файл(ів) ${ENV_DIR}` };
 }
 
 /* ── BOUNDARY-3: Tilecraft лише через завантажувач ────────────────────────── */
@@ -180,15 +184,16 @@ const CAMERA_WRITE = new RegExp([
 /* ── OWNER-4: писарі сонця — baseline, що лише падає ──────────────────────── */
 
 /**
- * `sky.params` (висота, азимут, хмари) пишуть GUI і кожен камерний шот через
- * `setSun` (ARCHITECTURE.md TD3). Віджет часу доби й погоди (MOOD-WEATHER M1)
- * стає єдиним писарем. Власник сам — `src/scene/sky.js` — не рахується.
+ * `env.params` (висота, азимут, хмари; до E1 — `sky.params`) пишуть GUI і кожен
+ * камерний шот через `setSun` (ARCHITECTURE.md TD3). Віджет часу доби й погоди
+ * (MOOD-WEATHER M1) стає єдиним писарем. Власник — `src/environment/index.js` —
+ * не рахується.
  */
-const SUN_OWNER = 'src/scene/sky.js';
+const SUN_OWNER = 'src/environment/index.js';
 const SUN_BASELINE = {
   'src/main.js': 6,
 };
-const SUN_WRITE = /\bsky\.params\.\w+\s*=(?!=)|Object\.assign\(\s*sky\.params\b|\.add\(\s*sky\.params\b/g;
+const SUN_WRITE = /\b(?:sky|env)\.params\.\w+\s*=(?!=)|Object\.assign\(\s*(?:sky|env)\.params\b|\.add\(\s*(?:sky|env)\.params\b/g;
 
 function baselineRule(id, files, re, baseline, skip, hint) {
   const found = new Map();
@@ -349,7 +354,7 @@ async function main() {
   camera.note = `${camera.note}; власник ${CAMERA_OWNER} — ${ownerWrites}`;
   const sun = baselineRule('OWNER-4 sun-writers', files, SUN_WRITE, SUN_BASELINE, SUN_OWNER,
     'сонце пише віджет часу доби (MOOD-WEATHER M1)');
-  const results = [ruleEngineLeaf(files), ruleSkyPortable(files), ruleTilecraftEntry(files),
+  const results = [ruleEngineLeaf(files), ruleEnvironmentPortable(files), ruleTilecraftEntry(files),
     ruleOneLoop(files), ruleOneRendererGui(files), camera, sun, ruleGlobals(files),
     ruleFloatFilter(files), await ruleWaterSamplers()];
 
