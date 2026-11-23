@@ -1,10 +1,10 @@
 # Handoff: mood-weather — віджет погоди-настрою й часу доби
 
 Стан на 2026-11-23. Гілка `master`. Фази з
-[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a і M1b закрито
+[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a, M1b і M2 закрито
 й закомічено; QA — [QA.md](QA.md).
 
-> **Далі:** M2 — плавні переходи; scene-environment E2 закрито 2026-11-23 (`env.setState(next, { tau })`, `update(dt)` — [docs/scene-environment/HANDOFF.md](../scene-environment/HANDOFF.md), рядок «час неба»).
+> **Далі:** не визначено — рішення власника: scene-environment E2b (анімовані хмари, «після M2» у [її HANDOFF](../scene-environment/HANDOFF.md)) чи M3 (потребує назв якорів і слів, спека §8 п.1).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -12,7 +12,7 @@
 ## НЕЗАКРИТЕ — почни звідси
 
 Порядок тем, визначений власником 2026-11-23: **scene-environment E0 → E1 →
-M1a → M1b → scene-environment E2 → M2 → …** `main.js` у цей час не правлять
+M1a → M1b → scene-environment E2 → M2 → …** Далі за M2 порядок не записано. `main.js` у цей час не правлять
 паралельно інші теми. Мапа залежностей:
 
 | фаза | чекає на |
@@ -63,13 +63,14 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      Controls → `custom: true`, наступний дотик → `false`.
    - QA очима: телефон — лист не перекриває рейку.~~ — ЗАКРИТО 2026-11-23.
 
-3. **M2 — плавні переходи** (спека §4.4). τ 6 с (сонце, світло, небо) і 10 с
+~~3. **M2 — плавні переходи** (спека §4.4). τ 6 с (сонце, світло, небо) і 10 с
    (море) через стан оточення з E2; `updateSpectrum` щокадру під час
    переходу моря.
    - проба: A9 → A1 — параметри моря й неба змінюються монотонно, без
      стрибків між кадрами; 95 % за ~3τ.
    - очі власника: запис екрана A9 → A1 і назад, світанок → захід (§6 п.3);
-     Nord 4 ≥ 30 FPS з `autoResolution` (§6 п.8).
+     Nord 4 ≥ 30 FPS з `autoResolution` (§6 п.8).~~ — ЗАКРИТО 2026-11-23; телефон
+   (QA-M2-7) і записи екрана — за власником, відкрите питання нижче.
 
 4. **M3 — зміст віджета** (спека §4.1, §4.2). Ілюстрації дев'яти якорів
    (CSS-градієнти + SVG), чотири слова по краях, емоційні слова з
@@ -106,21 +107,22 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
   переписати критерій для кольорових тайлів (контраст), інша фікстура. Таблиця —
   [QA.md](QA.md) «Відомі провали M1a». До рішення `probe-mood-m1a` виходить з
   кодом 1 на частині readable; anchors і field — зелені.
-- **Заміри на Nord 4** (M2 §6 п.8) і записи екрана (§6 п.3) — лише власник.
+- **Заміри на Nord 4** (M2 §6 п.8, QA-M2-7) і записи екрана (§6 п.3, QA-M2-1…3) — лише
+  власник; після M2 ще не зроблені.
 
 ## Що зроблено і працює
 
-Baseline (M1b, 2026-11-23): guard зелений (OWNER-4 0, BOUNDARY-2 9 файлів, TEX-1 16,
-TYPES-1 21); `npm test` 98/98; `probe-mood-m1b` PASS; `probe-scene-env-identity` Δ 0;
-`probe-mood-m1a` anchors + field PASS, readable 5/27 (відкрите питання).
+Baseline (M2, 2026-11-23): guard зелений (OWNER-4 0, BOUNDARY-2 10 файлів, TEX-1 16,
+TYPES-1 21); `npm test` 108/108; `probe-mood-m2`, `probe-mood-m1b`, `probe-scene-env-smooth` PASS;
+`probe-scene-env-identity` Δ 0; `probe-mood-m1a` anchors + field PASS, readable 5/27 (відкрите питання).
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
-| дані настрою | [src/environment/mood.js](../../src/environment/mood.js) (`MOOD_MAP_V1`, `sampleMood`, `SUN_PATH_V1`, `sunAt`), реекспорт з `environment/index.js` | спека §3.2, §3.3, §2.2; слова й назви — ключі локалі; вода — ваги пресетів | `tests/mood.test.js`, guard BOUNDARY-2 |
+| дані настрою | [src/environment/mood.js](../../src/environment/mood.js) (`MOOD_MAP_V1`, `sampleMood`, `SUN_PATH_V1`, `sunAt`, `MOOD_TAU`, `stepToward`), реекспорт з `environment/index.js` | спека §3.2, §3.3, §2.2, §4.4 (`stepToward` — експонента на місці, τ 0 = одразу); слова й назви — ключі локалі; вода — ваги пресетів | `tests/mood.test.js`, guard BOUNDARY-2 |
 | писар сонця | `env.set()`/`env.dirty` в [index.js](../../src/environment/index.js); `setSun` [main.js:185](../../src/main.js#L185), `sunUi` (геттер/сеттер) [main.js:313](../../src/main.js#L313) | `env.params` пише лише `env.set`; `renderFrame` перепікає при `env.dirty` | guard OWNER-4 (baseline 0) |
-| канали моря | `bindSea`, `mixWater`, `WATER_PRESETS` у [seaBinding.js](../../src/environment-bindings/seaBinding.js) | × — від значень на старті хоста; вода змішується в лінійному RGB; поглинання ÷ clarity | `probe-mood-m1a` anchors |
-| `app.mood` | `applyMood` [main.js:507](../../src/main.js#L507), `moodApi` [main.js:525](../../src/main.js#L525) (`set(v, a, t)`, `state()`) | миттєво: небо + море + грейдинг + дзеркало Controls; `applyMood({ sky: false })` — без сонця й перепікання; до першого `set` — `custom: true`; на старті світ не чіпає | `probe-mood-m1a` anchors |
-| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad`, `gui.onChange` [main.js:540](../../src/main.js#L540) | спека §4.1, §4.2, §4.5: `input(state, final)` — під пальцем море й грейдинг, небо на відпусканні; зміна в папках Sun & sky / Waves / Shore waves / Water / Post або шот → `custom: true`; дотик → `false`; без цифр і `input` | `probe-mood-m1b`, `tests/moodPad.test.js` |
+| канали моря | `bindSea` → `{ channels(sea), read(), write(ch) }`, `mixWater`, `WATER_PRESETS` у [seaBinding.js](../../src/environment-bindings/seaBinding.js) | канали — абсолютні значення хоста (× — від стартових), щоб перехід ішов від того, що на екрані; вода в лінійному RGB; поглинання ÷ clarity; `write` ставить `ocean.dirty` лише коли змінились хвилі | `probe-mood-m1a` anchors, `probe-mood-m2` |
+| `app.mood` і перехід | `applyMood`, `stepMood`, `freezeMood`, `moodApi` у [main.js](../../src/main.js) (`set` миттєво, `to` плавно, `state()` з `moving`, `day`); `stepMood` — у `renderFrame` перед небом | спека §4.4: погода неба — `env.setState` τ 6; день, море, грейдинг — `stepToward` (τ 6/10/6), сонце йде за днем дугою (`SUN_FOLLOW_TAU` 0.1); сонце поза дугою (шот) — прямо τ 6; Controls → `freezeMood`; до першого дотику `custom: true` | `probe-mood-m2`, `probe-mood-m1a` anchors |
+| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad`, `gui.onChange` [main.js:540](../../src/main.js#L540) | спека §4.1, §4.2, §4.5: `input(state, final)` — цілі одразу, світ іде за ними й під пальцем; зміна в папках Sun & sky / Waves / Shore waves / Water / Post або шот → `custom: true`; дотик → `false`; без цифр і `input` | `probe-mood-m1b`, `tests/moodPad.test.js` |
 | поле історії й шоти | `SET_BEARING` [main.js:184](../../src/main.js#L184), `storyAnchor` [main.js:261](../../src/main.js#L261) | кут = азимут заходу 205°, не поточне сонце | `probe-mood-m1a` field, `probe-scene-env-identity` |
 | слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні; у слоті стоїть кнопка віджета | `probe-scene-mobile` |
 | пресети води в Controls | `w`, `setWater`, `applyPreset` у [main.js](../../src/main.js) (папка Water); прибій — `shoreUi`/`setShore` | GUI читає `WATER_PRESETS` з seaBinding; `app.mood.set` оновлює `absorptionBase`, `w.clarity`, `w.scatter`, `shoreUi` | — |
@@ -140,6 +142,12 @@ TYPES-1 21); `npm test` 98/98; `probe-mood-m1b` PASS; `probe-scene-env-identity`
 
 - [`border-radius` на зоні дотику] кути заокругленого елемента не ловлять `pointerdown`, а камінчик кутового якоря (A1, A9) стоїть саме там → заокруглення — у `::before`, зона дотику — `::after` з `inset: -11px` (радіус камінчика). (M1b)
 - [lil-gui 0.21 у пробах] класи — `.lil-controller` і `.lil-name`, не `.controller`/`.name` → слайдер у пробі: `input.value`, потім `input` і `change`; `gui.onChange` бачить зміни всіх папок (`controller.parent` — папка). (M1b)
+
+### Перехід (M2)
+
+- [час у пробах переходу] headless дає ~48 fps, а dt обрізаний до 0.1 с → «95 % за 3τ» за годинником стіни не сходиться (Infinity за 32 с) → міряти годинник кадрів: сума dt (шпигун на `ocean.update`), як у `probe-mood-m2`. (M2)
+- [сонце між двома t] незалежні τ на висоті й азимуті ведуть сонце навпростець, а t 0 → 1 — це рівно 180° азимуту (короткий шлях неоднозначний) → `stepToward` веде t, небо — `setState` з τ 0.1 за ним: відхилення від дуги ≤ 0.03°. (M2)
+- [небо після зміни погоди] `SKY_EPS` хмар 1e-4 → небо «рухається» ~9τ ≈ 55 с, весь час грань за кадр і IBL кожен 6-й кадр → на телефоні міряти FPS усі 55 с, не лише 18. (M2)
 
 ### Проба читабельності (§6 п.5)
 

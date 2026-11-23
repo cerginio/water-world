@@ -5,7 +5,7 @@
 E0, E1, E2 закрито; код теми — `src/environment/` (модуль) і
 `src/environment-bindings/hostBinding.js`, `applySun` і `renderFrame` у `main.js`.
 
-> **Далі:** mood-weather M2 ([docs/mood-weather/HANDOFF.md](../mood-weather/HANDOFF.md)) — плавні переходи віджета через `env.setState`; E2b цієї теми — після M2.
+> **Далі:** E2b — анімовані хмари (mood-weather M2 закрито 2026-11-23); порядок E2b чи mood-weather M3 — за власником.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
