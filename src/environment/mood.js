@@ -99,3 +99,43 @@ export function sunAt(path, t) {
     tint: [1, 1, 1],
   };
 }
+
+// ── transitions (spec §4.4) ──────────────────────────────────────────────────────────────
+// The pebble and the sun on the arc move at once; the world follows them exponentially.
+
+/** τ in seconds per group: the time of day, the light and the sky; the sea (wind, waves, surf) */
+export const MOOD_TAU = Object.freeze({ day: 6, sky: 6, grade: 6, sea: 10 });
+
+/** a value within this share of its target (at least of 1) counts as arrived and snaps */
+const ARRIVED = 1e-4;
+
+/**
+ * One step of x += (target − x)·(1 − e^(−dt/τ)) over numbers, arrays and plain objects, in place:
+ * monotonic per value, 95 % after 3τ. τ 0 snaps. A key missing in `current` takes the target.
+ * @template T
+ * @param {T} current  written in place
+ * @param {T} target
+ * @param {number} dt seconds
+ * @param {number} tau seconds
+ * @returns {boolean} some value is still on its way
+ */
+export function stepToward(current, target, dt, tau) {
+  const k = tau > 0 ? 1 - Math.exp(-Math.max(0, dt) / tau) : 1;
+  let moving = false;
+  const walk = (cur, tgt) => {
+    for (const key of Object.keys(tgt)) {
+      const t = tgt[key];
+      if (typeof t === 'number') {
+        const x = typeof cur[key] === 'number' ? cur[key] : t;
+        const next = x + (t - x) * k;
+        if (Math.abs(t - next) <= ARRIVED * Math.max(1, Math.abs(t))) cur[key] = t;
+        else { cur[key] = next; moving = true; }
+      } else if (t && typeof t === 'object') {
+        if (!cur[key] || typeof cur[key] !== 'object') cur[key] = Array.isArray(t) ? [] : {};
+        walk(cur[key], t);
+      }
+    }
+  };
+  walk(current, target);
+  return moving;
+}

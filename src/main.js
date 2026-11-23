@@ -5,7 +5,7 @@ import { OceanSim, defaultOceanParams } from './water/OceanSim.js';
 import { OceanSurface } from './water/OceanSurface.js';
 import { bakeShoreMap } from './water/shoreMap.js';
 import { bakeWaterTextures } from './water/bakeTextures.js';
-import { createEnvironment, measureEnvironment, MOOD_MAP_V1, SUN_PATH_V1, sampleMood, sunAt } from './environment/index.js';
+import { createEnvironment, measureEnvironment, MOOD_MAP_V1, MOOD_TAU, SUN_PATH_V1, sampleMood, stepToward, sunAt } from './environment/index.js';
 import { bindSunLight } from './environment-bindings/hostBinding.js';
 import { bindSea, WATER_PRESETS } from './environment-bindings/seaBinding.js';
 import { bindPanelCopy } from './ui/perfCopy.js';
@@ -492,58 +492,116 @@ fQ.add(quality, 'reflections');
 fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).onFinishChange(makeTargets);
 [fWave, fShore, fWater, fFloat, fPost].forEach((f) => f.close());
 
-// --- mood weather (MOOD-WEATHER-SPEC §4; M1b: the widget, transitions come in M2) ----------
-// app.mood.set(v, a, t) puts the world in that state at once (sky re-baked); until the first
-// set the world is the Controls' own (custom). The sun goes through env.set like every writer.
-// The widget (src/environment/ui/moodPad.js) moves the sea and the grade while a finger moves
-// and re-bakes the sky on release; a hand change in the mood's Controls folders makes the
-// state custom again (spec §4.5) until the widget's next touch.
-const applySea = bindSea({ ocean, surface, spray, underwater, terrain });
+// --- mood weather (MOOD-WEATHER-SPEC §4) ----------------------------------------------
+// moodState is where the widget points: the pebble and the sun on the arc move at once. The world
+// follows (spec §4.4, M2): the weather sky through env.setState with τ 6; the time of day, the sea
+// and the grade through stepToward in renderFrame — the day τ 6 (the sun walks the arc, not the
+// short way between two azimuths), the sea τ 10 (a new spectrum every frame while the waves
+// change), the grade τ 6. A move starts from what is on screen, so leaving «custom» is smooth too.
+// app.mood.set(v, a, t) is at once (sky re-baked); app.mood.to(v, a, t) and the widget are smooth.
+// Until the first set the world is the Controls' own (custom); a hand change in the mood's
+// Controls folders makes it custom again (spec §4.5): the move stops where it is.
+const sea = bindSea({ ocean, surface, spray, underwater, terrain, clarity: () => w.clarity });
 const moodState = { t: 0.1, v: 1, a: -1, flow: false, custom: true };
+/** the move in progress: `now` is on screen, `to` is where it goes; null at rest */
+let moodMove = null, moodMirrorAt = 0;
+// the sky follows the walked day this closely (one cube face a frame, E2), not at once
+const SUN_FOLLOW_TAU = 0.1;
 const clampTo = (x, lo, hi, name) => {
   if (typeof x !== 'number' || !Number.isFinite(x)) throw new Error(`app.mood.set: ${name} must be a number`);
   return Math.min(hi, Math.max(lo, x));
 };
-/** the world from moodState; `sky` false skips the sun and the sky bake (a finger still moving) */
-function applyMood({ sky }) {
-  const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
-  if (sky) {
-    const sun = sunAt(SUN_PATH_V1, moodState.t);
-    env.set({ elevation: sun.elevation, azimuth: sun.azimuth,
-      sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity });
-    applySun();
-  }
-  const water = applySea(m.sea);
-  Object.assign(post.params, m.grade);
-  // the Controls mirror the world (their next change would otherwise write stale values back)
+const gradeNow = () => ({ keyValue: post.params.keyValue, contrast: post.params.contrast, saturation: post.params.saturation });
+/** the day that is on screen: the walked one, else moodState's (custom: wherever it was left) */
+let dayShown = moodState.t;
+/** the Controls mirror the world (their next change would otherwise write stale values back) */
+function mirrorMood(display) {
   shoreUi.amplitude = su.uShoreWave.value.x;
-  absorptionBase.fromArray(water.absorption);
-  w.clarity = water.clarity;
-  w.scatter = '#' + new THREE.Color().fromArray(water.scatter).getHexString();
-  gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  const ch = moodMove?.now.sea ?? sea.read();
+  absorptionBase.fromArray(ch.absorption);
+  w.clarity = ch.clarity;
+  w.scatter = '#' + new THREE.Color().fromArray(ch.scatter).getHexString();
+  if (display) gui.controllersRecursive().forEach((c) => c.updateDisplay());
+}
+/** the sun stands on the arc at day t (else a shot or a slider put it elsewhere) */
+const sunOnPath = (t) => {
+  const sun = sunAt(SUN_PATH_V1, t);
+  return Math.abs(env.target.elevation - sun.elevation) < 0.01 && Math.abs(env.target.azimuth - sun.azimuth) < 0.01;
+};
+/** moodState → targets; `smooth` false puts the world there at once */
+function applyMood({ smooth }) {
+  const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
+  const sky = { sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity };
+  const sun = sunAt(SUN_PATH_V1, moodState.t);
   moodState.custom = false;
+  if (!smooth) {
+    env.set({ ...sky, elevation: sun.elevation, azimuth: sun.azimuth });
+    moodMove = { now: { day: { t: moodState.t }, sea: sea.read(), grade: gradeNow() }, sunDirect: false, to: null };
+  } else if (!moodMove) {
+    // from what is on screen; a sun off the arc goes straight to its target (the sky's own τ)
+    const direct = !sunOnPath(dayShown);
+    moodMove = { now: { day: { t: direct ? moodState.t : dayShown }, sea: sea.read(), grade: gradeNow() }, sunDirect: direct, to: null };
+  }
+  moodMove.to = { day: { t: moodState.t }, sea: sea.channels(m.sea), grade: { ...m.grade } };
+  if (smooth) env.setState(moodMove.sunDirect ? { ...sky, elevation: sun.elevation, azimuth: sun.azimuth } : sky, { tau: MOOD_TAU.sky });
+  else { stepMood(0, true); applySun(); }
+}
+/** one frame of the move: day → sun, sea channels, grade; at once when `snap` */
+function stepMood(dt, snap = false) {
+  const { now, to } = moodMove;
+  const day = stepToward(now.day, to.day, dt, snap ? 0 : MOOD_TAU.day);
+  const waves = stepToward(now.sea, to.sea, dt, snap ? 0 : MOOD_TAU.sea);
+  const grade = stepToward(now.grade, to.grade, dt, snap ? 0 : MOOD_TAU.grade);
+  dayShown = now.day.t;
+  if (!snap && !moodMove.sunDirect) {
+    const sun = sunAt(SUN_PATH_V1, dayShown);
+    if (sun.elevation !== env.target.elevation || sun.azimuth !== env.target.azimuth)
+      env.setState({ elevation: sun.elevation, azimuth: sun.azimuth }, { tau: SUN_FOLLOW_TAU });
+  }
+  sea.write(now.sea);
+  Object.assign(post.params, now.grade);
+  const moving = day || waves || grade;
+  if (!moving) moodMove = null;
+  // the slider handles move four times a second, and once more when the world arrives
+  moodMirrorAt += dt;
+  const display = !moving || moodMirrorAt >= 0.25;
+  if (display) moodMirrorAt = 0;
+  mirrorMood(display);
+}
+/** a hand change in the Controls: the move stops where it is, the sky too */
+function freezeMood() {
+  moodMove = null;
+  env.setState({ ...env.params });
 }
 const moodApi = {
-  /** @param {number} v valence −1…1 @param {number} a arousal −1…1 @param {number} [t] day 0…1 */
-  set(v, a, t = moodState.t) {
+  /** at once. @param {number} v valence −1…1 @param {number} a arousal −1…1 @param {number} [t] day 0…1 */
+  set(v, a, t = moodState.t) { return moodApi.go(v, a, t, false); },
+  /** smoothly, like the widget (spec §4.4) */
+  to(v, a, t = moodState.t) { return moodApi.go(v, a, t, true); },
+  go(v, a, t, smooth) {
     moodState.v = clampTo(v, -1, 1, 'v');
     moodState.a = clampTo(a, -1, 1, 'a');
     moodState.t = clampTo(t, 0, 1, 't');
-    applyMood({ sky: true });
+    applyMood({ smooth });
     moodPad.sync();
     return moodApi.state();
   },
   state() {
     const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
-    return { ...moodState, map: MOOD_MAP_V1.version, anchor: m.anchor, words: m.words };
+    // moving: the world is still on its way (the sea, the grade, the day or the sky)
+    return { ...moodState, map: MOOD_MAP_V1.version, anchor: m.anchor, words: m.words,
+      moving: moodMove !== null || env.dirty, day: dayShown };
   },
 };
 const moodPad = createMoodPad({
   get: () => moodState,
+  // the widget is smooth while the finger moves and on release alike; `final` re-syncs the pad
   input: ({ t, v, a }, final) => {
-    if (final) { moodApi.set(v, a, t); return; }
+    if (final) { moodApi.to(v, a, t); return; }
+    const wasCustom = moodState.custom;
     Object.assign(moodState, { t, v, a });
-    applyMood({ sky: false });
+    applyMood({ smooth: true });
+    if (wasCustom) moodPad.sync();
   },
   language: railLanguage([...navigator.languages, navigator.language]),
 });
@@ -552,6 +610,7 @@ const moodFolders = new Set([fSun, fWave, fShore, fWater, fPost]);
 gui.onChange(({ controller }) => {
   if (moodState.custom || !(moodFolders.has(controller.parent) || controller === viewController)) return;
   moodState.custom = true;
+  freezeMood();
   moodPad.sync();
 });
 
@@ -576,6 +635,8 @@ function renderFrame(dt) {
   if (gl.isContextLost()) return;
   elapsed += dt;
   timer.beginFrame();
+  // the mood's move first: its day lands in the sky update below (spec §4.4)
+  if (moodMove) stepMood(dt);
   // inside the timer's frame, so a sky change shows as its own `sky` line (E0); while the sky
   // moves (env.setState with τ) one cube face a frame, the IBL and a full shadow at rest (E2)
   if (env.dirty) { timer.begin('sky'); applySunLight(env.update(dt), dt); }

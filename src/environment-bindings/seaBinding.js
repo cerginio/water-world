@@ -40,13 +40,23 @@ export function mixWater(weights) {
 }
 
 /**
+ * The sea as the host's own channels: absolute values, so a transition can start from whatever is
+ * on screen (a Controls edit included) and blend linearly to a mood (spec §4.4).
+ * @typedef {{ windSpeed: number, waveScale: number, swellScale: number, choppiness: number,
+ *   shore: number, spray: number, terrainFog: number, waterFog: number,
+ *   absorption: number[], clarity: number, scatter: number[], foam: number[], turbidity: number }} SeaChannels
+ *   absorption — before clarity (the Controls' base); the surface gets absorption ÷ clarity
+ */
+
+const WAVE_KEYS = /** @type {const} */ (['windSpeed', 'waveScale', 'swellScale']);
+
+/**
  * @param {{ ocean: { params: Record<string, number>, dirty: boolean }, surface: { uniforms: Record<string, { value: any }> },
  *   spray: { params: { amount: number } }, underwater: { params: { scattering: number } },
- *   terrain: { uniforms: Record<string, { value: any }> } }} host
- * @returns {(sea: import('../environment/mood.js').MoodSea) => ReturnType<typeof mixWater> & { clarity: number }}
- *   apply(sea) writes the channels and returns the water it set (the Controls mirror it)
+ *   terrain: { uniforms: Record<string, { value: any }> }, clarity: () => number }} host
+ *   clarity — the clarity the surface absorption is divided by now (the Controls' value)
  */
-export function bindSea({ ocean, surface, spray, underwater, terrain }) {
+export function bindSea({ ocean, surface, spray, underwater, terrain, clarity }) {
   const su = surface.uniforms;
   // the × channels multiply the defaults the host started with
   const base = {
@@ -55,22 +65,44 @@ export function bindSea({ ocean, surface, spray, underwater, terrain }) {
     terrainFog: terrain.uniforms.uFogDensity.value,
     waterFog: su.uOptics.value.w,
   };
-  return function applySea(sea) {
-    const op = ocean.params;
-    op.windSpeed = sea.windSpeed;
-    op.waveScale = sea.waveScale;
-    op.swellScale = sea.swellScale;
-    op.choppiness = sea.choppiness;
-    ocean.dirty = true;
-    su.uShoreWave.value.x = base.shore * sea.shore;
-    spray.params.amount = base.spray * sea.spray;
-    terrain.uniforms.uFogDensity.value = base.terrainFog * sea.fog;
-    su.uOptics.value.w = base.waterFog * sea.fog;
-    const water = mixWater(sea.water);
-    su.uAbsorption.value.fromArray(water.absorption).multiplyScalar(1 / sea.clarity);
-    su.uScatterColor.value.fromArray(water.scatter);
-    su.uFoamTint.value.fromArray(water.foam);
-    underwater.params.scattering = water.turbidity;
-    return { ...water, clarity: sea.clarity };
+  const op = ocean.params;
+  return {
+    /** @param {import('../environment/mood.js').MoodSea} sea @returns {SeaChannels} */
+    channels(sea) {
+      const water = mixWater(sea.water);
+      return {
+        windSpeed: sea.windSpeed, waveScale: sea.waveScale, swellScale: sea.swellScale, choppiness: sea.choppiness,
+        shore: base.shore * sea.shore, spray: base.spray * sea.spray,
+        terrainFog: base.terrainFog * sea.fog, waterFog: base.waterFog * sea.fog,
+        absorption: water.absorption, clarity: sea.clarity, scatter: water.scatter, foam: water.foam,
+        turbidity: water.turbidity,
+      };
+    },
+    /** @returns {SeaChannels} what the host shows now */
+    read() {
+      const c = clarity();
+      return {
+        windSpeed: op.windSpeed, waveScale: op.waveScale, swellScale: op.swellScale, choppiness: op.choppiness,
+        shore: su.uShoreWave.value.x, spray: spray.params.amount,
+        terrainFog: terrain.uniforms.uFogDensity.value, waterFog: su.uOptics.value.w,
+        absorption: su.uAbsorption.value.toArray().map((x) => x * c), clarity: c,
+        scatter: su.uScatterColor.value.toArray(), foam: su.uFoamTint.value.toArray(),
+        turbidity: underwater.params.scattering,
+      };
+    },
+    /** @param {SeaChannels} ch — the spectrum is re-made (ocean.dirty) only when the waves changed */
+    write(ch) {
+      if (WAVE_KEYS.some((k) => op[k] !== ch[k])) ocean.dirty = true;
+      for (const k of WAVE_KEYS) op[k] = ch[k];
+      op.choppiness = ch.choppiness;
+      su.uShoreWave.value.x = ch.shore;
+      spray.params.amount = ch.spray;
+      terrain.uniforms.uFogDensity.value = ch.terrainFog;
+      su.uOptics.value.w = ch.waterFog;
+      su.uAbsorption.value.fromArray(ch.absorption).multiplyScalar(1 / ch.clarity);
+      su.uScatterColor.value.fromArray(ch.scatter);
+      su.uFoamTint.value.fromArray(ch.foam);
+      underwater.params.scattering = ch.turbidity;
+    },
   };
 }

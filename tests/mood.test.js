@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
-import { MOOD_MAP_V1, SUN_PATH_V1, sampleMood, sunAt } from '../src/environment/mood.js';
+import { describe, expect, it, test } from 'vitest';
+import { MOOD_MAP_V1, SUN_PATH_V1, sampleMood, stepToward, sunAt } from '../src/environment/mood.js';
 import { WATER_PRESETS, mixWater } from '../src/environment-bindings/seaBinding.js';
 
 // MOOD-WEATHER M1a: the matrix of spec §3.2 and the sun path of spec §2.2 as data.
@@ -127,5 +127,47 @@ describe('mixWater', () => {
   });
   test('no known preset falls back to clear', () => {
     expect(mixWater({ nonsuch: 1 })).toEqual({ ...WATER_PRESETS.clear });
+  });
+});
+
+describe('stepToward (spec §4.4)', () => {
+  it('is monotonic and 95 % done after 3τ', () => {
+    const cur = { x: 0, rgb: [1, 0, 0.5] }, to = { x: 10, rgb: [0, 1, 0.5] };
+    let prev = 0, t = 0;
+    while (t < 30 - 1e-9) {
+      stepToward(cur, to, 1 / 60, 10);
+      t += 1 / 60;
+      expect(cur.x).toBeGreaterThanOrEqual(prev);
+      prev = cur.x;
+    }
+    expect(cur.x / 10).toBeCloseTo(1 - Math.exp(-3), 6);
+    expect(cur.x / 10).toBeGreaterThan(0.95);
+    expect(cur.rgb[0]).toBeCloseTo(Math.exp(-3), 6);
+    expect(cur.rgb[2]).toBe(0.5);
+  });
+
+  it('does not depend on how the time is cut', () => {
+    const a = { x: 0 }, b = { x: 0 };
+    for (let i = 0; i < 60; i++) stepToward(a, { x: 1 }, 1 / 60, 6);
+    stepToward(b, { x: 1 }, 1, 6);
+    expect(a.x).toBeCloseTo(b.x, 12);
+  });
+
+  it('snaps at τ 0, arrives and reports rest', () => {
+    const cur = { x: 3, o: { y: 1 } };
+    expect(stepToward(cur, { x: 5, o: { y: 2 } }, 0, 0)).toBe(false);
+    expect(cur).toEqual({ x: 5, o: { y: 2 } });
+    const c = { x: 0 };
+    let n = 0;
+    while (stepToward(c, { x: 1 }, 1 / 60, 1)) n++;
+    expect(c.x).toBe(1);
+    expect(n / 60).toBeGreaterThan(8);   // ln(1e4) ≈ 9.2 τ to within 1e-4
+    expect(n / 60).toBeLessThan(10);
+  });
+
+  it('takes the target for a key the current state lacks', () => {
+    const cur = {};
+    stepToward(cur, { x: 2, v: [1, 2] }, 1 / 60, 6);
+    expect(cur).toEqual({ x: 2, v: [1, 2] });
   });
 });

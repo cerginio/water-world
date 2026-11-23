@@ -5,7 +5,7 @@ import { createSkyState } from './state.js';
 import { updateSun } from './sun.js';
 
 export { measureEnvironment } from './measure.js';
-export { MOOD_MAP_V1, SUN_PATH_V1, sampleMood, sunAt } from './mood.js';
+export { MOOD_MAP_V1, MOOD_TAU, SUN_PATH_V1, sampleMood, stepToward, sunAt } from './mood.js';
 
 // scene-environment: sky, sun and the baked environment cube for any three host
 // (SCENE-ENVIRONMENT-SPEC §5). Imports only three and its own folder (guard BOUNDARY-2); no RAF,

@@ -1,8 +1,9 @@
 // MOOD-WEATHER M1b: the widget (spec §4.1, §4.2 without content, §4.5).
 //   1. desktop — the round button right of the rail; the first open shows morning + A9 (§6 p.2),
 //      half transparent while the world is the Controls' own; no digits and no range inputs in
-//      the widget's DOM (§6 p.9); dragging the pebble moves the sea at once and the sky only on
-//      release; a tap moves the pebble there; the sun drags along the arc and stops at its ends;
+//      the widget's DOM (§6 p.9); dragging the pebble sets the targets at once and the world
+//      follows them (M2: the sea and the sky on their way while the finger moves); a tap moves the
+//      pebble there; the sun drags along the arc and stops at its ends;
 //      a Controls slider makes the state custom, the next touch hands it back.
 //   2. phone — the bottom sheet stands above the rail, fits the screen, the window is square
 //      and ≤ 320 px; a tap in the window sets the mood.
@@ -14,7 +15,6 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE
   ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
 
 const BASE = process.env.PROBE_BASE ?? 'http://localhost:5199/';
-const sunAt = (t) => ({ elevation: -2 + 62 * Math.sin(Math.PI * t), azimuth: 205 - 180 * (1 - t) });   // spec §2.2
 const PHONES = [
   { name: 'nord4', width: 412, height: 915 },
   { name: 'narrow', width: 360, height: 780 },
@@ -86,18 +86,18 @@ try {
     assert.equal(dom.inputs, 0, 'no inputs (no sliders) in the widget');
     assert.equal((await page.evaluate(() => app.env.params.cloudCoverage)), before.cc, 'opening does not touch the world');
 
-    // drag the pebble A9 → A1: the sea follows the finger, the sky waits for the release
+    // drag the pebble A9 → A1: the targets follow the finger, the world is on its way (M2, §4.4)
     await page.mouse.move(g.pebble.x, g.pebble.y);
     await page.mouse.down();
     for (let i = 1; i <= 8; i++) await page.mouse.move(g.pebble.x - (i / 8) * 260, g.pebble.y - (i / 8) * 260);
-    const mid = await page.evaluate(() => ({ s: app.mood.state(), cc: app.env.params.cloudCoverage, wind: app.ocean.params.windSpeed }));
-    assert.equal(mid.cc, before.cc, 'sky not re-baked while the finger is down');
-    close(mid.wind, 22, 'sea follows the finger (A1 wind)', 1e-6);
+    const mid = await page.evaluate(() => ({ s: app.mood.state(), cc: app.env.target.cloudCoverage, wind: app.ocean.params.windSpeed }));
+    close(mid.cc, 0.95, 'the sky goes to A1 while the finger is down', 1e-6);
+    assert.ok(mid.wind < 22 && mid.s.moving, `the sea is on its way, not there (wind ${mid.wind})`);
     assert.equal(mid.s.custom, false, 'a touch hands the world to the widget');
     await page.mouse.up();
-    const a1 = await page.evaluate(() => ({ s: app.mood.state(), cc: app.env.params.cloudCoverage, dirty: app.env.dirty }));
+    const a1 = await page.evaluate(() => ({ s: app.mood.state(), cc: app.env.target.cloudCoverage, dirty: app.env.dirty }));
     assert.deepEqual([a1.s.v, a1.s.a, a1.s.anchor], [-1, 1, 'A1'], 'released past the top-left corner → A1');
-    close(a1.cc, 0.95, 'sky baked on release (A1 cloud)', 1e-6);
+    close(a1.cc, 0.95, 'the sky goes to A1 (cloud)', 1e-6);
     g = await geometry(page);
     assert.ok(!g.custom && g.opacity === 1, 'opaque once the widget owns the world');
     close(g.pebble.x, g.pad.left, 'A1 pebble x', 1); close(g.pebble.y, g.pad.top, 'A1 pebble y', 1);
@@ -117,7 +117,7 @@ try {
     await page.mouse.up();
     const noon = await page.evaluate(() => ({ s: app.mood.state(), e: { ...app.env.params } }));
     close(noon.s.t, 0.5, 'sun dragged to the top → noon', 0.01);
-    close(noon.e.elevation, sunAt(noon.s.t).elevation, 'noon elevation', 1e-6);
+    assert.ok(noon.s.moving && noon.s.day < noon.s.t, `the world walks the day after the sun (${noon.s.day} → ${noon.s.t})`);
     assert.equal(noon.s.anchor, 'A5', 'the day leaves the weather alone');
     await page.mouse.move(top.x, top.y);
     await page.mouse.down();
@@ -125,7 +125,6 @@ try {
     await page.mouse.up();
     const dusk = await page.evaluate(() => ({ s: app.mood.state(), e: { ...app.env.params } }));
     assert.equal(dusk.s.t, 1, 'past the right end the sun stops at sunset');
-    close(dusk.e.elevation, -2, 'sunset elevation', 1e-6); close(dusk.e.azimuth, 205, 'sunset azimuth', 1e-6);
 
     // a Controls slider → custom; the next touch hands the world back
     await page.evaluate(() => {
@@ -141,7 +140,7 @@ try {
     g = await geometry(page);
     assert.ok(g.custom && Math.abs(g.opacity - 0.45) < 0.01, 'custom → half transparent again');
     await page.mouse.click(g.pad.right - 2, g.pad.bottom - 2);
-    const back = await page.evaluate(() => ({ s: app.mood.state(), cc: app.env.params.cloudCoverage }));
+    const back = await page.evaluate(() => ({ s: app.mood.state(), cc: app.env.target.cloudCoverage }));
     assert.equal(back.s.custom, false, 'the next touch → not custom');
     assert.equal(back.s.anchor, 'A9', 'bottom-right → A9');
     close(back.cc, 0.12, 'A9 sky after the touch (2 px from the corner)', 0.02);
@@ -160,7 +159,7 @@ try {
     assert.ok((await geometry(page)).hidden, 'a second click collapses');
     await context.close();
     report.push(`desktop: button ${g.button.width}px right of the rail; first open t 0.1 + A9, custom ½; drag A9→A1 `
-      + `(sea live, sky on release); tap → A5; sun → noon → stops at sunset; Controls → custom → touch → A9 `
+      + `(targets live, world on its way); tap → A5; sun → noon → stops at sunset; Controls → custom → touch → A9 `
       + `(${((performance.now() - ts) / 1000).toFixed(1)} s)`);
   }
 
