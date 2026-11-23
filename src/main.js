@@ -301,7 +301,7 @@ const stations = createStationRail({
 
 let fSun = null;
 // --- GUI -----------------------------------------------------------------------
-const gui = new GUI({ title: 'Gelatin Water' });
+const gui = new GUI({ title: 'Edge of the Elements' });
 if (mobile) gui.close();   // on phones the open panel covers most of the screen
 // hidden until F2 / F3, ?controls / ?fps / ?debug or the three-finger strip (SCENE-UI-SPEC §3)
 const techPanels = createTechPanels({ gui, perf: document.getElementById('perf'), args });
