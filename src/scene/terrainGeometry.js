@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { halfTexture } from '../engine/halfTexture.js';
 import { islandHeight, ISLAND_SIZE } from './islandHeight.js';
 
-// Grid mesh of the island plus a float heightmap of the same footprint,
+// Grid mesh of the island plus a half-float heightmap of the same footprint,
 // which the water uses for shore depth (wave damping, shallow colour, foam).
 export function buildTerrain(segments = 384, mapSize = 256) {
   const geo = new THREE.PlaneGeometry(ISLAND_SIZE, ISLAND_SIZE, segments, segments);
@@ -26,10 +27,7 @@ export function buildTerrain(segments = 384, mapSize = 256) {
       data[j * mapSize + i] = islandHeight(x, z);
     }
   }
-  const heightMap = new THREE.DataTexture(data, mapSize, mapSize, THREE.RedFormat, THREE.FloatType);
-  heightMap.minFilter = heightMap.magFilter = THREE.LinearFilter;
-  heightMap.wrapS = heightMap.wrapT = THREE.ClampToEdgeWrapping;
-  heightMap.needsUpdate = true;
+  const heightMap = halfTexture(data, mapSize, mapSize, THREE.RedFormat);
 
   return { geometry: geo, heightMap };
 }

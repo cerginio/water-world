@@ -29,6 +29,7 @@
 | [OWNER-4](#owner-4--писарі-сонця-не-множаться) | записи `sky.params` поза `sky.js` не ростуть: `main.js` 6 | guard-static, baseline 6 ↓ | борг |
 | [OWNER-5](#owner-5--глобали-пише-лише-корінь-композиції) | `window.*` / `globalThis.*` / `self.*` пише лише `src/main.js` | guard-static, baseline 0 | ✓ |
 | [BUDGET-1](#budget-1--семплери-води-в-мінімумах-webgl2) | вода: фрагмент ≤ 16, вершина ≤ 16, разом ≤ 32 семплерів | guard-static | 16/16 |
+| [TEX-1](#tex-1--float-текстури-без-лінійної-фільтрації) | `FloatType` — лише з `NearestFilter`; лінійно фільтровані дані — half float (`engine/halfTexture.js`) | guard-static + проба `probe-scene-shore` | ✓ |
 | [TYPES-1](#types-1--помилки-типів-не-ростуть) | помилок `tsc --checkJs` не більше baseline, по кожному файлу | guard (окремий процес), baseline 21 ↓ | борг |
 
 «↓» — baseline лише опускається: guard падає і на зростанні, і на зникненні
@@ -238,6 +239,41 @@ WebGL2). Зараз фрагмент 16/16.
 розбір — [scripts/audit/glsl-samplers.mjs](scripts/audit/glsl-samplers.mjs);
 експорт — `WATER_SHADERS` у [src/water/OceanSurface.js](src/water/OceanSurface.js).
 
+## TEX-1 — float-текстури без лінійної фільтрації
+
+**Формулювання.** Текстура чи render target з `FloatType` має `NearestFilter`
+(min і mag). Дані, які шейдер читає з лінійною фільтрацією, — `HalfFloatType`
+через [src/engine/halfTexture.js](src/engine/halfTexture.js). Виняток —
+`DepthTexture` з `compareFunction` (shadow-семплер, повний у ядрі WebGL2).
+
+**Походження.** scene-ui U4, 2026-11-23: на телефоні власника (Chrome Android,
+`OES_texture_float_linear` немає) навколо острова — квадрат 1800 × 1800 м світлої
+гладкої «мілини» без прибою з різкою межею. `FloatType` + `LinearFilter` без
+розширення — неповна текстура, читається як 0 → глибина 0 у всій карті берега.
+Desktop має розширення — жоден рівень перевірок цього не бачив.
+
+**Механізм.** guard-static, `TEX-1 float-filter`: кожен `FloatType` у `src/` —
+його інструкція (опції `minFilter:`/`magFilter:`, `WebGL*RenderTarget` без двох
+`NearestFilter` — лінійний за замовчуванням three) і наступні інструкції
+`<ім'я>.minFilter|magFilter = …`. Розмір: ≥ 10 `FloatType`, інакше правило дивиться
+не туди. Поведінково — [scripts/probe-scene-shore.mjs](scripts/probe-scene-shore.mjs):
+трекер WebGL перелічує `R/RG/RGB/RGBA32F`, прив'язані до draw з лінійним фільтром
+(до фіксу — `RGBA32F` ×2 і `R32F`, після — 0; працює й на деплої).
+
+**Перевірюване твердження.** `✓ TEX-1 float-filter — 16 FloatType`.
+
+| мутація | guard до правила | guard після |
+|---|---|---|
+| `shoreMap.js`: `floatTex` знову `new THREE.DataTexture(…, THREE.FloatType)` + `tex.minFilter = tex.magFilter = THREE.LinearFilter` (відкат U4) | ✓ проходить — дефект | ✗ `shoreMap.js:69: FloatType + лінійна фільтрація` |
+| `terrainGeometry.js`: heightMap знову `FloatType` + `LinearFilter` | ✓ проходить — дефект | ✗ `terrainGeometry.js:30: …` |
+| `TileSim.js:320`: `minFilter: THREE.LinearFilter` у float render target | ✓ проходить — дефект | ✗ `TileSim.js:320: …` |
+| `WaterQuery.js:27`: прибрати `minFilter`/`magFilter` з float render target | ✓ проходить — дефект | ✗ `WaterQuery.js:27: …` |
+| `floaterShadow.js`: прибрати `depth.compareFunction = …` | ✓ проходить — дефект | ✗ `floaterShadow.js:23: …` |
+
+**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleFloatFilter`;
+хелпер — `halfTexture` у [src/engine/halfTexture.js](src/engine/halfTexture.js);
+юніт — [tests/shoreTextures.test.js](tests/shoreTextures.test.js).
+
 ## TYPES-1 — помилки типів не ростуть
 
 **Формулювання.** `tsc --checkJs` над `src/` (tsconfig.json, `strict: false`)
@@ -289,7 +325,7 @@ WebGL2). Зараз фрагмент 16/16.
   проб покривають лише назване в них.
 - **Не працюють без циклу фаз.** Реєстр росте лише тоді, коли фаза виправила
   регресію і має для неї механізм. Без цього через пів року тут будуть ті самі
-  10 правил.
+  11 правил.
 - **Не безкоштовні.** Кожне правило — код, що може впасти на легальному
   рефакторингу (P15). Правило, що тричі впало хибно, переписують як похідне
   твердження або видаляють — це нормальний хід, не поразка. Регулярні вирази

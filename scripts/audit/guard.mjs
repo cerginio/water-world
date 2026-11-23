@@ -258,6 +258,84 @@ async function ruleWaterSamplers() {
   return { id: 'BUDGET-1 water-samplers', failures, note: `fragment ${fragment.length}/16, vertex ${vertex.length}/16, combined ${combined}/32` };
 }
 
+/* ── TEX-1: float-текстури без лінійної фільтрації ────────────────────────── */
+
+/**
+ * `FloatType` + `LinearFilter` фільтрується лише з `OES_texture_float_linear`.
+ * На телефоні власника (Chrome Android, 2026-11-23) розширення немає: текстура
+ * неповна й читається як 0 — карта берега давала глибину 0 у квадраті 1800 м
+ * (scene-ui U4). Лінійно фільтровані дані — `HalfFloatType`
+ * (`engine/halfTexture.js`); `FloatType` — лише з `NearestFilter`.
+ * Виняток: `DepthTexture` з `compareFunction` (shadow-семплер, ядро WebGL2).
+ *
+ * Розбір по інструкціях: інструкція з `FloatType` (між `;`) — її опції
+ * `minFilter:`/`magFilter:`, далі присвоєння `<ім'я>.minFilter|magFilter = …` у
+ * наступних інструкціях. `WebGL*RenderTarget` без явного `NearestFilter` — лінійний
+ * за замовчуванням three.
+ */
+const FLOAT_TYPE = /(?<![\w$])(?:THREE\.)?FloatType\b/g;
+const LINEAR = /\b\w*Linear\w*Filter\b/;
+
+function statementAt(text, index) {
+  const start = text.lastIndexOf(';', index) + 1;
+  const endAt = text.indexOf(';', index);
+  return { start, end: endAt < 0 ? text.length : endAt + 1 };
+}
+
+// Найглибший незакритий `new THREE.X(` перед index у межах інструкції.
+function enclosingCtor(text, from, index) {
+  const re = /\bnew\s+(?:THREE\.)?(\w+)\s*\(/g;
+  re.lastIndex = from;
+  let found = null;
+  for (let m; (m = re.exec(text)) && m.index < index;) {
+    let depth = 0;
+    for (let i = m.index + m[0].length - 1; i < index; i++) {
+      if (text[i] === '(') depth++;
+      else if (text[i] === ')') depth--;
+    }
+    if (depth > 0) found = m[1];
+  }
+  return found;
+}
+
+function ruleFloatFilter(files) {
+  const failures = [];
+  let checked = 0;
+  for (const { rel, text } of files) {
+    for (const m of text.matchAll(FLOAT_TYPE)) {
+      checked++;
+      const { start, end } = statementAt(text, m.index);
+      const stmt = text.slice(start, end);
+      const ctor = enclosingCtor(text, start, m.index);
+      const line = text.slice(0, m.index).split('\n').length;
+      // ім'я, якому присвоєно конструктор: останнє `x =` перед FloatType (`=>` пропускається)
+      const name = text.slice(start, m.index).match(/([\w$.]+)\s*=(?![=>])(?:[^=;]|=>)*$/)?.[1];
+      // наступні інструкції, що налаштовують ту саму текстуру
+      const after = [];
+      let pos = end;
+      for (let k = 0; k < (name ? 8 : 0) && pos < text.length; k++) {
+        const next = statementAt(text, pos);
+        const s = text.slice(next.start, next.end);
+        if (!s.trim().startsWith(`${name}.`)) break;
+        after.push(s);
+        pos = next.end;
+      }
+      const assigned = after.filter(s => /\.(?:minFilter|magFilter)\s*=/.test(s));
+      const inline = [...stmt.matchAll(/\b(?:minFilter|magFilter)\s*:\s*([\w.]+)/g)].map(x => x[1]);
+      const compare = after.some(s => /\.compareFunction\s*=/.test(s));
+      let linear = assigned.some(s => LINEAR.test(s));
+      if (ctor === 'DepthTexture') linear = linear && !compare;
+      else {
+        if (inline.some(f => LINEAR.test(f))) linear = true;
+        if (/^WebGL\w*RenderTarget$/.test(ctor ?? '') && inline.filter(f => /NearestFilter/.test(f)).length < 2) linear = true;
+      }
+      if (linear) failures.push(`${rel}:${line}: FloatType + лінійна фільтрація — без OES_texture_float_linear читається як 0 → halfTexture() / HalfFloatType або NearestFilter`);
+    }
+  }
+  if (checked < 10) failures.push(`перевірено ${checked} FloatType, очікувалось ≥ 10 — правило дивиться не туди`);
+  return { id: 'TEX-1 float-filter', failures, note: `${checked} FloatType` };
+}
+
 /* ── main ─────────────────────────────────────────────────────────────────── */
 
 async function main() {
@@ -273,7 +351,7 @@ async function main() {
     'сонце пише віджет часу доби (MOOD-WEATHER M1)');
   const results = [ruleEngineLeaf(files), ruleSkyPortable(files), ruleTilecraftEntry(files),
     ruleOneLoop(files), ruleOneRendererGui(files), camera, sun, ruleGlobals(files),
-    await ruleWaterSamplers()];
+    ruleFloatFilter(files), await ruleWaterSamplers()];
 
   if (process.argv.includes('--baseline')) {
     const print = (name, found) => console.log(`Підставте у ${name}:\n{\n${[...found]

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { halfTexture } from '../engine/halfTexture.js';
 
-// Bakes (height, signed coast distance, ∇sdf.x, ∇sdf.z) into one float texture.
+// Bakes (height, signed coast distance, ∇sdf.x, ∇sdf.z) into one half-float texture.
 // sdf > 0 offshore, < 0 on land, in metres. Exact EDT (Felzenszwalb) then a light
 // blur so the gradient doesn't flip hard along medial axes in bays.
 // Plus `travel`: (tau, dir.x, dir.z, shoal), same size/extent mapping, see bakeTravel():
@@ -64,13 +65,7 @@ function boxBlur(src, size, r) {
   return dst;
 }
 
-function floatTex(data, size) {
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.FloatType);
-  tex.minFilter = tex.magFilter = THREE.LinearFilter;
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.needsUpdate = true;
-  return tex;
-}
+const floatTex = (data, size) => halfTexture(data, size, size, THREE.RGBAFormat);
 
 // --- wave travel-time field ------------------------------------------------------
 // tau = seconds a shallow-water front needs from the coastline to here: eikonal
@@ -305,11 +300,7 @@ function surfShelter(height, dirX, dirZ, sdf, size, texel) {
   }
   // blur: energy diffracts into the lee a little, and the gate shouldn't show texels
   const out = boxBlur(boxBlur(S, size, 2), size, 2);
-  const tex = new THREE.DataTexture(out, size, size, THREE.RedFormat, THREE.FloatType);
-  tex.minFilter = tex.magFilter = THREE.LinearFilter;
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.needsUpdate = true;
-  return tex;
+  return halfTexture(out, size, size, THREE.RedFormat);
 }
 
 // obstacle(x, z): optional extra height (e.g. a rock) raised into the bathymetry the wave
