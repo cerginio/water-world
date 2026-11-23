@@ -2,10 +2,10 @@
 
 Стан на 2026-11-23. Гілка `master`. Фази з
 [SCENE-ENVIRONMENT-SPEC.md](../../SCENE-ENVIRONMENT-SPEC.md) (далі — «спека»).
-E0, E1, E2 закрито; код теми — `src/environment/` (модуль) і
+E0, E1, E2, E2b закрито; код теми — `src/environment/` (модуль) і
 `src/environment-bindings/hostBinding.js`, `applySun` і `renderFrame` у `main.js`.
 
-> **Далі:** E2b — анімовані хмари (mood-weather M2 закрито 2026-11-23); порядок E2b чи mood-weather M3 — за власником.
+> **Далі:** не визначено — E3 (LDR) блокують питання спеки §8 п.1, п.3, п.4 (нижче); mood-weather M3 чекає назв якорів і слів. Вибір — за власником.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -62,12 +62,14 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      2026-11-23: [QA.md](QA.md) → E2; IBL — PMREM 64² і в русі (QA-E2-1 власника,
      DECISIONS уточнено); §7 п.3 на телефоні ще не міряно — відкрите питання нижче.
 
-4. **E2b — анімовані хмари** (спека §3.3). Після mood-weather M2. Хмари в `BG_FRAG` з `uTime` і
+~~4. **E2b — анімовані хмари** (спека §3.3). Після mood-weather M2. Хмари в `BG_FRAG` з `uTime` і
    вітром хмар; той самий `uTime` у кубі при перепіканні; `cloudSpeed` у
    стані.
    - проба: два знімки тла з різницею 1 с відрізняються в зоні хмар, а без
      хмар (`cloudCoverage = 0`) — ні.
-   - критерій §7 п.4 (немає стрибка на відбитті) — запис екрана, власник.
+   - критерій §7 п.4 (немає стрибка на відбитті) — запис екрана, власник.~~ — ЗАКРИТО
+     2026-11-23: [QA.md](QA.md) → E2b; тіні хмар (§3.3 п.3) не робились; запис §7 п.4
+     (QA-E2b-2) і телефон (QA-E2b-5) — за власником, відкрите питання нижче.
 
 5. **E3 — LDR** (спека §5.4). `output: 'ldr'`, `lowerHemisphere: 'ground'`,
    `env.ldrLights()`; `ldr.js`; сторінка `env-demo.html` без води:
@@ -99,7 +101,10 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
   вимагає спека (§6, §7 п.3): E0 міряно на ньому. **§7 п.3 для E2 не виміряно:**
   кадр руху = `lut + face`, кожен 6-й — ще `bake64 + pmrem64`; `pmrem64` на телефоні
   невідомий (256² там 20.4 мс) — Measure sky на телефоні. Чи досить цього телефона
-  замість Nord 4 — питання власнику.
+  замість Nord 4 — питання власнику. Після E2b ще й попіксельні хмари в тлі й дрейф
+  (рядок `sky` щокадру) — на телефоні не міряно (QA-E2b-5).
+- **Напрямок вітру хмар** сталий (`CLOUD_WIND_DIR`), не пов'язаний із `windDirection`
+  моря; тіні хмар (спека §3.3 п.3) — без фази.
 - **`probe-scene-ui` на `?tiles=story-8-frames-hibrid: strip after tap`**: падав
   у E0 і E2 і на коді до фази (E2: git stash 2/2), проходив у E1 і після
   виправлення E2 — нестабільна, тема scene-ui.
@@ -108,15 +113,16 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (E2, 2026-11-23): guard зелений (BOUNDARY-2 10 файлів, OWNER-4 0, TEX-1 16,
-TYPES-1 21); `npm test` 104/104; проби `probe-scene-env-smooth`, `-env-identity` (еталон
-E2, Δ 0), `-env-measure`, `-mobile`, `-rail`, `-ui`, `probe-mood-m1b` PASS.
+Baseline (E2b, 2026-11-23): guard зелений (BOUNDARY-2 11 файлів, OWNER-4 0, TEX-1 16,
+TYPES-1 21); `npm test` 109/109; проби `probe-scene-env-clouds`, `-env-smooth`, `-env-identity`
+(еталон E2b, Δ 0), `-env-measure`, `-mobile`, `-rail`, `-ui`, `probe-mood-m2`, `-m1b` PASS.
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
-| модуль оточення | [src/environment/index.js](../../src/environment/index.js) (`createEnvironment` → `env`: `params`, `target`, `sun.{direction,color}`, `cube`, `envMap`, `background`, `update(dt)`, `on`, `restoreContext`, `dispose`; кроки замірів `updateSun`, `bakeLuts`, `bakeFace`, `bakeCube`, `bakeCubeInto`); `skyBake.js` (`bakeFaceInto`), `skyBackground.js`, `sun.js`, `atmosphere.js`, копія `fullscreen.js` | спека §5; лише `three` і своя папка; `env.cube`/`env.envMap`/`env.sun.*` — сталі об'єкти: куб тримають [terrain.js:340](../../src/scene/terrain.js#L340), [OceanSurface.js:750](../../src/water/OceanSurface.js#L750), `envMap` — `scene.environment` | guard BOUNDARY-2, `probe-scene-env-identity` |
-| час неба | [src/environment/state.js](../../src/environment/state.js) (`createSkyState`: `setTarget`, `step`, `SKY_EPS`); `env.setState(next, { tau })`, `env.set` = τ 0, `env.dirty`, `update(dt)` → `{ sunChanged, cubeChanged, moving, faces, pmrem }` | експонента з τ на ключ, азимут коротким шляхом; у русі одна грань 1024² за кадр, після кожних 6 граней IBL = PMREM копії 64² (власний `PMREMGenerator`); у спокої — 6 граней + IBL; `set()` — усе в одному `update` (DECISIONS «Оточення: оновлення неба в часі») | `tests/envState.test.js`, `probe-scene-env-smooth` |
-| сонячне світло | `bindSunLight(env, light, renderer, { shadowEvery })` у [hostBinding.js](../../src/environment-bindings/hostBinding.js) → `applySunLight(update, dt)`; `applySun`, `setSun` у [main.js:170](../../src/main.js#L170) | `renderFrame` при `env.dirty` кличе `env.update(dt)` у мітці `sky`; світло — кожен `sunChanged`, тінь 4096² у русі раз на 0.5 с, у спокої одразу; `applySun` = `update(0)` для `set()`; інших писарів `env.params` немає (OWNER-4 0); відновлення контексту — `env.restoreContext()` | guard OWNER-4, `probe-scene-env-smooth` |
+| модуль оточення | [src/environment/index.js](../../src/environment/index.js) (`createEnvironment` → `env`: `params`, `target`, `sun.{direction,color}`, `cube`, `envMap`, `background`, `update(dt)`, `on`, `restoreContext`, `dispose`; кроки замірів `updateSun`, `bakeLuts`, `bakeFace`, `bakeCube`, `bakeCubeInto`); `skyBake.js` (`bakeFaceInto`), `skyBackground.js` (небо попіксельно з LUT і хмарами), `sun.js`, `atmosphere.js`, копія `fullscreen.js` | спека §5; лише `three` і своя папка; `env.cube`/`env.envMap`/`env.sun.*` — сталі об'єкти: куб тримають [terrain.js:340](../../src/scene/terrain.js#L340), [OceanSurface.js:750](../../src/water/OceanSurface.js#L750), `envMap` — `scene.environment` | guard BOUNDARY-2, `probe-scene-env-identity` |
+| час неба | [src/environment/state.js](../../src/environment/state.js) (`createSkyState`: `setTarget`, `step`, `SKY_EPS`, з E2b і `cloudSpeed`); `env.setState(next, { tau })`, `env.set` = τ 0, `env.dirty`, `update(dt)` → `{ sunChanged, cubeChanged, moving, faces, pmrem, drift }` | експонента з τ на ключ, азимут коротким шляхом; у русі одна грань 1024² за кадр, після кожних 6 граней IBL = PMREM копії 64² (власний `PMREMGenerator`); у спокої — 6 граней + IBL; `set()` — усе в одному `update` (DECISIONS «Оточення: оновлення неба в часі») | `tests/envState.test.js`, `probe-scene-env-smooth` |
+| хмари | [src/environment/clouds.js](../../src/environment/clouds.js) (`CLOUD_GLSL`: `skyWithClouds`, `CLOUD_WIND`, `CLOUD_WIND_DIR`); `env.clouds.{offset,cube,ibl}`, `env.active`, `CLOUD_STEP`, `CLOUD_IBL_STEP` в index.js | спека §3.3: зсув = ∫ `cloudSpeed`·`CLOUD_WIND` dt; тло — живий зсув, куб — прогін 6 граней (по одній за кадр), коли відстав на `CLOUD_STEP`, IBL — на `CLOUD_IBL_STEP`; дрейф не робить `dirty`, хост тікає за `active` | `probe-scene-env-clouds` |
+| сонячне світло | `bindSunLight(env, light, renderer, { shadowEvery })` у [hostBinding.js](../../src/environment-bindings/hostBinding.js) → `applySunLight(update, dt)`; `applySun`, `setSun` у [main.js:170](../../src/main.js#L170) | `renderFrame` при `env.active` кличе `env.update(dt)` у мітці `sky`; світло — кожен `sunChanged`, тінь 4096² у русі раз на 0.5 с, у спокої одразу; `applySun` = `update(0)` для `set()`; інших писарів `env.params` немає (OWNER-4 0); відновлення контексту — `env.restoreContext()` | guard OWNER-4, `probe-scene-env-smooth` |
 | кадр без часу | `?still` + `app.still({ shot, frames, dt })` у [main.js](../../src/main.js) | цикл не стартує; N кадрів із фіксованим dt, після кожного — GPU-fence і зчитування висот; повертає RGBA останнього кадру | [probe-scene-env-identity.mjs](../../scripts/probe-scene-env-identity.mjs) |
 | GPU-таймер | [src/engine/gpuTimer.js](../../src/engine/gpuTimer.js) (`GpuTimer`: `begin(label)`, `ms`, `drain`); мітки — `renderFrame` у [main.js](../../src/main.js) | мітки не вкладаються; зміна неба — мітка `sky` всередині кадру таймера | `runBenchmark`, `probe-scene-env-measure` |
 | заміри неба | [src/environment/measure.js](../../src/environment/measure.js) (`measureEnvironment`, кроки хоста — `steps: { spectrum }`); `app.measureEnvironment`, кнопка `#pSky` у `#perf`; копіювання панелі — [src/ui/perfCopy.js](../../src/ui/perfCopy.js) (`DoubleTap`, `bindPanelCopy`) | час між GPU-fence, цикл на паузі (`benchmarking`); кроки lut, face, cube, pmrem (1024², довідково), pmrem256/64/32 і bake256/64/32, shadow, spectrum; параметри неба не змінює | `probe-scene-env-measure`, `tests/perfCopy.test.js` |
@@ -140,9 +146,14 @@ E2, Δ 0), `-env-measure`, `-mobile`, `-rail`, `-ui`, `probe-mood-m1b` PASS.
 - [`sun.direction` після `env.set()`] оновлюється лише в наступному `update`, у headless кадр буває > 300 мс → у пробах чекати `!app.env.dirty`, не таймаут. (E2)
 - [чутливість проби] світло сонця ×1.02 дає лише 9 каналів > 1/255 у `Lagoon` (автоекспозиція гасить), висота хмар +0.8 % — куб Δ 4.9e-3 → освітлення кадр ловить слабко; для E2/E3 перевіряти ще `sunLight.intensity`/колір. (E1)
 
+- [кадри з хмарами в пробах] з E2b хмари пливуть і в `app.still` (`cloudSpeed` 1 за замовчуванням) → проба, що порівнює код, ставить `app.env.set({ cloudSpeed: 0 })` перед кадрами (identity, smooth). (E2b)
+- [тло неба] попіксельні хмари проти вибірки з куба 1024² — до 56/255 у тонких хмарах над горизонтом (куб їх розмивав), решта кадру Δ 0; `runBenchmark` 890M ±0.3 мс (шум). (E2b)
+- [зміна хмар і автоекспозиція] після `env.set` покриття хмар кадр «пливе» секундами (404 тис. пікселів за 1 с) → перед порівнянням двох кадрів неба 300 кадрів на усталення. (E2b)
+
 ### Стенд і проби
 
 - [GPU-таймер у headless] запит одного кадру з міткою `sky` губиться (чекання `timer.ms.sky` падало й до E2) → мітку ловити шпигуном на `timer.begin` під час руху, HUD лише звітувати. (E2)
 - [`WEBGL_lose_context` у пробі] `restoreContext()` у мікрозадачі обробника `webglcontextlost` не отримує відповіді — сторінка висить → кликати через `setTimeout`. (E2)
-- [холодний браузер] перший `page.goto` у новому Chromium ~25 с і до E2, межа проб 30 с → разовий таймаут `goto` повторити, не шукати причину у фазі. (E2)
+- [холодний браузер] перший `page.goto` у новому Chromium 14–30 с і до E2b (код до E2b — 19.9 с), межа проб 30 с → разовий таймаут `goto` повторити, не шукати причину у фазі. (E2, E2b)
+- [HUD на ландшафті телефона] мітка GPU-таймера щокадру (з E2b `sky`) — рядок у панелі FPS; на 915×412 панель 325 px упиралась у рейку → `max-height` над рейкою з прокруткою в `index.html`, `probe-scene-mobile` ловить. (E2b)
 - [`app.still` у `?still`] ~0.13–0.15 с на кадр (GPU-fence + 10 мс), не більше 600 кадрів за виклик → довгі рухи — частинами по 300 і τ ≤ 1 с. (E2)
