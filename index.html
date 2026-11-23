@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Gelatin Water</title>
   <style>
     html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
@@ -75,6 +75,18 @@
     #stationRail .station[aria-disabled="true"] { opacity: 0.4; cursor: default; }
     #stationRail .station:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 2px; border-radius: 6px; }
     /* reduced motion: fade out, place, fade in (SCENE-UI-SPEC §4.4) */
+    /* phones (SCENE-UI-SPEC §4.6): the rail spans the width with 16 px margins over the
+       safe area, leaving a slot on the right for the round weather button (MOOD-WEATHER §4.1) */
+    .mobile { --rail-top: calc(16px + 64px + env(safe-area-inset-bottom)); --weather-slot: calc(56px + 8px); }
+    .mobile #stationRail {
+      left: calc(16px + env(safe-area-inset-left)); right: calc(16px + var(--weather-slot) + env(safe-area-inset-right));
+      bottom: calc(16px + env(safe-area-inset-bottom)); transform: none; grid-template-columns: repeat(4, 1fr);
+    }
+    .mobile #stationRail .track { left: 12.5%; right: 12.5%; }
+    /* a phone on its side has no room for #perf over the strip: it goes up, as on desktop */
+    @media (max-height: 500px) {
+      .mobile #perf, .tech-strip.mobile #perf { top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
+    }
     #stationFade {
       position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 8;
       transition: opacity 250ms linear;

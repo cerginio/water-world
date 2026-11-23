@@ -55,11 +55,13 @@ export function onStation(camera, target, pose) {
 export function createStationRail({ rig, poseOf, frames, isActive,
   reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches,
   language = railLanguage([...navigator.languages, navigator.language]) }) {
-  const text = LABELS[language] ?? LABELS.en;
+  const lang = LABELS[language] ? language : 'en';
+  const text = LABELS[lang];
   const state = { arrived: null, flying: null, from: null, progress: 0, fading: null, seq: 0, focus: null, request: 0 };
 
   const rail = document.createElement('nav');
   rail.id = 'stationRail';
+  rail.lang = lang;   // a screen reader reads «Острів» in Ukrainian on an English page
   rail.setAttribute('aria-label', text.rail);
   const track = document.createElement('div');
   track.className = 'track';
@@ -104,6 +106,7 @@ export function createStationRail({ rig, poseOf, frames, isActive,
 
   const fade = document.createElement('div');
   fade.id = 'stationFade';
+  fade.setAttribute('aria-hidden', 'true');
   document.body.append(fade);
 
   const shown = {};   // last DOM state per node, so update() writes only on change
