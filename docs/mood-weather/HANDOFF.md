@@ -1,10 +1,10 @@
 # Handoff: mood-weather — віджет погоди-настрою й часу доби
 
-Стан на 2026-11-23. Гілка `master`. Фази з
-[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a, M1b і M2 закрито
+Стан на 2026-11-24. Гілка `master`. Фази з
+[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a, M1b, M2 і M3 закрито
 й закомічено; QA — [QA.md](QA.md).
 
-> **Далі:** M3 — після рішення власника про назви якорів і слова (спека §8 п.1); scene-environment E2b закрито 2026-11-23 (`cloudSpeed` якорів тепер іде в небо).
+> **Далі:** M3b — поведінка й безпека (спека §4.3, §4.6); перед стартом — рішення власника про плин дня 20 хв (спека §8 п.2).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -72,13 +72,14 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      Nord 4 ≥ 30 FPS з `autoResolution` (§6 п.8).~~ — ЗАКРИТО 2026-11-23; телефон
    (QA-M2-7) і записи екрана — за власником, відкрите питання нижче.
 
-4. **M3 — зміст віджета** (спека §4.1, §4.2). Ілюстрації дев'яти якорів
+~~4. **M3 — зміст віджета** (спека §4.1, §4.2). Ілюстрації дев'яти якорів
    (CSS-градієнти + SVG), чотири слова по краях, емоційні слова з
    перехрестям (на межі — обох станів), назва якоря на довгому натисканні,
    запрошення зі згортанням після першого жесту, мініатюра й кільце
    прогресу на кнопці; слова в локалях uk/en.
    - проба: у A9 — «спокій · умиротворення» (§6 п.7); запрошення видно при
-     кожному відкритті (§6 п.12); мова — за `navigator.languages`.
+     кожному відкритті (§6 п.12); мова — за `navigator.languages`.~~ — ЗАКРИТО
+   2026-11-24; картинки якорів — ілюстрація, з рендером не калібровано.
 
 5. **M3b — поведінка й безпека** (спека §4.3, §4.6). «Затихнути» (видима
    при `a > 0.3`, τ 8 с), плин дня 20 хв з автовимкненням на заході,
@@ -96,8 +97,8 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ### Відкриті питання
 
-- **Спека §8:** назви якорів і слова (п.1) — потрібні до M3; тривалість плину
-  дня 20 хв (п.2) — до M3b.
+- **Спека §8 п.2:** тривалість плину дня 20 хв — потрібна до M3b (п.1, назви й
+  слова, вирішено 2026-11-23).
 - **Застаріле посилання в спеці §2.2:** «main.js:286» — тепер `storyAnchor`
   ([main.js:261](../../src/main.js#L261)) на `SET_BEARING`; передумову виконано
   в M1a.
@@ -112,9 +113,9 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (M2, 2026-11-23): guard зелений (OWNER-4 0, BOUNDARY-2 10 файлів, TEX-1 16,
-TYPES-1 21); `npm test` 108/108; `probe-mood-m2`, `probe-mood-m1b`, `probe-scene-env-smooth` PASS;
-`probe-scene-env-identity` Δ 0; `probe-mood-m1a` anchors + field PASS, readable 5/27 (відкрите питання).
+Baseline (M3, 2026-11-24): guard зелений (OWNER-4 0, BOUNDARY-2 11 файлів, TEX-1 16,
+TYPES-1 21); `npm test` 118/118; `probe-mood-m3`, `probe-mood-m2`, `probe-mood-m1b`, `probe-scene-mobile` PASS;
+`probe-mood-m1a` anchors + field PASS, readable 5/27 (відкрите питання).
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
@@ -122,7 +123,7 @@ TYPES-1 21); `npm test` 108/108; `probe-mood-m2`, `probe-mood-m1b`, `probe-scene
 | писар сонця | `env.set()`/`env.dirty` в [index.js](../../src/environment/index.js); `setSun` [main.js:185](../../src/main.js#L185), `sunUi` (геттер/сеттер) [main.js:313](../../src/main.js#L313) | `env.params` пише лише `env.set`; `renderFrame` перепікає при `env.dirty` | guard OWNER-4 (baseline 0) |
 | канали моря | `bindSea` → `{ channels(sea), read(), write(ch) }`, `mixWater`, `WATER_PRESETS` у [seaBinding.js](../../src/environment-bindings/seaBinding.js) | канали — абсолютні значення хоста (× — від стартових), щоб перехід ішов від того, що на екрані; вода в лінійному RGB; поглинання ÷ clarity; `write` ставить `ocean.dirty` лише коли змінились хвилі | `probe-mood-m1a` anchors, `probe-mood-m2` |
 | `app.mood` і перехід | `applyMood`, `stepMood`, `freezeMood`, `moodApi` у [main.js](../../src/main.js) (`set` миттєво, `to` плавно, `state()` з `moving`, `day`); `stepMood` — у `renderFrame` перед небом | спека §4.4: погода неба (з E2b і `cloudSpeed`) — `env.setState` τ 6; день, море, грейдинг — `stepToward` (τ 6/10/6), сонце йде за днем дугою (`SUN_FOLLOW_TAU` 0.1); сонце поза дугою (шот) — прямо τ 6; Controls → `freezeMood`; до першого дотику `custom: true` | `probe-mood-m2`, `probe-mood-m1a` anchors |
-| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad`, `gui.onChange` [main.js:540](../../src/main.js#L540) | спека §4.1, §4.2, §4.5: `input(state, final)` — цілі одразу, світ іде за ними й під пальцем; зміна в папках Sun & sky / Waves / Shore waves / Water / Post або шот → `custom: true`; дотик → `false`; без цифр і `input` | `probe-mood-m1b`, `tests/moodPad.test.js` |
+| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`, локалі uk/en, слова з межею, картинки якорів, мініатюра й кільце), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad`, `gui.onChange` [main.js](../../src/main.js) | спека §4.1, §4.2, §4.5: `input(state, final)` — цілі одразу, світ іде за ними; Controls/шот → `custom: true`, дотик → `false`; без цифр і `input`; межа слів, мініатюра — [DECISIONS.md](../../DECISIONS.md) | `probe-mood-m3`, `probe-mood-m1b`, `tests/moodPad.test.js` |
 | поле історії й шоти | `SET_BEARING` [main.js:184](../../src/main.js#L184), `storyAnchor` [main.js:261](../../src/main.js#L261) | кут = азимут заходу 205°, не поточне сонце | `probe-mood-m1a` field, `probe-scene-env-identity` |
 | слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні; у слоті стоїть кнопка віджета | `probe-scene-mobile` |
 | пресети води в Controls | `w`, `setWater`, `applyPreset` у [main.js](../../src/main.js) (папка Water); прибій — `shoreUi`/`setShore` | GUI читає `WATER_PRESETS` з seaBinding; `app.mood.set` оновлює `absorptionBase`, `w.clarity`, `w.scatter`, `shoreUi` | — |
