@@ -19,7 +19,9 @@ import { CLOUD_GLSL } from './clouds.js';
 // sampled with plain world directions).
 const CUBE_FRAG = ATMOSPHERE_GLSL + CLOUD_GLSL + /* glsl */`
 const vec3 WATER = vec3(0.02, 0.035, 0.045);  // deep-water body reflectance for the lower hemisphere
+const vec3 GROUND = vec3(0.18, 0.17, 0.15);   // lowerHemisphere 'ground': a neutral, slightly warm soil
 uniform int uFace;
+uniform float uOutScale;                      // 1 for HDR; the LDR exposure (ldr.js) for 'ldr'
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform float uCloudCoverage;
@@ -41,13 +43,20 @@ void main() {
   vec3 d = normalize(faceDir(vUv));
   vec3 up = skyView(vec3(0.0, 1.0, 0.0), uSunDir);
   if (d.y < 0.0) {
+#ifdef LOWER_GROUND
+    // below the horizon: lit ground, the haze of the horizon over its last degrees
+    vec3 soil = GROUND * (uSunColor * max(uSunDir.y, 0.0) + up);
+    fragColor = vec4(mix(soil, skyView(vec3(d.x, 0.0, d.z), uSunDir), exp(d.y * 40.0)) * uOutScale, 1.0);
+#else
     // below the horizon: sea, Fresnel between the mirrored sky and a dark water body
     float F = 0.02 + 0.98 * pow(1.0 + d.y, 5.0);
     vec3 body = WATER * (uSunColor * max(uSunDir.y, 0.0) + up);
-    fragColor = vec4(mix(body, skyView(vec3(d.x, -d.y, d.z), uSunDir), F), 1.0);
+    fragColor = vec4(mix(body, skyView(vec3(d.x, -d.y, d.z), uSunDir), F) * uOutScale, 1.0);
+#endif
     return;
   }
-  fragColor = skyWithClouds(d, uSunDir, up, uCloudCoverage, uCloudOffset);
+  vec4 sky = skyWithClouds(d, uSunDir, up, uCloudCoverage, uCloudOffset);
+  fragColor = vec4(sky.rgb * uOutScale, sky.a);
 }`;
 
 
@@ -57,8 +66,9 @@ export class SkyBake {
    * @param {number} cubeSize
    * @param {THREE.Vector3} sunDir   held, not copied
    * @param {THREE.Vector3} sunColor held, not copied
+   * @param {{ lowerHemisphere?: 'sea' | 'ground' }} [options]
    */
-  constructor(renderer, cubeSize, sunDir, sunColor) {
+  constructor(renderer, cubeSize, sunDir, sunColor, { lowerHemisphere = 'sea' } = {}) {
     this.renderer = renderer;
     this.sunDir = sunDir;
     this.atmosphere = new Atmosphere();
@@ -68,10 +78,11 @@ export class SkyBake {
       type: THREE.HalfFloatType, generateMipmaps: true, depthBuffer: false,
       minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
     });
-    this.cubePass = new FullscreenQuad(rawPass(CUBE_FRAG, {
+    const frag = lowerHemisphere === 'ground' ? `#define LOWER_GROUND\n${CUBE_FRAG}` : CUBE_FRAG;
+    this.cubePass = new FullscreenQuad(rawPass(frag, {
       ...this.atmosphere.uniforms,
       uFace: { value: 0 }, uSunDir: { value: sunDir }, uSunColor: { value: sunColor },
-      uCloudCoverage: { value: 0 }, uCloudOffset: { value: this.cloudOffset },
+      uCloudCoverage: { value: 0 }, uCloudOffset: { value: this.cloudOffset }, uOutScale: { value: 1 },
     }));
     this.camera = new THREE.Camera();   // unused by the fullscreen vertex shader
   }

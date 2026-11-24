@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { CLOUD_WIND, CLOUD_WIND_DIR } from './clouds.js';
 import { SkyBake } from './skyBake.js';
 import { createSkyBackground } from './skyBackground.js';
+import { createLdrLights, ldrLighting } from './ldr.js';
 import { createSkyState } from './state.js';
 import { updateSun } from './sun.js';
 
 export { measureEnvironment } from './measure.js';
+export { LDR_FLOOR, LDR_REFERENCE, THREE_LIGHTS, ldrLighting } from './ldr.js';
 export { flowDay, MOOD_MAP_V1, MOOD_TAU, moodTau, QUIET, REDUCED_MOTION, SUN_PATH_V1, sampleMood, stepToward, sunAt, worldArousal } from './mood.js';
 
 // scene-environment: sky, sun and the baked environment cube for any three host
@@ -29,6 +31,13 @@ export { flowDay, MOOD_MAP_V1, MOOD_TAU, moodTau, QUIET, REDUCED_MOTION, SUN_PAT
 // the IBL only once they are CLOUD_IBL_STEP away. A drift run is not a sky change: env.dirty stays
 // false (the mood is at rest while its clouds move); env.active tells the host to keep ticking.
 //
+// Output (spec §5.4, E3): 'hdr' — radiance for Ultra-Water's HDR target and PostFX; 'ldr' — for a
+// host on an sRGB canvas with NoToneMapping (three): the background does its own exposure and AgX,
+// the cube (and so the IBL) is scaled so that the IBL can stand in for the hemisphere light, the
+// lower hemisphere is ground, and env.ldrLights() gives the HemisphereLight + DirectionalLight for
+// the state (ldr.js). The module
+// never touches renderer.toneMapping.
+//
 // Identity is the contract: env.cube, env.envMap, env.sun.direction and env.sun.color are created
 // once and written in place, so materials hold them as uniforms.
 
@@ -51,17 +60,37 @@ const cubeTarget = (size) => new THREE.WebGLCubeRenderTarget(size, {
 });
 
 /**
- * @param {THREE.WebGLRenderer} renderer
- * @param {{ cubeSize?: number, envSize?: number, params?: Partial<SkyParams> }} [options]
- *   cubeSize — the sky cube (water, background); envSize — the cube the IBL PMREM is made from
+ * @typedef {{ cubeSize?: number, envSize?: number, params?: Partial<SkyParams>, output?: 'hdr' | 'ldr',
+ *   lowerHemisphere?: 'sea' | 'ground', background?: 'sky' | 'gradient' }} EnvironmentOptions
  */
-export function createEnvironment(renderer, { cubeSize = 1024, envSize = 64, params } = {}) {
+
+/**
+ * @param {THREE.WebGLRenderer} renderer
+ * @param {EnvironmentOptions} [options]
+ *   cubeSize — the sky cube (water, background); envSize — the cube the IBL PMREM is made from;
+ *   output 'hdr' (default) | 'ldr'; lowerHemisphere — 'sea' for hdr, 'ground' for ldr by default;
+ *   background — 'sky' (clouds, sun disc; hdr default) | 'gradient' (restrained; ldr default)
+ */
+export function createEnvironment(renderer, { cubeSize = 1024, envSize = 64, params, output = 'hdr',
+  lowerHemisphere = output === 'ldr' ? 'ground' : 'sea', background = output === 'ldr' ? 'gradient' : 'sky' } = {}) {
+  if (output !== 'hdr' && output !== 'ldr') throw new Error(`createEnvironment: output 'hdr' | 'ldr', got ${output}`);
+  if (lowerHemisphere !== 'sea' && lowerHemisphere !== 'ground') throw new Error(`createEnvironment: lowerHemisphere 'sea' | 'ground', got ${lowerHemisphere}`);
+  if (background !== 'sky' && background !== 'gradient') throw new Error(`createEnvironment: background 'sky' | 'gradient', got ${background}`);
+  const ldr = output === 'ldr';
   const direction = new THREE.Vector3(0, 1, 0);
   const color = new THREE.Vector3(1, 1, 1);
   /** @type {SkyParams} */
   const p = { ...DEFAULT_SKY_PARAMS, ...params };
   const state = createSkyState(p);
-  const bake = new SkyBake(renderer, cubeSize, direction, color);
+  const bake = new SkyBake(renderer, cubeSize, direction, color, { lowerHemisphere });
+  // LDR: the lights and the exposure follow the sun (refreshed with it, before the bake reads it)
+  const lights = createLdrLights();
+  const outScale = bake.cubePass.material.uniforms.uOutScale;
+  const sunStep = () => {
+    const c = updateSun(p, direction, color);
+    if (ldr) { ldrLighting(p, color, direction, lights); outScale.value = lights.iblExposure; }
+    return c;
+  };
   const cube = bake.cubeRT.texture;
   const clouds = new THREE.Vector2();         // the live deck offset (the background)
   const baked = bake.cloudOffset;             // the offset of the faces being baked (the cube)
@@ -115,6 +144,16 @@ export function createEnvironment(renderer, { cubeSize = 1024, envSize = 64, par
       return () => set.delete(fn);
     },
     sun: { direction, color },
+    output,
+    /**
+     * The LDR host's lights for the current state (output 'ldr'; spec §5.4): written in place on
+     * every sun change — read them on 'sun-changed'. Equal to three's lights at the clear noon.
+     * @returns {import('./ldr.js').LdrLights}
+     */
+    ldrLights() {
+      if (!ldr) ldrLighting(p, color, direction, lights);
+      return lights;
+    },
     cube,
     cubeTarget: bake.cubeRT,
     cubeSize,
@@ -125,7 +164,8 @@ export function createEnvironment(renderer, { cubeSize = 1024, envSize = 64, par
       ...bake.atmosphere.uniforms,
       uSunDir: { value: direction }, uSunColor: { value: color },
       uCloudCoverage: { get value() { return p.cloudCoverage; } }, uCloudOffset: { value: clouds },
-    }),
+      uExposure: { get value() { return lights.exposure; } },
+    }, { ldr, gradient: background === 'gradient' }),
 
     /**
      * One tick of the host's frame (no RAF of its own). dt 0 only bakes what set() asked for.
@@ -188,7 +228,7 @@ export function createEnvironment(renderer, { cubeSize = 1024, envSize = 64, par
 
     // the steps of one sky change, apart (measureEnvironment times them)
     /** CPU only: sun direction and colour from params; returns the atmosphere coefficients */
-    updateSun: () => updateSun(p, direction, color),
+    updateSun: sunStep,
     /** @param {ReturnType<typeof updateSun>} c */
     bakeLuts: (c) => bake.bakeLuts(c, p.sunIntensity),
     bakeCube: () => bake.bakeCubeInto(bake.cubeRT, p.cloudCoverage),

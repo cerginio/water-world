@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>scene-environment — LDR demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1b1d21; color: #e8e8e8; font: 13px/1.35 system-ui, sans-serif; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #ui { position: fixed; right: 12px; top: 12px; padding: 10px; background: rgba(20, 22, 26, 0.78); border-radius: 8px; width: 214px; }
+    #grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 6px 0 8px; }
+    #grid button { padding: 6px 2px; font: inherit; font-size: 11px; color: inherit; background: #2c3036; border: 1px solid #444a52; border-radius: 4px; cursor: pointer; }
+    #grid button[aria-pressed="true"] { background: #4c6a8a; border-color: #8fb3d9; }
+    label { display: block; margin: 6px 0 2px; }
+    input[type="range"] { width: 100%; }
+    #state { margin-top: 8px; font: 11px/1.4 ui-monospace, monospace; white-space: pre; color: #b8c0c8; }
+    .row { display: flex; gap: 10px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <strong>Оточення LDR (E3)</strong>
+    <div id="grid" role="group" aria-label="Якір настрою"></div>
+    <label for="day">Час доби <span id="dayOut"></span></label>
+    <input id="day" type="range" min="0" max="1" step="0.01" value="0.5">
+    <div class="row">
+      <label><input id="ibl" type="checkbox"> IBL</label>
+      <label><input id="ref" type="checkbox"> three зараз</label>
+    </div>
+    <div id="state"></div>
+  </div>
+  <script type="module" src="/demo/envDemo.js"></script>
+</body>
+</html>
