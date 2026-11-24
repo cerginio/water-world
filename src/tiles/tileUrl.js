@@ -19,10 +19,18 @@ export function readTileUrl(args, params) {
   params.frame = args.get('tilesFrame') || 'all';
 }
 
+// source: a fixture id, a File, or a catalog payload { id: '<folder>/<slug>', story }
 export function writeTileUrl(source, params) {
   const url = new URL(location.href);
-  // Local files cannot be reconstructed from a link.
-  url.searchParams.set('tiles', source instanceof File ? 'none' : source);
+  if (source?.story) {
+    // a catalog story is its own link (?story=<folder>/<slug>), not a fixture
+    url.searchParams.delete('tiles');
+    url.searchParams.set('story', source.id);
+  } else {
+    url.searchParams.delete('story');
+    // Local files cannot be reconstructed from a link.
+    url.searchParams.set('tiles', source instanceof File ? 'none' : source);
+  }
   for (const name of [...Object.keys(TILE_RANGES), 'mode', 'frame']) {
     url.searchParams.set(key(name), String(params[name]));
   }

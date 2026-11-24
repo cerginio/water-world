@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { toStoryFrames } from './storyFrames.js';
 
 // Live Tilecraft models (spec.md §3). Tilecraft's own modules do the loading and the
 // compiling, so the field draws exactly what Tilecraft draws; every Tilecraft call
@@ -30,11 +31,20 @@ function loadModules() {
   return modules;
 }
 
-// source → { id, model, world, sidecar } (a fixture id, or a dropped File)
-/** @param {string | File} source @param {{ signal?: AbortSignal }} [options] */
+// source → { id, model, world, sidecar } (a fixture id, a dropped File, or a payload the
+// story catalog already fetched). Every source is brought to its visible frames here,
+// before compileTileSource, so the field is the same whichever way the model came.
+/** @param {string | File | { id: string, model: any }} source @param {{ signal?: AbortSignal }} [options] */
 export async function fetchTileSource(source, { signal } = {}) {
-  const tc = await loadModules();
-  return source instanceof File ? tc.loadFile(source) : tc.loadFixture(source, { signal });
+  let payload;
+  if (typeof source === 'object' && !(source instanceof File)) payload = source;
+  else {
+    const tc = await loadModules();
+    payload = source instanceof File ? await tc.loadFile(source) : await tc.loadFixture(source, { signal });
+  }
+  const { model, dropped } = toStoryFrames(payload.model);
+  if (dropped.tiles || dropped.frames) console.warn(`[tiles] ${payload.id}: ${dropped.tiles} tile(s) outside visible frames, ${dropped.frames} hidden frame(s) dropped`);
+  return model === payload.model ? payload : { ...payload, model, dropped };
 }
 
 // the same chain as Tilecraft's shell/viewer-session.js compileWorld (§3.4), with our

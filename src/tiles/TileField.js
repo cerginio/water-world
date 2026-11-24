@@ -53,11 +53,11 @@ export class TileField {
 
   get loaded() { return this.rest !== null; }
 
-  // source: 'none', a Tilecraft fixture id, or a File. Errors land in the status; the
-  // scene stays as it was (spec.md §3.4).
+  // source: 'none', a Tilecraft fixture id, a File, or a fetched payload { id, model }
+  // (the story catalog). Errors land in the status; the scene stays as it was (spec.md §3.4).
   async load(source) {
     const epoch = ++this.epoch;
-    this.source = source instanceof File ? source.name : source;
+    this.source = source instanceof File ? source.name : typeof source === 'object' ? source.id : source;
     this.clear();
     this.frameRegistry = new TileFrames();
     this.frames = [];
