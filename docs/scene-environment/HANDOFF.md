@@ -1,11 +1,12 @@
 # Handoff: scene-environment — заміри неба й переносний модуль оточення
 
-Стан на 2026-11-23. Гілка `master`. Фази з
+Стан на 2026-11-24. Гілка `master`. Фази з
 [SCENE-ENVIRONMENT-SPEC.md](../../SCENE-ENVIRONMENT-SPEC.md) (далі — «спека»).
-E0, E1, E2, E2b закрито; код теми — `src/environment/` (модуль) і
-`src/environment-bindings/hostBinding.js`, `applySun` і `renderFrame` у `main.js`.
+E0, E1, E2, E2b, E3 закрито; код теми — `src/environment/` (модуль) і
+`src/environment-bindings/hostBinding.js`, `applySun` і `renderFrame` у `main.js`;
+LDR-демо — `env-demo.html` + `demo/envDemo.js`.
 
-> **Далі:** не визначено — E3 (LDR) блокують питання спеки §8 п.1, п.3, п.4 (нижче); mood-weather M3 чекає назв якорів і слів. Вибір — за власником.
+> **Далі:** E4 — пакет для three (п.6 нижче): печатка версії, README модуля, чернетка спеки для Tilecraft (§5.5, §5.6); §8 відповіджено.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -71,19 +72,23 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      2026-11-23: [QA.md](QA.md) → E2b; тіні хмар (§3.3 п.3) не робились; запис §7 п.4
      (QA-E2b-2) і телефон (QA-E2b-5) — за власником, відкрите питання нижче.
 
-5. **E3 — LDR** (спека §5.4). `output: 'ldr'`, `lowerHemisphere: 'ground'`,
+~~5. **E3 — LDR** (спека §5.4). `output: 'ldr'`, `lowerHemisphere: 'ground'`,
    `env.ldrLights()`; `ldr.js`; сторінка `env-demo.html` без води:
    MeshStandard + MeshBasic-«кадр» під дев'ятьма якорями.
    - проба: критерії §7 п.5–6 — білий ≥ 0.55, чорний ≤ 0.25 sRGB під усіма
      якорями; ΔE ≤ 2 до three у ясний полудень; `renderer.toneMapping` після
      `createEnvironment` незмінний.
-   - потребує даних якорів з mood-weather M1a (`MOOD_MAP_V1`).
+   - потребує даних якорів з mood-weather M1a (`MOOD_MAP_V1`).~~ — ЗАКРИТО
+     2026-11-24: [QA.md](QA.md) → E3; IBL у LDR калібровано лише на полудні —
+     відкрите питання нижче.
 
 6. **E4 — пакет для three** (спека §5.5, §5.6). Печатка версії
    `scene-environment@x.y`, README модуля, чернетка спеки для Tilecraft.
    - перевірка: тест копіює `src/environment/` у тимчасову теку й імпортує
      `index.js`, маючи лише `three`.
-   - залежить від відкритих питань §8 (нижче).
+   - §8 відповіджено: копія з печаткою зараз (§5.6 a). У чернетку спеки Tilecraft —
+     вимкнення дрейфу хмар для three (§5.5 п.6: перепікання лише на зміну стану;
+     зараз у LDR куб перепікається й при дрейфі, демо ставить `cloudSpeed 0`).
 
 ### Відкриті питання
 
@@ -94,15 +99,20 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
   64² кожен цикл граней (DECISIONS). Шот
   `Underwater` з §7 п.1 у коді є (E1 його перевірив). Спеку поправити через
   `handoff:spec scene-environment`.
-- **Спека §8** — питання власнику: п.1 (небо як фон у three), п.3 (тіні
-  сонця в three), п.4 (настрій від products) — блокують E3/E4 і спеку
-  Tilecraft, не E0–E2; п.2 (копія з печаткою → інверсія) — блокує E4.
-- **Телефон власника — Samsung Xclipse 540, не OnePlus Nord 4**, якого
-  вимагає спека (§6, §7 п.3): E0 міряно на ньому. **§7 п.3 для E2 не виміряно:**
+- ~~**Спека §8** — питання власнику п.1–п.4~~ — ВІДПОВІДЖЕНО 2026-11-24
+  (спека §8): тло three — стриманий градієнт, повне небо — опція; копія → інверсія;
+  тіні — хоста; продукт пропонує настрій, людина вирішує. E3/E4 більше не блоковані.
+- **Еталонний телефон — Samsung Xclipse 540** (рішення власника 2026-11-24,
+  спека §8 п.5; §6 і §7 п.3 переписано): E0 міряно на ньому. **§7 п.3 для E2 не виміряно:**
   кадр руху = `lut + face`, кожен 6-й — ще `bake64 + pmrem64`; `pmrem64` на телефоні
-  невідомий (256² там 20.4 мс) — Measure sky на телефоні. Чи досить цього телефона
-  замість Nord 4 — питання власнику. Після E2b ще й попіксельні хмари в тлі й дрейф
+  невідомий (256² там 20.4 мс) — Measure sky на телефоні. Після E2b ще й попіксельні хмари в тлі й дрейф
   (рядок `sky` щокадру) — на телефоні не міряно (QA-E2b-5).
+- **IBL у LDR** (`LDR_IBL_K` 0.42 у `ldr.js`) підібрано на полудні: стоячий білий з IBL
+  0.60 проти 0.62 з півсферою, а в тумані на заході 0.32 — нижче підлоги 0.55; проба
+  лише звітує. three IBL зараз не використовує — вирішити до E4, чи IBL взагалі в пакеті.
+- **Спека §5.3** не має `background`, `ldrLights().iblExposure`; §5.4 каже «куб у тому
+  самому LDR-діапазоні», а в коді куб має власну експозицію IBL — поправити разом із
+  рештою відставань через `handoff:spec`.
 - **Напрямок вітру хмар** сталий (`CLOUD_WIND_DIR`), не пов'язаний із `windDirection`
   моря; тіні хмар (спека §3.3 п.3) — без фази.
 - **`probe-scene-ui` на `?tiles=story-8-frames-hibrid: strip after tap`**: падав
@@ -113,15 +123,16 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (E2b, 2026-11-23): guard зелений (BOUNDARY-2 11 файлів, OWNER-4 0, TEX-1 16,
-TYPES-1 21); `npm test` 109/109; проби `probe-scene-env-clouds`, `-env-smooth`, `-env-identity`
-(еталон E2b, Δ 0), `-env-measure`, `-mobile`, `-rail`, `-ui`, `probe-mood-m2`, `-m1b` PASS.
+Baseline (E3, 2026-11-24): guard зелений (BOUNDARY-2 12 файлів, OWNER-4 0, TEX-1 16,
+TYPES-1 0); `npm test` 158/158; проби `probe-scene-env-ldr`, `-env-identity` (еталон до E3,
+Δ 0), `-env-smooth`, `-env-clouds`, `-env-measure`, `-mobile`, `probe-mood-m2`, `-m3b` PASS.
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
-| модуль оточення | [src/environment/index.js](../../src/environment/index.js) (`createEnvironment` → `env`: `params`, `target`, `sun.{direction,color}`, `cube`, `envMap`, `background`, `update(dt)`, `on`, `restoreContext`, `dispose`; кроки замірів `updateSun`, `bakeLuts`, `bakeFace`, `bakeCube`, `bakeCubeInto`); `skyBake.js` (`bakeFaceInto`), `skyBackground.js` (небо попіксельно з LUT і хмарами), `sun.js`, `atmosphere.js`, копія `fullscreen.js` | спека §5; лише `three` і своя папка; `env.cube`/`env.envMap`/`env.sun.*` — сталі об'єкти: куб тримають [terrain.js:340](../../src/scene/terrain.js#L340), [OceanSurface.js:750](../../src/water/OceanSurface.js#L750), `envMap` — `scene.environment` | guard BOUNDARY-2, `probe-scene-env-identity` |
+| модуль оточення | [src/environment/index.js](../../src/environment/index.js) (`createEnvironment(renderer, { output, lowerHemisphere, background })` → `env`: `params`, `target`, `sun.{direction,color}`, `cube`, `envMap`, `background`, `update(dt)`, `on`, `restoreContext`, `dispose`; кроки замірів `updateSun`, `bakeLuts`, `bakeFace`, `bakeCube`, `bakeCubeInto`); `skyBake.js` (`bakeFaceInto`), `skyBackground.js` (небо попіксельно з LUT і хмарами), `sun.js`, `atmosphere.js`, копія `fullscreen.js` | спека §5; лише `three` і своя папка; `env.cube`/`env.envMap`/`env.sun.*` — сталі об'єкти: куб тримають [terrain.js:340](../../src/scene/terrain.js#L340), [OceanSurface.js:750](../../src/water/OceanSurface.js#L750), `envMap` — `scene.environment` | guard BOUNDARY-2, `probe-scene-env-identity` |
 | час неба | [src/environment/state.js](../../src/environment/state.js) (`createSkyState`: `setTarget`, `step`, `SKY_EPS`, з E2b і `cloudSpeed`); `env.setState(next, { tau })`, `env.set` = τ 0, `env.dirty`, `update(dt)` → `{ sunChanged, cubeChanged, moving, faces, pmrem, drift }` | експонента з τ на ключ, азимут коротким шляхом; у русі одна грань 1024² за кадр, після кожних 6 граней IBL = PMREM копії 64² (власний `PMREMGenerator`); у спокої — 6 граней + IBL; `set()` — усе в одному `update` (DECISIONS «Оточення: оновлення неба в часі») | `tests/envState.test.js`, `probe-scene-env-smooth` |
 | хмари | [src/environment/clouds.js](../../src/environment/clouds.js) (`CLOUD_GLSL`: `skyWithClouds`, `CLOUD_WIND`, `CLOUD_WIND_DIR`); `env.clouds.{offset,cube,ibl}`, `env.active`, `CLOUD_STEP`, `CLOUD_IBL_STEP` в index.js | спека §3.3: зсув = ∫ `cloudSpeed`·`CLOUD_WIND` dt; тло — живий зсув, куб — прогін 6 граней (по одній за кадр), коли відстав на `CLOUD_STEP`, IBL — на `CLOUD_IBL_STEP`; дрейф не робить `dirty`, хост тікає за `active` | `probe-scene-env-clouds` |
+| LDR-вихід | [src/environment/ldr.js](../../src/environment/ldr.js) (`skyLight`, `ldrLighting`, `LDR_REFERENCE`, `THREE_LIGHTS`); `env.ldrLights()`; дефайни `ENV_LDR`/`BG_GRADIENT` у `skyBackground.js`, `LOWER_GROUND` і `uOutScale` у `skyBake.js`; демо [env-demo.html](../../env-demo.html) + `demo/envDemo.js` (`window.envDemo`) | спека §5.4: тло саме робить експозицію + AgX, `toneMapping` хоста не чіпає; світло на CPU — у полудень (A6, t 0.5) = three, інакше одна стиснута яскравість (√, 0.45…1.1) і підлога 0.58 sRGB; куб × `iblExposure`, IBL замінює півсферу | `tests/envLdr.test.js`, `probe-scene-env-ldr` |
 | сонячне світло | `bindSunLight(env, light, renderer, { shadowEvery })` у [hostBinding.js](../../src/environment-bindings/hostBinding.js) → `applySunLight(update, dt)`; `applySun`, `setSun` у [main.js:170](../../src/main.js#L170) | `renderFrame` при `env.active` кличе `env.update(dt)` у мітці `sky`; світло — кожен `sunChanged`, тінь 4096² у русі раз на 0.5 с, у спокої одразу; `applySun` = `update(0)` для `set()`; інших писарів `env.params` немає (OWNER-4 0); відновлення контексту — `env.restoreContext()` | guard OWNER-4, `probe-scene-env-smooth` |
 | кадр без часу | `?still` + `app.still({ shot, frames, dt })` у [main.js](../../src/main.js) | цикл не стартує; N кадрів із фіксованим dt, після кожного — GPU-fence і зчитування висот; повертає RGBA останнього кадру | [probe-scene-env-identity.mjs](../../scripts/probe-scene-env-identity.mjs) |
 | GPU-таймер | [src/engine/gpuTimer.js](../../src/engine/gpuTimer.js) (`GpuTimer`: `begin(label)`, `ms`, `drain`); мітки — `renderFrame` у [main.js](../../src/main.js) | мітки не вкладаються; зміна неба — мітка `sky` всередині кадру таймера | `runBenchmark`, `probe-scene-env-measure` |
@@ -150,7 +161,15 @@ TYPES-1 21); `npm test` 109/109; проби `probe-scene-env-clouds`, `-env-smoo
 - [тло неба] попіксельні хмари проти вибірки з куба 1024² — до 56/255 у тонких хмарах над горизонтом (куб їх розмивав), решта кадру Δ 0; `runBenchmark` 890M ±0.3 мс (шум). (E2b)
 - [зміна хмар і автоекспозиція] після `env.set` покриття хмар кадр «пливе» секундами (404 тис. пікселів за 1 с) → перед порівнянням двох кадрів неба 300 кадрів на усталення. (E2b)
 
+- [LDR-світло, нормування] кожне світло на свою фізичну частку від полудня розносить три: шторм — півсфера ×9.3 (чорний > 0.25), світанок — сонце 4.37 > полуденних 2.5 → одна стиснута яскравість на обидва, сонце ділиться за `through`·`cloudPass`. (E3)
+- [LDR-світло, відтінок] сіре небо відносно блакитного полудня дає помаранчевий (насиченість 0.56) → відтінок від ясної частини неба, хмари ведуть його до білого. (E3)
+- [IBL у LDR] GPU-небо ~2.4× яскравіше за CPU-оцінку `skyLight` опівдні, і відношення залежить від стану (туман на заході — білий 0.32) → `LDR_IBL_K` тримає лише полудень; точніше — лише зчитуванням з GPU. (E3)
+- [зчитування неба з GPU для світла] `readRenderTargetPixelsAsync` у three 0.186 бере лише `UnsignedByte`, half/float не читає асинхронно → світло LDR рахується на CPU (`skyLight`), не з куба. (E3)
+- [HDR-шлях після змін тла/куба] дефайни `ENV_LDR`/`BG_GRADIENT`/`LOWER_GROUND` і `uOutScale` 1.0 дають Δ 0 у `probe-scene-env-identity` → нові режими — лише дефайнами, HDR-код не міняти. (E3)
+
 ### Стенд і проби
+
+- [демо-сторінка з власним renderer] guard OWNER-1/2 дозволяє RAF і `new WebGLRenderer` лише в `src/main.js` → скрипт демо поза `src/` (`demo/`), поза збіркою, tsc і lint його не бачать. (E3)
 
 - [GPU-таймер у headless] запит одного кадру з міткою `sky` губиться (чекання `timer.ms.sky` падало й до E2) → мітку ловити шпигуном на `timer.begin` під час руху, HUD лише звітувати. (E2)
 - [`WEBGL_lose_context` у пробі] `restoreContext()` у мікрозадачі обробника `webglcontextlost` не отримує відповіді — сторінка висить → кликати через `setTimeout`. (E2)
