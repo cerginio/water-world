@@ -29,6 +29,8 @@ import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 import { createStoryCatalog } from './catalog/index.js';
 import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
+import { TerrainContact } from './scene/TerrainContact.js';
+import { createWalkerHost } from './walker/index.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
 import { createFrameFocus } from './scene/frameFocus.js';
 import { createStationRail, railLanguage } from './ui/stationRail.js';
@@ -274,6 +276,36 @@ function placeTiles() {
   return tiles.place(anchor.start, anchor.out);
 }
 
+// --- walker (story-quest Q2a) ---------------------------------------------------------
+// Feet on the mesh as drawn (TerrainContact, as the tiles touch it), not on islandHeight.
+// The walker appears on the beach of the story coast, facing the field, and the camera goes
+// into its eyes; V (or the GUI button) toggles eyes / standing.
+// Built on first use: ~11 ms on a desktop (Q2a), a scene without the walker never pays it.
+let groundContact = null;
+const walkGround = (x, z) => (groundContact ??= new TerrainContact(terrain.geometry, terrain.geometry.parameters.width)).at(x, z);
+let walkerHost = null, walkerLoading = null;
+function walkerSpawn() {
+  const { coast: c } = storyAnchor(), out = storyAnchor().out;
+  const inward = new THREE.Vector2(-c.x, -c.y).normalize();
+  const p = c.clone();
+  for (let i = 0; i < 400 && (walkGround(p.x, p.y)?.height ?? -1) < 1; i++) p.addScaledVector(inward, 0.5);
+  return { x: p.x, z: p.y, yaw: Math.atan2(out.x, out.y) };
+}
+async function walk() {
+  walkerLoading ??= createWalkerHost({ scene, rig, ground: walkGround, canvas: renderer.domElement, isEditing });
+  walkerHost = await walkerLoading;
+  if (walkerHost.mode === 'off') {
+    const spawn = walkerSpawn();
+    walkerHost.place(spawn.x, spawn.z, spawn.yaw);
+  }
+  walkerHost.toggleEyes();
+  return walkerHost;
+}
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyV' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  walk().catch((err) => console.error('[walker]', err));
+});
+
 // --- station rail (SCENE-UI-SPEC §4) -------------------------------------------------
 // Stations never call setSun: the sun and the weather are not the camera's business.
 const radius = islandRadius(islandHeight);
@@ -312,6 +344,7 @@ if (mobile) gui.close();   // on phones the open panel covers most of the screen
 const techPanels = createTechPanels({ gui, perf: document.getElementById('perf'), args });
 const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
+gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk').name('walk · eyes (V)');
 
 fSun = gui.addFolder('Sun & sky');
 // the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
@@ -875,6 +908,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const px = new Uint8Array(size.x * size.y * 4);
   for (let i = 0; i < frames; i++) {
+    walkerHost?.update(dt, i * dt * 1000);
     rig.update(dt);
     renderFrame(dt);
     if (i === frames - 1) {
@@ -894,6 +928,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
 window.app = {
   still,
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
+  walk, get walker() { return walkerHost; }, ground: walkGround,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -985,6 +1020,7 @@ function setResolution(r) {
 function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
+  walkerHost?.update(dt, now);
   rig.update(dt);
   stations.update();
   renderFrame(dt);
@@ -1028,4 +1064,5 @@ views[ui.view]();
 // a link with ?story or ?tiles opens on the field once it has loaded and been placed (?story wins)
 if (args.has('story')) loadStory(args.get('story')).then(() => tiles.loaded && viewController.setValue('Tiles'));
 else if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
+if (args.has('walk')) walk().catch((e) => console.error('[walker]', e));
 if (!stillMode) requestAnimationFrame(loop);

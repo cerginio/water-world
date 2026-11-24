@@ -22,7 +22,7 @@
 |---|---|---|---|
 | [BOUNDARY-1](#boundary-1--engine--листок) | `src/engine/` імпортує лише `three` і `engine/` | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-2](#boundary-2--небо-й-атмосфера-переносні) | файли `src/environment/**` імпортують лише `three`, `three/*` і свою папку | guard-static, baseline 0 | ✓ |
-| [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортують лише входи платформи: `src/tiles/tilecraftLoader.js`, `src/catalog/tilecraftCatalog.js` | guard-static, baseline 0 | ✓ |
+| [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортують лише входи платформи: `src/tiles/tilecraftLoader.js`, `src/catalog/tilecraftCatalog.js`, `src/walker/tilecraftWalker.js` | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-4](#boundary-4--продукти-залежать-від-платформи) | `src/**` не імпортує `products/**` | guard-static, baseline 0 | ✓ |
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
@@ -91,7 +91,8 @@
 **Формулювання.** Специфікатор `@tilecraft…` (статичний, side-effect чи
 динамічний `import()`) трапляється лише у вхідних файлах платформи
 (`TILECRAFT_ENTRIES`): `src/tiles/tilecraftLoader.js` (моделі) і
-`src/catalog/tilecraftCatalog.js` (клієнт каталогу R2, story-quest Q1). Правило
+`src/catalog/tilecraftCatalog.js` (клієнт каталогу R2, story-quest Q1),
+`src/walker/tilecraftWalker.js` (фігура й `moveOnSheet`, story-quest Q2a). Правило
 дивиться й у `products/**`: продукт бере Tilecraft лише через платформу.
 Розширюється списком входів, а не дозволом усім (STORY-QUEST-SPEC §4).
 
@@ -100,15 +101,17 @@
 тримаються лише доти, доки решта коду не знає, звідки прийшла модель.
 
 **Механізм.** guard-static, `BOUNDARY-3 tilecraft-entry`. Розмір набору: у
-кожному вході зі списку ≥ 1 import (зараз 7 і 1); вхід без жодного — помилка.
+кожному вході зі списку ≥ 1 import (зараз 7, 1 і 2); вхід без жодного — помилка.
 
-**Перевірюване твердження.** `✓ BOUNDARY-3 tilecraft-entry — tiles/tilecraftLoader.js 7, catalog/tilecraftCatalog.js 1 import(ів)`.
+**Перевірюване твердження.** `✓ BOUNDARY-3 tilecraft-entry — tiles/tilecraftLoader.js 7, catalog/tilecraftCatalog.js 1, walker/tilecraftWalker.js 2 import(ів)`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
 | `src/tiles/TileField.js` + `import { thicknessScale } from '@tilecraft/lib/thickness-scale.js'` | ✓ проходить — дефект | ✗ `TileField.js: import «@tilecraft/lib/thickness-scale.js»` |
 | `src/catalog/catalog.js` + `import '@tilecraft/lib/story-catalog.js'` (story-quest Q1) | — | ✗ `src/catalog/catalog.js: import «@tilecraft/lib/story-catalog.js» — Tilecraft лише через входи …` |
 | `products/story-quest/main.js` + `import '@tilecraft/lib/story-catalog.js'` (Q1) | ✓ проходить — products/ не сканувався | ✗ `products/story-quest/main.js: import «@tilecraft/lib/story-catalog.js»` |
+| `src/walker/index.js` + `import '@tilecraft/viewer/engines/three/core/gamifier/characters.js'` (Q2a) | — | ✗ `src/walker/index.js: import «@tilecraft/…/characters.js» — Tilecraft лише через входи …` |
+| `src/walker/tilecraftWalker.js`: обидва `import('@tilecraft/…')` замінено на локальні (Q2a) | — | ✗ `src/walker/tilecraftWalker.js: жодного @tilecraft — вхід зі списку не імпортує Tilecraft` |
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleTilecraftEntry`.
 

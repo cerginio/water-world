@@ -20,6 +20,8 @@ const modules = [
   'lib/thickness-scale.js', 'lib/story-catalog.js', 'viewer/engines/pixi/polyline-lcr.js',
   ...['model-loader', 'coordinates', 'world-config', 'scene-compiler'].map(name => `viewer/engines/three/core/${name}.js`),
   'viewer/engines/three/engine/resource-scope.js',
+  // the walker (src/walker/tilecraftWalker.js, story-quest Q2a)
+  ...['sheet-motion', 'avatar'].map(name => `viewer/engines/three/core/gamifier/${name}.js`),
 ];
 
 export function resolveTilecraft(mode = 'production') {

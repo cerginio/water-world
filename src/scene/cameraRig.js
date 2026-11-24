@@ -26,6 +26,7 @@ export class CameraRig {
     this.locks = new Set();
     this.flight = null;
     this.following = null;
+    this.riding = null;
     this.keys = new Set();
     this.listeners = new Set();
     this._pose = { position: new THREE.Vector3(), target: new THREE.Vector3() };
@@ -64,6 +65,7 @@ export class CameraRig {
 
   /** Puts the camera at a pose at once; stops a flight and a follow. */
   place(position, target) {
+    this.dismount();
     this.following = null;
     this._endFlight();
     this.camera.position.copy(position);
@@ -101,6 +103,7 @@ export class CameraRig {
    * @param {{ onProgress?: (share: number) => void }} [options]
    */
   flyTo(to, { onProgress } = {}) {
+    this.dismount();
     this.following = null;
     const previous = this.flight;
     const flight = createFlight(this.pose(), to, { ground: this.ground, water: this.water });
@@ -174,6 +177,45 @@ export class CameraRig {
     if (f.elapsed >= f.duration) this._endFlight(true);
   }
 
+  // --- eyes (story-quest Q2a) ---------------------------------------------------------
+
+  get eyes() { return !!this.riding; }
+
+  /**
+   * The camera looks through a walker's eyes: every frame it takes `eye()` = { position,
+   * target } (plain {x, y, z}) as is. The controls are off under the lock 'eyes' until
+   * dismount(); place() and flyTo() dismount first. interrupt() (a touch, WASD) does not:
+   * the walker's own keys move the eyes. `onEnd` runs once when the ride ends.
+   * @param {() => ({ position: {x: number, y: number, z: number}, target: {x: number, y: number, z: number} } | null)} eye
+   * @param {{ onEnd?: () => void }} [options]
+   */
+  ride(eye, { onEnd } = {}) {
+    this.dismount();
+    this.interrupt();
+    this.keys.clear();
+    this.riding = { eye, onEnd, token: this.lock('eyes') };
+    this._stepRide();
+  }
+
+  /** Back to the free camera where the eyes were; no jump. */
+  dismount() {
+    const r = this.riding;
+    if (!r) return;
+    this.riding = null;
+    this.keys.clear();
+    this.holdStill();
+    this.release(r.token);
+    r.onEnd?.();
+  }
+
+  _stepRide() {
+    const pose = this.riding.eye();
+    if (!pose) return;
+    this.camera.position.copy(pose.position);
+    this.controls.target.copy(pose.target);
+    this.camera.lookAt(this.controls.target);
+  }
+
   // --- free camera ------------------------------------------------------------------
 
   /**
@@ -225,15 +267,19 @@ export class CameraRig {
   /** Once a frame, before rendering. */
   update(dt) {
     if (this.flight) this._stepFlight(dt);
+    else if (this.riding) this._stepRide();
     else {
       if (this.following) this._stepFollow(dt);
       this.controls.update();
       this._moveKeys(dt);
     }
-    this._clamp();
+    // The eyes stand 1.6 m over the drawn mesh; the clamp's islandHeight lies up to 2.5 m
+    // above that mesh on the ridges (story-quest Q2a) and would lift the eyes off the feet.
+    if (!this.riding) this._clamp();
   }
 
   dispose() {
+    this.dismount();
     this.interrupt();
     for (const off of this.listeners) off();
     this.listeners.clear();

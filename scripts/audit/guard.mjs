@@ -102,7 +102,7 @@ function ruleEnvironmentPortable(files) {
  * (BUILD-DEPLOY-SPEC) залежали б від кожного файлу. Продукти (`products/**`) теж
  * під правилом: вони беруть Tilecraft лише через платформу.
  */
-const TILECRAFT_ENTRIES = ['src/tiles/tilecraftLoader.js', 'src/catalog/tilecraftCatalog.js'];
+const TILECRAFT_ENTRIES = ['src/tiles/tilecraftLoader.js', 'src/catalog/tilecraftCatalog.js', 'src/walker/tilecraftWalker.js'];
 
 function ruleTilecraftEntry(files) {
   const failures = [];
