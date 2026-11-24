@@ -54,6 +54,21 @@ export class TileFrames {
     }
   }
 
+  // The authored frame: the model's frame.points (4 source-unit corners) in the field's rest
+  // coordinates, the same mapping as a tile (tileRest.js: (x - origin.x) * unit, y → z).
+  // The selection outline follows it; `bounds` (the tiles' footprint box) stays for contact
+  // and placement. A frame's tiles may cover only part of it (my-day frame 2: 145 of 196 units).
+  setQuads(frames, space) {
+    for (const entry of this.entries) entry.quad = null;
+    for (const frame of frames ?? []) {
+      const entry = this.byId.get(frameKey(frame?.id));
+      const points = frame?.points;
+      if (!entry || !Array.isArray(points) || points.length !== 4
+        || !points.every(p => Number.isFinite(p?.x) && Number.isFinite(p?.y))) continue;
+      entry.quad = points.map(p => new THREE.Vector2((p.x - space.origin.x) * space.unit, (p.y - space.origin.y) * space.unit));
+    }
+  }
+
   get(id) {
     const entry = this.byId.get(frameKey(id));
     if (!entry) throw new Error(`Unknown frame: ${String(id)}`);

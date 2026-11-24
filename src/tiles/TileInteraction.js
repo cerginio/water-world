@@ -287,8 +287,10 @@ export class TileInteraction {
   updateHighlight(frame){
     this.highlightFrame=frame;
     if(!frame){this.highlight.style.display='none';return;}
+    // the authored frame (model frame.points) when the model has one, else the tiles' box
     const {min,max}=frame.bounds,rect=this.canvas.getBoundingClientRect();
-    const points=[[min.x,min.y],[max.x,min.y],[max.x,max.y],[min.x,max.y]].map(([x,z])=>{
+    const corners=frame.quad?.map(c=>[c.x,c.y])??[[min.x,min.y],[max.x,min.y],[max.x,max.y],[min.x,max.y]];
+    const points=corners.map(([x,z])=>{
       const p=new THREE.Vector3(x+frame.offset.x,0,z+frame.offset.z).applyMatrix4(this.field.group.matrixWorld);
       const land=this.field.terrainContact.at(p.x,p.z)?.height??-1e20;
       p.y=land>0?land+0.05:frame.selectionHeight+0.05;

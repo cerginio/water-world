@@ -92,6 +92,7 @@ export class TileField {
     this.group.updateWorldMatrix(true, false);
     const all = collectTileRest(compiled);
     this.frameRegistry.rebuild(all, this.group.matrixWorld);
+    this.frameRegistry.setQuads(this.payload.model.frames, compiled.space);
     const rest = this.params.frame === 'all' ? all : collectTileRest(compiled, { frame: this.params.frame });
     if (rest !== all) for (const part of [...all.polygon, ...all.polyline]) part.geometry.dispose();
     this.frameRegistry.assign(rest);
