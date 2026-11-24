@@ -1,10 +1,10 @@
 # Handoff: mood-weather — віджет погоди-настрою й часу доби
 
 Стан на 2026-11-24. Гілка `master`. Фази з
-[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a, M1b, M2 і M3 закрито
+[MOOD-WEATHER-SPEC.md](../../MOOD-WEATHER-SPEC.md) (далі — «спека»). M1a, M1b, M2, M3 і M3b закрито
 й закомічено; QA — [QA.md](QA.md).
 
-> **Далі:** M3b — поведінка й безпека (спека §4.3, §4.6); перед стартом — рішення власника про плин дня 20 хв (спека §8 п.2).
+> **Далі:** M4 — стан світу; чекає на EDGE W5 (у репозиторії ще не почато, HANDOFF немає) — рішення власника, що робити до того.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -81,14 +81,15 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      кожному відкритті (§6 п.12); мова — за `navigator.languages`.~~ — ЗАКРИТО
    2026-11-24; картинки якорів — ілюстрація, з рендером не калібровано.
 
-5. **M3b — поведінка й безпека** (спека §4.3, §4.6). «Затихнути» (видима
+~~5. **M3b — поведінка й безпека** (спека §4.3, §4.6). «Затихнути» (видима
    при `a > 0.3`, τ 8 с), плин дня 20 хв з автовимкненням на заході,
    `prefers-reduced-motion` (`a ≤ 0.3`, τ ×1.5), клавіатура (←/→ 0.05 дня,
    стрілки 0.25, `Enter`, `Esc`), три `role="slider"`, `aria-live`.
    - проба: «Затихнути» з A1 → A9 за 25 ± 5 с, `t` незмінний (§6 п.4);
      reduced motion + A1 → `waveScale ≤ 0.12`, `windSpeed ≤ 7` (§6 п.6);
      плин дня — вимкнений після першого відкриття, зі стиснутим годинником
-     доходить до заходу й вимикається (§6 п.11).
+     доходить до заходу й вимикається (§6 п.11).~~ — ЗАКРИТО 2026-11-24; §6 п.6
+   переписано під `a ≤ 0.3` (вітер ≤ 11, хвилі ≤ 0.21) — рішення власника.
 
 6. **M4 — стан світу** (спека §4.7). `mood: { t, v, a, flow, map: 'mood@1' }`
    у частині `edge-of-the-elements`; URL `?mood=v,a&day=t`. Після EDGE W5.
@@ -97,8 +98,6 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ### Відкриті питання
 
-- **Спека §8 п.2:** тривалість плину дня 20 хв — потрібна до M3b (п.1, назви й
-  слова, вирішено 2026-11-23).
 - **Застаріле посилання в спеці §2.2:** «main.js:286» — тепер `storyAnchor`
   ([main.js:261](../../src/main.js#L261)) на `SET_BEARING`; передумову виконано
   в M1a.
@@ -113,22 +112,27 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (M3, 2026-11-24): guard зелений (OWNER-4 0, BOUNDARY-2 11 файлів, TEX-1 16,
-TYPES-1 21); `npm test` 118/118; `probe-mood-m3`, `probe-mood-m2`, `probe-mood-m1b`, `probe-scene-mobile` PASS;
+Baseline (M3b, 2026-11-24): guard зелений (OWNER-4 0, BOUNDARY-2 11 файлів, TEX-1 16,
+TYPES-1 21); `npm test` 127/127; `probe-mood-m3b`, `probe-mood-m3`, `probe-mood-m2`, `probe-mood-m1b`, `probe-scene-mobile` PASS;
 `probe-mood-m1a` anchors + field PASS, readable 5/27 (відкрите питання).
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
-| дані настрою | [src/environment/mood.js](../../src/environment/mood.js) (`MOOD_MAP_V1`, `sampleMood`, `SUN_PATH_V1`, `sunAt`, `MOOD_TAU`, `stepToward`), реекспорт з `environment/index.js` | спека §3.2, §3.3, §2.2, §4.4 (`stepToward` — експонента на місці, τ 0 = одразу); слова й назви — ключі локалі; вода — ваги пресетів | `tests/mood.test.js`, guard BOUNDARY-2 |
+| дані настрою | [src/environment/mood.js](../../src/environment/mood.js) (`MOOD_MAP_V1`, `sampleMood`, `SUN_PATH_V1`, `sunAt`, `MOOD_TAU`, `stepToward`, `QUIET`, `REDUCED_MOTION`, `moodTau`, `worldArousal`, `flowDay`), реекспорт з `environment/index.js` | спека §3.2, §3.3, §2.2, §4.4, §4.6 (`stepToward` — експонента на місці, τ 0 = одразу); слова й назви — ключі локалі; вода — ваги пресетів | `tests/mood.test.js`, guard BOUNDARY-2 |
 | писар сонця | `env.set()`/`env.dirty` в [index.js](../../src/environment/index.js); `setSun` [main.js:185](../../src/main.js#L185), `sunUi` (геттер/сеттер) [main.js:313](../../src/main.js#L313) | `env.params` пише лише `env.set`; `renderFrame` перепікає при `env.dirty` | guard OWNER-4 (baseline 0) |
 | канали моря | `bindSea` → `{ channels(sea), read(), write(ch) }`, `mixWater`, `WATER_PRESETS` у [seaBinding.js](../../src/environment-bindings/seaBinding.js) | канали — абсолютні значення хоста (× — від стартових), щоб перехід ішов від того, що на екрані; вода в лінійному RGB; поглинання ÷ clarity; `write` ставить `ocean.dirty` лише коли змінились хвилі | `probe-mood-m1a` anchors, `probe-mood-m2` |
-| `app.mood` і перехід | `applyMood`, `stepMood`, `freezeMood`, `moodApi` у [main.js](../../src/main.js) (`set` миттєво, `to` плавно, `state()` з `moving`, `day`); `stepMood` — у `renderFrame` перед небом | спека §4.4: погода неба (з E2b і `cloudSpeed`) — `env.setState` τ 6; день, море, грейдинг — `stepToward` (τ 6/10/6), сонце йде за днем дугою (`SUN_FOLLOW_TAU` 0.1); сонце поза дугою (шот) — прямо τ 6; Controls → `freezeMood`; до першого дотику `custom: true` | `probe-mood-m2`, `probe-mood-m1a` anchors |
-| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`, локалі uk/en, слова з межею, картинки якорів, мініатюра й кільце), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad`, `gui.onChange` [main.js](../../src/main.js) | спека §4.1, §4.2, §4.5: `input(state, final)` — цілі одразу, світ іде за ними; Controls/шот → `custom: true`, дотик → `false`; без цифр і `input`; межа слів, мініатюра — [DECISIONS.md](../../DECISIONS.md) | `probe-mood-m3`, `probe-mood-m1b`, `tests/moodPad.test.js` |
+| `app.mood` і перехід | `applyMood`, `stepMood`, `stepFlow`, `freezeMood`, `moodApi` у [main.js](../../src/main.js) (`set`, `to`, `quiet`, `flow`, `flowScale` — лише QA, `state()` з `moving`, `day`, `reduced`, `worldA`) | спека §4.4: небо — `env.setState`, день/море/грейдинг — `stepToward` з τ з `moodTau` (в `moodMove.tau`); плин рухає `moodState.t` перед `stepMood`; reduced motion — `matchMedia`, світ бере `worldArousal`; Controls → `freezeMood` (і плин вимк.) | `probe-mood-m3b`, `probe-mood-m2` |
+| віджет | [src/environment/ui/moodPad.js](../../src/environment/ui/moodPad.js) (`createMoodPad`, `padToMood`, `arcToDay`, `keyStep`, `dayBand`, локалі uk/en), стилі `#moodPad` в [index.html](../../index.html); хост — `createMoodPad({ get, input, quiet, flow })` у [main.js](../../src/main.js) | спека §4.1–§4.6: цілі одразу, світ за ними; дуга — `role=slider`, вікно — група з двома слайдерами через `aria-activedescendant`; кнопка перед панеллю в DOM (порядок Tab); рішення — [DECISIONS.md](../../DECISIONS.md) | `probe-mood-m3b`, `probe-mood-m3`, `probe-mood-m1b`, `tests/moodPad.test.js` |
 | поле історії й шоти | `SET_BEARING` [main.js:184](../../src/main.js#L184), `storyAnchor` [main.js:261](../../src/main.js#L261) | кут = азимут заходу 205°, не поточне сонце | `probe-mood-m1a` field, `probe-scene-env-identity` |
 | слот під погоду | `--weather-slot` в [index.html](../../index.html) (`.mobile`) | scene-ui §4.6: 56 + 8 px праворуч від рейки на телефоні; у слоті стоїть кнопка віджета | `probe-scene-mobile` |
 | пресети води в Controls | `w`, `setWater`, `applyPreset` у [main.js](../../src/main.js) (папка Water); прибій — `shoreUi`/`setShore` | GUI читає `WATER_PRESETS` з seaBinding; `app.mood.set` оновлює `absorptionBase`, `w.clarity`, `w.scatter`, `shoreUi` | — |
 
 ## Головні виміряні факти
+
+### Стенд і інструменти
+
+- [`npm test` з Git Bash] усі набори падають з «Cannot read properties of undefined (reading 'config')» (шлях `/d/…` дає два екземпляри vitest) → запускати з PowerShell; та сама пастка — scene-ui HANDOFF. (M3b)
+- [правка `src/` під час проби] Vite HMR перезавантажує сторінку посеред проби, `probe-mood-m2` падає на `waitForFunction` → не правити код, поки йдуть проби; після правки переганяти. (M3b)
 
 ### Сонце й поле історії
 
@@ -143,6 +147,9 @@ TYPES-1 21); `npm test` 118/118; `probe-mood-m3`, `probe-mood-m2`, `probe-mood-m
 
 - [`border-radius` на зоні дотику] кути заокругленого елемента не ловлять `pointerdown`, а камінчик кутового якоря (A1, A9) стоїть саме там → заокруглення — у `::before`, зона дотику — `::after` з `inset: -11px` (радіус камінчика). (M1b)
 - [lil-gui 0.21 у пробах] класи — `.lil-controller` і `.lil-name`, не `.controller`/`.name` → слайдер у пробі: `input.value`, потім `input` і `change`; `gui.onChange` бачить зміни всіх папок (`controller.parent` — папка). (M1b)
+
+- [`probe-mood-m3b`, «Затихнути»] межа спеки 25 ± 5 с пропускає й звичайний перехід (море 30 с, небо 18 с) → проба вимагає 95 % кожного каналу за 24 ± 1.5 с (τ 8 усім); мутація «без τ 8» валить. (M3b)
+- [плин дня в пробі] 20 хв не чекати → `app.mood.flowScale = 120`, годинник кадрів: 0.1 → захід за 9.02 с = 20.04 хв. (M3b)
 
 ### Перехід (M2)
 
