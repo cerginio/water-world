@@ -1,10 +1,11 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
-Стан на 2026-11-24. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0, Q1 і Q2a закрито й закомічено: каталог R2, `?story=`, оболонка
-`products/story-quest/`, персонаж ходить островом «очима». QA — [QA.md](QA.md).
+Стан на 2026-11-25. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
+(далі — «спека»). Q0, Q1, Q2a і Q2b закрито й закомічено: каталог R2, `?story=`,
+оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
+очі», «поза тілом», стік. QA — [QA.md](QA.md).
 
-> **Далі:** Q2b — «поза тілом», огляд і телефон.
+> **Далі:** Q3 — мініатюри.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Tilecraft (`TILECRAFT_ROOT`) лише читається.
@@ -19,7 +20,7 @@
 | ~~Q0~~ | закрито 2026-11-24 |
 | ~~Q1~~ | закрито 2026-11-24 |
 | ~~Q2a~~ | закрито 2026-11-24 |
-| Q2b | Q2a |
+| ~~Q2b~~ | закрито 2026-11-25 (fps на телефоні — за власником, QA-Q2b-7) |
 | Q3 | Q1, Q2a |
 | Q4 | Q3 |
 | Q5 | Q3 (долі кадру; пліт Q4 — для фіналу «в морі») |
@@ -84,16 +85,13 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    (не перешкода `moveOnSheet`, див. факти «Персонаж»); ввід свій
    (DECISIONS «Персонаж»); старт — `?walk`, V або кнопка GUI.
 
-4. **Q2b — «поза тілом», огляд і телефон** (спека §2 п.2, §5).
+~~4. **Q2b — «поза тілом», огляд і телефон** (спека §2 п.2, §5).
    Камера «поза тілом» (вільна, клавіші й мобільний контролер; персонаж
-   стоїть); огляд острова на старті → плавно в «очі»; стік на телефоні.
-   Зараз «стоїть» (V) — звичайна вільна камера; `rig.ride` різко ставить камеру
-   в очі; завантаження історії (переліт до поля) виводить з очей — порядок старту
-   з `?story` вирішує Q2b.
-   - guard: OWNER-3 baseline не росте.
-   - проба: старт → огляд → «очима» без різкого стрибка; «вийти з тіла» й
-     назад повертає ту саму позу; на телефоні власника ходьба ≥ 30 fps при
-     ≤ 10 кадрах (спека §5).
+   стоїть); огляд острова на старті → плавно в «очі»; стік на телефоні.~~ —
+   ЗАКРИТО 2026-11-25; числа — QA.md Q2b, рішення — DECISIONS «Персонаж: камери й
+   телефон». Швидкість ×3 (4.2 / 12 м/с) — на прохання власника. Ходьба за
+   замовчуванням в оболонці продукту (без `&walk`) — Q7. Заміри fps на телефоні
+   власника — QA-Q2b-7, не зроблено.
 
 5. **Q3 — мініатюри** (спека §2 п.3–4, §4.1 «Мініатюра й гідратація»).
    Мініатюра 1/8 rest (стартове значення, підбір на телефоні); розкладка на
@@ -145,18 +143,16 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
   вирішує Q3 за контактом мініатюр із рельєфом саме на цих історіях.
 - Fingerprint історії з каталогу — `null` (клієнт Tilecraft віддає розібраний
   об'єкт без байтів); ключ сховища slug + fingerprint — рішення Q6.
-- Стік телефону (Q2b): свій (як `src/walker/keyboard.js`) чи `gamifier-stick.js`
-  Tilecraft, якщо його можна взяти без `control()`.
 - Перешкоди на суші (каміння, валуни, плаваючі предмети) — персонаж проходить
   крізь них; спека Q2a межею називає лише воду. Чи потрібні — рішення власника.
-- Заміри на телефоні (базовий fps з історією — не зроблено в Q0; Q2b, Q4,
-  Q7) — лише власник. IP ПК у локальній мережі в правилі CORS немає —
+- Заміри на телефоні (базовий fps з історією — не зроблено в Q0; ходьба —
+  QA-Q2b-7; Q4, Q7) — лише власник. IP ПК у локальній мережі в правилі CORS немає —
   телефон на dev-стенді з `--host` каталог не прочитає, поки власник не
   впише його.
 
 ## Що зроблено і працює
 
-Baseline (Q2a, 2026-11-24): guard зелений 0.25 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0); `npm test` 202 passed; `probe-story-q2a` PASS 29.7 с.
+Baseline (Q2b, 2026-11-25): guard зелений 0.56 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0); `npm test` 211 passed; `probe-story-q2b` PASS 71.3 с, `probe-story-q2a` PASS 53.5 с.
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
@@ -164,8 +160,9 @@ Baseline (Q2a, 2026-11-24): guard зелений 0.25 с (BOUNDARY-1…4, OWNER-
 | Історія = видимі кадри | `src/tiles/storyFrames.js` (`toStoryFrames`), виклик у `tilecraftLoader.js` → `fetchTileSource` для фікстури, файлу й payload каталогу | HANDOFF Q1; тайли без видимого кадру й `hid`-кадри відкидаються до компіляції | `tests/storyFrames.test.js`, `probe-story-q1` (`contentOffset` < 1 м) |
 | Рамка виділення кадру | `TileFrames.setQuads` (`entry.quad` з `frame.points`), `TileInteraction.updateHighlight`; без `points` — `entry.bounds` | FRAME-DRAG FD4 + рев'ю Q1: рамка = авторський кадр, нерухома | `tests/frameQuad.test.js`, `probe-frame-land.mjs` |
 | Оболонка продукту | `products/story-quest/index.html`, `main.js` (рядок `#storyStatus`, uk/en), `story-quest.css`; спільний CSS сцени `src/ui/scene.css` | спека §4; BOUNDARY-4: `src/**` не імпортує `products/**` | `probe-story-q1` (dev + `PREVIEW_URL`) |
-| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`); у `main.js` — `walk()`, `app.walker`, `app.ground`, `?walk`, V | спека §4.1; ноги на `TerrainContact` (сітка), не на `islandHeight`; тіло ≥ 0.255 м від лінії броду −0.5 м | `tests/walker.test.js`, `scripts/probe-story-q2a.mjs` |
-| Камера «очима» | `CameraRig.ride(eye, { onEnd })`, `dismount()`, lock `eyes`; `place()`/`flyTo()` спершу `dismount()`; у `ride` без клемпу `islandHeight` | OWNER-3; `interrupt()` не знімає `ride` | `tests/walker.test.js` («CameraRig.ride») |
+| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `app.walker`, `app.ground` | спека §4.1; ноги на `TerrainContact`, не на `islandHeight`; тіло ≥ 0.255 м від лінії броду −0.5 м | `tests/walker.test.js`, `probe-story-q2a.mjs` |
+| Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
+| Стік і кнопка телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3) |
 | Збірка й деплой продукту | `vite.config.js` (`rollupOptions.input`), `verify-dist.mjs`, `deploy-netlify.mjs --alias`, `static-server.mjs` (index папки, `.css`), dev-фолбек `build/tilecraft-plugin.js` (`LOCAL_CATALOG_PATH`) | спека §5, §5.1 | `npm run deploy:check -- --alias story-quest`, `test:build` |
 
 ## Головні виміряні факти
@@ -199,6 +196,9 @@ Baseline (Q2a, 2026-11-24): guard зелений 0.25 с (BOUNDARY-1…4, OWNER-
 - [`islandHeight` проти сітки рельєфу] на хребтах аналітична висота до 2.49 м вища за намальовану сітку (34.05 проти 36.54 м у (127.5, −34.2)) → все, що стоїть на рельєфі, міряти `TerrainContact.at`; клемп `CameraRig._clamp` (`islandHeight + 0.8`) піднімав очі на 0.33 м — у `ride` вимкнений. (Q2a)
 - [берег острова на лінії −0.5 м] нормаль лінії на ±3 м зазвичай повертає на 10–70°, прямих відрізків (≤ 5° щометра) мало → проба шукає їх (`probe-story-q2a` 3b), а курси рахує від локальної нормалі, не від усередненої. (Q2a)
 - [вартість кроку] `walkOnGround` 0.022 мс на лінії броду, 0.007 мс углибині (desktop); `new TerrainContact` для персонажа — ~11 мс, тому лінивий у `main.js`. (Q2a)
+- [старт `?walk`, перші секунди після перельоту над островом] кадри провисають до 0.85 с (headless desktop), через 5 с — рівні 16.7 мс → проби, що міряють ходьбу за часом, чекають 5 с після прибуття в очі. (Q2b)
+- [трасування в пробі через rAF] перший запис іде лише на наступному кадрі, а `page.evaluate` повертається раніше → дія проби (V) потрапляє до першого рядка; писати перший рядок синхронно. (Q2b)
+- [спуск у очі з огляду] 1163 м за 4 с: найбільший крок 9.13 м за кадр = 1.03 від межі кривої (1.875 × середня швидкість × dt) → допуск проби ≤ 1.05, тісний; довший спуск — довша `approach`, не ширший допуск. (Q2b)
 - [збірка аватара] `avatar.js` Tilecraft іде окремим лінивим чанком 40 KB і бере three з `main` (один three); `test:build` перевіряє наявну `dist`, не будує → перед перевіркою `dist` — `npm run build`. (Q2a)
 
 ### Пліт і кайт
