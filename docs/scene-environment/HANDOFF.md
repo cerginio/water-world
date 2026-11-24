@@ -2,11 +2,11 @@
 
 Стан на 2026-11-24. Гілка `master`. Фази з
 [SCENE-ENVIRONMENT-SPEC.md](../../SCENE-ENVIRONMENT-SPEC.md) (далі — «спека»).
-E0, E1, E2, E2b, E3 закрито; код теми — `src/environment/` (модуль) і
+E0, E1, E2, E2b, E3, E4 закрито — усі фази спеки §6; код теми — `src/environment/` (модуль) і
 `src/environment-bindings/hostBinding.js`, `applySun` і `renderFrame` у `main.js`;
-LDR-демо — `env-demo.html` + `demo/envDemo.js`.
+LDR-демо — `env-demo.html` + `demo/envDemo.js`; пакування — `scripts/pack-environment.mjs`.
 
-> **Далі:** E4 — пакет для three (п.6 нижче): печатка версії, README модуля, чернетка спеки для Tilecraft (§5.5, §5.6); §8 відповіджено.
+> **Далі:** фаз у спеці не лишилось — рішення власника: `handoff:spec scene-environment` (відставання спеки, версія 1.1 без дрейфу хмар для градієнта) або фаза в Tilecraft за [чернеткою](TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд».
@@ -82,13 +82,14 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      2026-11-24: [QA.md](QA.md) → E3; IBL у LDR калібровано лише на полудні —
      відкрите питання нижче.
 
-6. **E4 — пакет для three** (спека §5.5, §5.6). Печатка версії
+~~6. **E4 — пакет для three** (спека §5.5, §5.6). Печатка версії
    `scene-environment@x.y`, README модуля, чернетка спеки для Tilecraft.
    - перевірка: тест копіює `src/environment/` у тимчасову теку й імпортує
      `index.js`, маючи лише `three`.
    - §8 відповіджено: копія з печаткою зараз (§5.6 a). У чернетку спеки Tilecraft —
      вимкнення дрейфу хмар для three (§5.5 п.6: перепікання лише на зміну стану;
-     зараз у LDR куб перепікається й при дрейфі, демо ставить `cloudSpeed 0`).
+     зараз у LDR куб перепікається й при дрейфі, демо ставить `cloudSpeed 0`).~~ — ЗАКРИТО
+     2026-11-24: [QA.md](QA.md) → E4; копію в Tilecraft не покладено (там лише читаємо).
 
 ### Відкриті питання
 
@@ -109,7 +110,11 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
   (рядок `sky` щокадру) — на телефоні не міряно (QA-E2b-5).
 - **IBL у LDR** (`LDR_IBL_K` 0.42 у `ldr.js`) підібрано на полудні: стоячий білий з IBL
   0.60 проти 0.62 з півсферою, а в тумані на заході 0.32 — нижче підлоги 0.55; проба
-  лише звітує. three IBL зараз не використовує — вирішити до E4, чи IBL взагалі в пакеті.
+  лише звітує. E4: у пакеті є, для three за замовчуванням вимкнений (чернетка §4 п.9, §7 п.2).
+- **Ім'я capability в three** — `scene-presentation.setEnvironment('light'|'calm')` уже
+  займає «environment» і пише фон через `backgroundOf` (чернетка §7 п.1) — власник Tilecraft.
+- **Дрейф хмар з тлом `'gradient'`** перепікає куб без видимої користі — кандидат на 1.1
+  (чернетка §7 п.3).
 - **Спека §5.3** не має `background`, `ldrLights().iblExposure`; §5.4 каже «куб у тому
   самому LDR-діапазоні», а в коді куб має власну експозицію IBL — поправити разом із
   рештою відставань через `handoff:spec`.
@@ -123,9 +128,9 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (E3, 2026-11-24): guard зелений (BOUNDARY-2 12 файлів, OWNER-4 0, TEX-1 16,
-TYPES-1 0); `npm test` 158/158; проби `probe-scene-env-ldr`, `-env-identity` (еталон до E3,
-Δ 0), `-env-smooth`, `-env-clouds`, `-env-measure`, `-mobile`, `probe-mood-m2`, `-m3b` PASS.
+Baseline (E4, 2026-11-24): guard зелений (BOUNDARY-2 12 файлів, OWNER-4 0, TEX-1 16,
+TYPES-1 0); `npm test` 161/161; проби `probe-scene-env-identity` (еталон E3, Δ 0), `-env-ldr`,
+`-mobile`, `probe-mood-m1b`, `-m3`, `-m3b` PASS.
 
 | підсистема | де | контракт | перевірка |
 |---|---|---|---|
@@ -134,6 +139,7 @@ TYPES-1 0); `npm test` 158/158; проби `probe-scene-env-ldr`, `-env-identity
 | хмари | [src/environment/clouds.js](../../src/environment/clouds.js) (`CLOUD_GLSL`: `skyWithClouds`, `CLOUD_WIND`, `CLOUD_WIND_DIR`); `env.clouds.{offset,cube,ibl}`, `env.active`, `CLOUD_STEP`, `CLOUD_IBL_STEP` в index.js | спека §3.3: зсув = ∫ `cloudSpeed`·`CLOUD_WIND` dt; тло — живий зсув, куб — прогін 6 граней (по одній за кадр), коли відстав на `CLOUD_STEP`, IBL — на `CLOUD_IBL_STEP`; дрейф не робить `dirty`, хост тікає за `active` | `probe-scene-env-clouds` |
 | LDR-вихід | [src/environment/ldr.js](../../src/environment/ldr.js) (`skyLight`, `ldrLighting`, `LDR_REFERENCE`, `THREE_LIGHTS`); `env.ldrLights()`; дефайни `ENV_LDR`/`BG_GRADIENT` у `skyBackground.js`, `LOWER_GROUND` і `uOutScale` у `skyBake.js`; демо [env-demo.html](../../env-demo.html) + `demo/envDemo.js` (`window.envDemo`) | спека §5.4: тло саме робить експозицію + AgX, `toneMapping` хоста не чіпає; світло на CPU — у полудень (A6, t 0.5) = three, інакше одна стиснута яскравість (√, 0.45…1.1) і підлога 0.58 sRGB; куб × `iblExposure`, IBL замінює півсферу | `tests/envLdr.test.js`, `probe-scene-env-ldr` |
 | сонячне світло | `bindSunLight(env, light, renderer, { shadowEvery })` у [hostBinding.js](../../src/environment-bindings/hostBinding.js) → `applySunLight(update, dt)`; `applySun`, `setSun` у [main.js:170](../../src/main.js#L170) | `renderFrame` при `env.active` кличе `env.update(dt)` у мітці `sky`; світло — кожен `sunChanged`, тінь 4096² у русі раз на 0.5 с, у спокої одразу; `applySun` = `update(0)` для `set()`; інших писарів `env.params` немає (OWNER-4 0); відновлення контексту — `env.restoreContext()` | guard OWNER-4, `probe-scene-env-smooth` |
+| пакет для three | `ENVIRONMENT_VERSION` в [index.js](../../src/environment/index.js); [scripts/pack-environment.mjs](../../scripts/pack-environment.mjs) (`packEnvironment`, `sealHeader`, `SEAL_FILE`); [README.md](../../src/environment/README.md) модуля; стилі віджета — [ui/moodPad.css](../../src/environment/ui/moodPad.css) (`index.html` — `<link>`, телефон — у своєму `<style>`) | спека §5.6 a: копія `.js/.css/.md` з печаткою першим рядком і `seal.json` (sha256 без печатки); заміна лише теки з `seal.json`; чернетка спеки three — [TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md](TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md) | `tests/envPackage.test.js` (копія + лише `three`, окремий node) |
 | кадр без часу | `?still` + `app.still({ shot, frames, dt })` у [main.js](../../src/main.js) | цикл не стартує; N кадрів із фіксованим dt, після кожного — GPU-fence і зчитування висот; повертає RGBA останнього кадру | [probe-scene-env-identity.mjs](../../scripts/probe-scene-env-identity.mjs) |
 | GPU-таймер | [src/engine/gpuTimer.js](../../src/engine/gpuTimer.js) (`GpuTimer`: `begin(label)`, `ms`, `drain`); мітки — `renderFrame` у [main.js](../../src/main.js) | мітки не вкладаються; зміна неба — мітка `sky` всередині кадру таймера | `runBenchmark`, `probe-scene-env-measure` |
 | заміри неба | [src/environment/measure.js](../../src/environment/measure.js) (`measureEnvironment`, кроки хоста — `steps: { spectrum }`); `app.measureEnvironment`, кнопка `#pSky` у `#perf`; копіювання панелі — [src/ui/perfCopy.js](../../src/ui/perfCopy.js) (`DoubleTap`, `bindPanelCopy`) | час між GPU-fence, цикл на паузі (`benchmarking`); кроки lut, face, cube, pmrem (1024², довідково), pmrem256/64/32 і bake256/64/32, shadow, spectrum; параметри неба не змінює | `probe-scene-env-measure`, `tests/perfCopy.test.js` |
@@ -167,7 +173,12 @@ TYPES-1 0); `npm test` 158/158; проби `probe-scene-env-ldr`, `-env-identity
 - [зчитування неба з GPU для світла] `readRenderTargetPixelsAsync` у three 0.186 бере лише `UnsignedByte`, half/float не читає асинхронно → світло LDR рахується на CPU (`skyLight`), не з куба. (E3)
 - [HDR-шлях після змін тла/куба] дефайни `ENV_LDR`/`BG_GRADIENT`/`LOWER_GROUND` і `uOutScale` 1.0 дають Δ 0 у `probe-scene-env-identity` → нові режими — лише дефайнами, HDR-код не міняти. (E3)
 
+- [інтеграція в three, фон] Tilecraft `36dc43ab`: `aura-control` пише `scene.background = backgroundOf() ?? …`, а `backgroundOf` уже віддає градієнт `scene-presentation` → небо оточення йде через цей гачок, не другим writer-ом. (E4)
+- [копія модуля поза репозиторієм] стилі `ui/moodPad.js` жили в `index.html` → копія віджета була б без стилів; новий стиль віджета — лише в `ui/moodPad.css`. (E4)
+
 ### Стенд і проби
+
+- [vitest з Git Bash] після `cd /d/…` диск `d:` малою літерою — vitest 5 падає `failed to find the runner` на будь-якому тесті → запускати з PowerShell (`D:`). (E4)
 
 - [демо-сторінка з власним renderer] guard OWNER-1/2 дозволяє RAF і `new WebGLRenderer` лише в `src/main.js` → скрипт демо поза `src/` (`demo/`), поза збіркою, tsc і lint його не бачать. (E3)
 

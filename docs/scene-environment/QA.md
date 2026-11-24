@@ -9,6 +9,143 @@
 треба підняти з `--host` (`npm run dev -- --host`) і відкрити
 `http://<IP цього ПК в локальній мережі>:5199/` — телефон і ПК в одній мережі.
 
+## E4. Пакет для three
+
+**Прийнято власником через `handoff:next` 2026-11-24.** Копію в Tilecraft не
+покладено; ім'я capability — відкрите питання чернетки §7 п.1.
+
+Модуль оточення готовий до копіювання в Tilecraft (спека §5.6 a — копія з
+печаткою):
+
+- **версія** — `ENVIRONMENT_VERSION = '1.0'` в `src/environment/index.js`;
+- **пакування** — `node scripts/pack-environment.mjs <тека>` копіює
+  `src/environment/` (`.js`, `.css`, `.md`; 14 файлів), ставить першим рядком
+  кожного файла печатку `scene-environment@1.0, source: Ultra-Water <коміт> <дата>`
+  (`-dirty`, якщо `src/environment/` має незакомічені зміни) і пише `seal.json`
+  з sha256 кожного файла без печатки. Повторне пакування в ту саму теку
+  замінює копію повністю; непорожню теку без `seal.json` скрипт не чіпає;
+- **README модуля** — [src/environment/README.md](../../src/environment/README.md):
+  межа, створення, контракт, рецепт LDR-хоста, віджет, обмеження 1.0, печатка;
+- **стилі віджета погоди** переїхали з `index.html` у
+  `src/environment/ui/moodPad.css` (рядки 99–209 без змін, `index.html`
+  підключає файл `<link>` перед своїм `<style>`); розкладка телефона —
+  Ultra-Water — лишилась в `index.html`. Інакше копія віджета приходила б без
+  стилів;
+- **чернетка спеки для Tilecraft** —
+  [TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md](TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md),
+  звірена з кодом Tilecraft `36dc43ab` читанням. Головна знахідка: у three вже
+  є `scene-presentation.setEnvironment('light' | 'calm')`, що пише фон через той
+  самий `backgroundOf` в `aura-control` — ім'я й роль capability вирішує
+  власник Tilecraft (чернетка §7 п.1).
+
+Перевірка §5.6 — `tests/envPackage.test.js`: пакує в тимчасову теку поза
+репозиторієм, де в `node_modules` лише `three` (junction), і окремий процес
+node імпортує звідти `index.js` і `ui/moodPad.js`. Мутація «`sun.js` імпортує
+`lil-gui`» валить тест (`ERR_MODULE_NOT_FOUND`), guard BOUNDARY-2 — теж.
+
+Guard зелений (BOUNDARY-2 12 файлів, OWNER-4 0, TEX-1 16, TYPES-1 0); `npm test`
+161/161 (+3); `npm run lint` без нових зауважень; `npm run build` +
+`verify:dist` — стилі віджета в `dist/assets/index-*.css`. Проби (AMD Radeon
+890M, стенд 5199):
+
+| проба | результат |
+|---|---|
+| `probe-scene-env-identity` (еталон E3) | Δ 0/255, куб і сонце Δ 0 у п'яти шотах, 48.4 с |
+| `probe-scene-env-ldr` | PASS 2.9 с, ΔE76 полудня 0.00…1.88, як в E3 |
+| `probe-mood-m1b` | PASS 13.5 с |
+| `probe-mood-m3` | перший прогін — виняток на холодному браузері, повтор PASS 38.5 с |
+| `probe-mood-m3b` | PASS 99.8 с |
+| `probe-scene-mobile` | PASS 23.3 с |
+
+### Свідомо не зроблено в E4
+
+- **Копію в Tilecraft не покладено.** Tilecraft з Ultra-Water лише читається;
+  скрипт і чернетка — вхід для фази в репозиторії Tilecraft.
+- **Дрейф хмар з тлом-градієнтом досі перепікає куб.** Для three — `cloudSpeed: 0`
+  у кожному `setState` (README, чернетка §4 п.6); зміна модуля — питання 1.1
+  (чернетка §7 п.3).
+- **IBL у пакеті є, але за замовчуванням для three вимкнений** (чернетка §4
+  п.9): калібровано лише полудень.
+- **Спеку SCENE-ENVIRONMENT не правили** (§5.2 `check:environment`, §5.3 API) —
+  через `handoff:spec scene-environment`.
+- Перевірки sha256 копії на боці Tilecraft немає — лише пропозиція в чернетці §3.
+
+### QA-E4-1. Пакування ставить печатку
+
+**qa:mode:** cli
+**qa:open:** PowerShell, каталог `D:\work\_tools\water-3d\Ultra-Water`, після коміту фази.
+**qa:action:** `node scripts/pack-environment.mjs $env:TEMP\scene-env-qa`, потім
+`Get-Content $env:TEMP\scene-env-qa\state.js -TotalCount 1`.
+**qa:inspect:** вивід обох команд.
+**qa:expected:** перша друкує `scene-environment@1.0, source: Ultra-Water <коміт фази> <сьогоднішня дата> — a copy: …`
+(без `-dirty`) і `14 files → …\scene-env-qa`, exit 0; друга — той самий рядок
+після `// `.
+
+### QA-E4-2. `seal.json` перелічує всі файли
+
+**qa:mode:** cli
+**qa:open:** PowerShell, той самий каталог, після QA-E4-1.
+**qa:action:** `Get-Content $env:TEMP\scene-env-qa\seal.json`.
+**qa:inspect:** JSON.
+**qa:expected:** `"name": "scene-environment"`, `"version": "1.0"`, `commit`
+як у QA-E4-1, у `files` 14 ключів, серед них `README.md`, `ui/moodPad.css`,
+`ui/moodPad.js`, `index.js`; значення — 64 шістнадцяткові символи.
+
+### QA-E4-3. Чужу теку скрипт не перезаписує
+
+**qa:mode:** cli
+**qa:open:** PowerShell, той самий каталог.
+**qa:action:** `node scripts/pack-environment.mjs $env:TEMP`; потім
+`Remove-Item -Recurse -Force $env:TEMP\scene-env-qa`.
+**qa:inspect:** вивід першої команди й `$LASTEXITCODE`.
+**qa:expected:** `pack-environment: …\Temp is not empty and has no seal.json — not a previous copy (--force to overwrite)`,
+exit 1; у `$env:TEMP` нічого не змінилось.
+
+### QA-E4-4. Копія живе лише з `three`
+
+**qa:mode:** cli
+**qa:open:** PowerShell (Git Bash з `cd /d/…` дає диск `d:` малою літерою, і
+vitest 5 падає `failed to find the runner` на будь-якому тесті), каталог
+`D:\work\_tools\water-3d\Ultra-Water`.
+**qa:action:** `npx vitest run tests/envPackage.test.js`.
+**qa:inspect:** підсумок vitest.
+**qa:expected:** `Tests  3 passed (3)`.
+
+### QA-E4-5. Вікно погоди виглядає як до фази
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/`
+**qa:action:** натиснути круглу кнопку погоди праворуч від рейки внизу.
+**qa:inspect:** кнопка й відкрита панель.
+**qa:expected:** кнопка 56 px з мініатюрою неба й моря праворуч від рейки;
+панель над рейкою: запрошення, дуга сонця, вікно погоди 240 px з дев'ятьма
+картинками й чотирма словами по краях, слова настрою під вікном. Без
+незастилізованих кнопок і тексту в лівому верхньому куті (ознака, що
+`moodPad.css` не підключився).
+
+### QA-E4-6. Вікно погоди на телефоні — нижній аркуш
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/` у DevTools, режим пристрою 360×780 (або
+телефон на стенді з `--host`).
+**qa:action:** оновити сторінку, натиснути кнопку погоди.
+**qa:inspect:** кнопка й аркуш.
+**qa:expected:** кнопка в правому нижньому куті над рейкою; аркуш на всю
+ширину над рейкою, вікно ~312 px. Покриває `probe-mood-m1b` (`sheet 344×578`,
+`window 312 px`); очима — що нічого не налазить і не обрізане.
+
+### QA-E4-7. README і чернетка читаються без Ultra-Water
+
+**qa:mode:** cli
+**qa:open:** [src/environment/README.md](../../src/environment/README.md) і
+[TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md](TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md) у редакторі.
+**qa:action:** прочитати як агент Tilecraft, що бачить лише копію модуля.
+**qa:inspect:** README «Хост LDR (three)», чернетка §2 і §7.
+**qa:expected:** з README зрозуміло, як підключити небо й світло в three без
+інших файлів; чернетка називає реальні файли Tilecraft (`aura-control.js`,
+`scene-presentation.js`, `viewer-session.js:724`) і чотири відкриті питання,
+серед них ім'я capability.
+
 ## E3. LDR-вихід оточення
 
 **Прийнято власником через `handoff:next` 2026-11-24.** IBL у LDR відкалібровано
