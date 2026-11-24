@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Edge of the Elements</title>
+  <link rel="stylesheet" href="/src/environment/ui/moodPad.css" />
   <style>
     html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
     canvas { display: block; width: 100%; height: 100%; }
@@ -96,117 +97,6 @@
          reached it at 412 px; the panel scrolls instead */
       .mobile #perf { max-height: calc(100% - var(--rail-top) - 16px - env(safe-area-inset-top)); overflow-y: auto; }
     }
-    /* mood weather (MOOD-WEATHER-SPEC §4.1, §4.2; src/environment/ui/moodPad.js): a round 56 px
-       button right of the rail with a thumbnail of the chosen state and a progress ring; open —
-       the invitation, the sun's arc, the weather window (240 px; on phones a bottom sheet above the
-       rail, the window up to 320 px) and the emotional words. No numbers, no sliders (§6 p.9). */
-    #moodPad { --pad: 240px; font: 500 12px/1.2 system-ui, sans-serif; color: #e8f4ff; }
-    #moodPad .mood-button {
-      position: fixed; z-index: 9; width: 56px; height: 56px; padding: 4px; border: 0; border-radius: 50%;
-      left: min(calc(50% + 152px + 12px), calc(100% - 56px - 8px)); bottom: calc(12px + 4px + env(safe-area-inset-bottom));
-      background: rgba(6, 10, 14, 0.55); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); cursor: pointer;
-    }
-    #moodPad .mood-thumb {
-      display: block; width: 100%; height: 100%; border-radius: 50%;
-      background: linear-gradient(#7fb6e6 0 58%, #1d6f8c 58% 100%);
-    }
-    /* the world is still on its way to the chosen state (§4.1): a thin ring fills round the button */
-    #moodPad .mood-ring {
-      position: absolute; inset: -5px; border-radius: 50%; opacity: 0; transition: opacity 400ms; pointer-events: none;
-      background: conic-gradient(#e8f4ff calc(var(--progress, 0) * 1turn), rgb(232 244 255 / 0.2) 0);
-      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
-      mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
-    }
-    #moodPad.moving .mood-ring { opacity: 1; }
-    #moodPad.open .mood-button { box-shadow: 0 0 0 2px #e8f4ff; }
-    #moodPad .mood-button:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 3px; }
-    #moodPad .mood-panel {
-      position: fixed; z-index: 11; right: max(8px, calc(50% - 220px)); bottom: calc(var(--rail-top) + 8px);
-      display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 16px 14px;
-      border-radius: 14px; background: rgba(6, 10, 14, 0.62); backdrop-filter: blur(6px);
-    }
-    #moodPad .mood-panel[hidden] { display: none; }
-    /* the invitation (§4.2): calm small type; after the first gesture only its first sentence */
-    #moodPad .mood-invite {
-      width: var(--pad); padding: 0; border: 0; background: none; color: rgb(232 244 255 / 0.78);
-      font: 400 12px/1.4 system-ui, sans-serif; text-align: center; cursor: pointer;
-    }
-    #moodPad .mood-invite.short .mood-invite-rest { display: none; }
-    #moodPad .mood-invite:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 2px; border-radius: 4px; }
-    #moodPad .mood-sky { position: relative; width: var(--pad); }
-    #moodPad .mood-arc { display: block; width: var(--pad); height: auto; touch-action: none; cursor: pointer; }
-    #moodPad .mood-arc:focus-visible, #moodPad .mood-window:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 4px; border-radius: 8px; }
-    #moodPad .mood-arc:focus { outline-offset: 2px; }
-    /* the day's flow toggle (§4.3) in the arc's top right corner: dim when off, lit when on */
-    #moodPad .mood-flow {
-      position: absolute; top: -4px; right: -6px; width: 30px; height: 30px; padding: 4px; border: 0; border-radius: 50%;
-      background: none; color: rgb(232 244 255 / 0.5); cursor: pointer;
-    }
-    #moodPad .mood-flow svg { display: block; width: 100%; height: 100%; }
-    #moodPad .mood-flow[aria-pressed="true"] { color: #ffd98a; background: rgb(255 217 138 / 0.16); }
-    #moodPad .mood-flow:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 1px; }
-    #moodPad .mood-sun { fill: #fff1c2; stroke: #ffffff; stroke-width: 2; filter: drop-shadow(0 0 4px #ffd27a); }
-    #moodPad .mood-day-words { fill: rgb(232 244 255 / 0.7); font-size: 11px; }
-    /* the corners are anchors (A1, A3, A7, A9) and the pebble sits on them: the rounded pictures
-       are a child, the hit area is the whole square plus the pebble's radius (::after) */
-    #moodPad .mood-window { position: relative; width: var(--pad); height: var(--pad); touch-action: none; cursor: pointer; }
-    #moodPad .mood-window::after { content: ''; position: absolute; inset: -11px; }
-    #moodPad .mood-art {
-      position: absolute; inset: 0; overflow: hidden; border-radius: 10px; pointer-events: none;
-      background: linear-gradient(to top, rgba(29, 111, 140, 0.55), rgba(29, 111, 140, 0) 55%),
-        linear-gradient(to right, #8a929b, #a7bccb 50%, #79b8ea);
-    }
-    /* nine soft sky-over-sea pictures that flow into each other (§4.2) */
-    #moodPad .mood-cell {
-      position: absolute; width: 74%; height: 74%; transform: translate(-50%, -50%);
-      -webkit-mask: radial-gradient(closest-side, #000 38%, transparent);
-      mask: radial-gradient(closest-side, #000 38%, transparent);
-    }
-    #moodPad .mood-motifs { position: absolute; inset: 0; width: 100%; height: 100%; }
-    #moodPad .mood-edge {
-      position: absolute; font-size: 11px; color: #f4f1ea; opacity: 0.9; pointer-events: none;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-    }
-    #moodPad .mood-edge.wind { top: 4px; left: 50%; transform: translateX(-50%); }
-    #moodPad .mood-edge.quiet { bottom: 4px; left: 50%; transform: translateX(-50%); }
-    #moodPad .mood-edge.cloudy { left: 3px; top: 50%; writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
-    #moodPad .mood-edge.clear { right: 3px; top: 50%; writing-mode: vertical-rl; transform: translateY(-50%); }
-    #moodPad .mood-pebble {
-      position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
-      background: #f4f1ea; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55); pointer-events: none;
-    }
-    /* «Quiet down»: the pebble glides to A9 instead of jumping */
-    #moodPad .mood-pebble.gliding { transition: left 1.4s ease-in-out, top 1.4s ease-in-out; }
-    /* the anchor's name on hover or a long press (§4.2) */
-    #moodPad .mood-name {
-      position: absolute; transform: translate(-50%, -50%); padding: 4px 9px; border-radius: 8px; white-space: nowrap;
-      background: rgba(6, 10, 14, 0.78); font-size: 12px; opacity: 0; transition: opacity 200ms; pointer-events: none;
-    }
-    #moodPad .mood-name.show { opacity: 1; }
-    /* the emotional words (§4.2): the new ones fade in over the old */
-    #moodPad .mood-words { position: relative; width: var(--pad); height: 18px; font-size: 13px; text-align: center; }
-    #moodPad .mood-words span { position: absolute; inset: 0; opacity: 0; transition: opacity 600ms ease; white-space: nowrap; }
-    #moodPad .mood-words span.on { opacity: 1; }
-    #moodPad .mood-words span.mood-sr { opacity: 0; }
-    /* screen-reader only: the window's two sliders and the live words (§4.6) */
-    #moodPad .mood-sr {
-      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0);
-      white-space: nowrap; border: 0; pointer-events: none;
-    }
-    #moodPad .mood-foot { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    /* «Quiet down» (§4.2): its place is kept; shown while the pebble is windy (a > 0.3) */
-    #moodPad .mood-quiet {
-      visibility: hidden; padding: 6px 16px; border: 1px solid rgb(232 244 255 / 0.45); border-radius: 16px;
-      background: rgb(232 244 255 / 0.1); color: #e8f4ff; font: 500 12px/1.2 system-ui, sans-serif; cursor: pointer;
-    }
-    #moodPad .mood-quiet.show { visibility: visible; }
-    #moodPad .mood-quiet:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 2px; }
-    @media (prefers-reduced-motion: reduce) {
-      #moodPad .mood-pebble.gliding { transition: none; }
-      #moodPad .mood-words span { transition-duration: 200ms; }
-    }
-    /* custom (§4.5): the Controls changed the world by hand; the next touch hands it back */
-    #moodPad .mood-panel.custom .mood-pebble, #moodPad .mood-panel.custom .mood-sun { opacity: 0.45; }
     .mobile #moodPad .mood-button { left: auto; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + 4px + env(safe-area-inset-bottom)); }
     /* phones: the window takes what is left above the rail after the arc (84/240 of the window)
        and, upright, the invitation unfolded, the words and «Quiet down» (--mood-extra) */

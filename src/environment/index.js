@@ -44,6 +44,13 @@ export { flowDay, MOOD_MAP_V1, MOOD_TAU, moodTau, QUIET, REDUCED_MOTION, SUN_PAT
 /** @typedef {{ elevation: number, azimuth: number, turbidity: number, rayleigh: number, cloudCoverage: number, sunIntensity: number, cloudSpeed: number }} SkyParams */
 /** @typedef {{ sunChanged: boolean, cubeChanged: boolean, moving: boolean, faces: number, pmrem: boolean, drift: boolean }} EnvUpdate */
 
+/**
+ * The module's version (spec §5.6): a copy in another repository carries it in its seal
+ * (`scripts/pack-environment.mjs`). Minor — a new option or export; major — a changed contract
+ * (an option's default, a removed export, the identity of env.cube / env.sun.*).
+ */
+export const ENVIRONMENT_VERSION = '1.0';
+
 export const DEFAULT_SKY_PARAMS = Object.freeze({
   elevation: 3.5, azimuth: 205, turbidity: 2, rayleigh: 1, cloudCoverage: 0.38, sunIntensity: 9,
   cloudSpeed: 1,
