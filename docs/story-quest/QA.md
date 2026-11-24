@@ -13,6 +13,165 @@
 
 Список історій папки — `…/<папка>/index.json`.
 
+## Q1. Каталог і оболонка продукту
+
+**Прийнято власником через `handoff:next` 2026-11-24** (після рев'ю — рамка виділення за `frame.points`). Рівні:
+
+- **guard** зелений 0.25 с: BOUNDARY-3 — `tiles/tilecraftLoader.js 7, catalog/tilecraftCatalog.js 1 import(ів)`,
+  новий BOUNDARY-4 — `1 файл(ів) products/, 1 import(ів) з src/`, OWNER-3 0, TYPES-1 0.
+  Мутації: `src/main.js` + `import '../products/story-quest/main.js'` → ✗ BOUNDARY-4;
+  `@tilecraft/lib/story-catalog.js` у `src/catalog/catalog.js` і в
+  `products/story-quest/main.js` → ✗ BOUNDARY-3; без `products/` → ✗ BOUNDARY-4
+  «правило дивиться не туди».
+- **focused:** `tests/catalog.test.js` 14 + `tests/storyFrames.test.js` 5 +
+  `tests/frameQuad.test.js` 3 — 22 passed. `npm test` — 13 файлів, 183 passed.
+  `npm run lint` — лише 2 давні попередження проб.
+- **рамка виділення** (рев'ю власника): `probe-frame-land` PASS 25 с,
+  `probe-frame-drag` PASS 86 с, `probe-story-q1` PASS 55.5 с після зміни.
+- **probe:** `scripts/probe-story-q1.mjs` PASS 56.7 с (dev); з
+  `PREVIEW_URL=http://127.0.0.1:4173/` — PASS 62.6 с (dev + preview).
+  `npm run test:build` і `npm run test:portability` — зелені.
+  `?tiles=none` + `runBenchmark(60, { shot: 'Golden hour' })` — 8.7 мс, без помилок.
+
+Що виміряно (`?story=` проти тієї ж моделі, кинутої файлом, — поля однакові):
+
+| історія | тайли | кадри | групи | поле, м | зсув вмісту, м (Q0) |
+|---|---|---|---|---|---|
+| `test-2025/my-day-3-moments` | 13 046 | 3 | 593 | 41.46 × 9.30 | 0.03 (0) |
+| `public-test/frog-fairy-full` | 39 092 | 10 | 1 729 | 78.01 × 22.93 | 0.01 (**2199**) |
+| `?tiles=story-8-frames-hibrid` = `?story=local/story-8-frames-hibrid` | 46 861 | 8 | 2 213 | 84.88 × 30.65 | 0.17 / 0.18 |
+
+- **Адреса історії** — `?story=<папка>/<історія>`; голий slug — папка
+  `public-test`. Папки — `public-test`, `test-2025`; у dev ще `local` (фікстури
+  Tilecraft `viewer/engines/three/fixtures/catalog/`, віддає лише dev-сервер,
+  у `dist` їх немає). Посилання переписується з `/` як `%2F` — читається так само.
+- **Приведення до кадрів** працює для всіх джерел (фікстура, файл, каталог):
+  жаба втрачає 5 тайлів без кадру, у консолі `[tiles] …: 5 tile(s) outside
+  visible frames`. Фікстури не змінились (тайлів без кадру в них немає).
+- **Форму тайлів не змінювали:** історії каталогу лишаються суцільною
+  полілінією, як в R2 (статус `Warning: polyline tile 1.9 / 7.6 m > 1 m`).
+- **Рамка виділення — авторський кадр** (`frame.points` моделі), а не прямокутник
+  тайлів. До цього рамка бралася з меж тайлів (з FD4): у `my-day-3-moments` тайли
+  кадру 2 займають 145 з 196 одиниць по y, і рамка кінчалася на ~2 м раніше за
+  кадр — низ ноутбука виходив за неї. Кадр без `points` (модель без кадрів) — як
+  раніше, за тайлами.
+- **Оболонка** `products/story-quest/` — та сама сцена плюс рядок стану історії
+  (uk / en за мовою браузера). CSS сторінки сцени винесено з `index.html` у
+  `src/ui/scene.css`, його читають обидві сторінки.
+
+### QA-Q1-1. Жаба з каталогу лягає на своє поле
+
+Проба це перевіряє (кількості, зсув < 1 м); власник дивиться очима.
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?story=public-test/frog-fairy-full`
+**qa:action:** нічого; дочекатися, поки камера перелетить до поля.
+**qa:inspect:** центр кадру; Controls → Tiles → `status` і `story`.
+**qa:expected:** у кадрі 10 кадрів жаби двома рядами по п'ять на воді. Статус
+`… 39092 tiles · 1729 groups · polyline` з попередженням про 7.6 м, рядок
+`story` — `public-test/frog-fairy-full · ready`. Заміщує QA-Q0-2: тепер це
+очікувана поведінка, а не дефект.
+
+### QA-Q1-2. Оболонка продукту піднімає історію
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/products/story-quest/?story=test-2025/my-day-3-moments`
+**qa:action:** нічого.
+**qa:inspect:** заголовок вкладки, верх екрана, поле історії.
+**qa:expected:** вкладка `Story Quest`. Поки модель вантажиться, вгорі видно рядок
+`Завантажуємо історію «test-2025/my-day-3-moments»…` (en: `Loading the story …`);
+щойно історія лягла, рядок зникає. На воді 3 кадри в ряд. Рейка, кнопка погоди й
+Controls ті самі, що на `/`.
+
+### QA-Q1-3. Оболонка без історії пропонує список
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/products/story-quest/`
+**qa:action:** нічого; потім клікнути перше посилання списку.
+**qa:inspect:** рядок стану вгорі.
+**qa:expected:** текст `Історію не вибрано. Додайте до адреси ?story=<папка>/<історія>, наприклад:`
+(en: `No story chosen. …`) і 8 посилань виду `Fairy Frog story (public-test/frog-fairy-full)`.
+Клік відкриває ту саму оболонку з `?story=…`; рядок зникає, щойно історія лягла.
+
+### QA-Q1-4. Хибна адреса історії
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/products/story-quest/?story=public-test/no-such-story`
+**qa:action:** нічого.
+**qa:inspect:** рядок стану вгорі (червона рамка); Controls → Tiles → `status`.
+**qa:expected:** `Такої історії в каталозі немає.`, під ним `Інші історії:` і список
+посилань. Статус `error: HTTP 404`. Сцена працює далі. З
+`?story=nonsuch/x` текст — `Адреса історії має вигляд ?story=<папка>/<історія>.`,
+статус `error: Unknown story «nonsuch/x»`.
+
+### QA-Q1-5. Немає мережі до R2 — повідомлення й локальні історії
+
+Проба це перевіряє (`route.abort` для `storytilecraft.cc` і `r2.dev`).
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/products/story-quest/?story=public-test/frog-fairy-full`
+**qa:action:** F12 → Network → ⋮ → More tools → Network request blocking →
+Enable, додати `*storytilecraft.cc*` і `*r2.dev*`; оновити сторінку (F5).
+**qa:inspect:** рядок стану вгорі.
+**qa:expected:** `Немає зв’язку з каталогом історій. Перевірте інтернет і оновіть сторінку.`,
+далі `Каталог недоступний — ось локальні історії для розробки:` і три посилання
+`local/story-8-frames-polygon`, `-polyline`, `-hibrid`. Клік на `hibrid` кладе
+білку (8 кадрів, 46 861 тайл). Після перевірки — вимкнути blocking.
+
+### QA-Q1-6. Оболонка в зібраному `dist`
+
+Проба це перевіряє з `PREVIEW_URL`.
+
+**qa:mode:** browser
+**qa:open:** термінал у `D:/work/_tools/water-3d/Ultra-Water`: `npm run build`, потім
+`npm run preview`; у браузері `http://127.0.0.1:4173/products/story-quest/?story=test-2025/my-day-3-moments`
+**qa:action:** нічого; після перевірки зупинити preview (Ctrl+C).
+**qa:inspect:** поле історії; консоль (F12).
+**qa:expected:** 3 кадри на воді, як у QA-Q1-2; у консолі немає помилок CORS.
+З `?story=local/story-8-frames-hibrid` — `Адреса історії має вигляд …`: локального
+каталогу в зібраному продукті немає.
+
+### QA-Q1-7. Стала адреса драфту продукту
+
+**qa:mode:** cli
+**qa:open:** термінал у `D:/work/_tools/water-3d/Ultra-Water`.
+**qa:action:** `npm run deploy:check -- --alias story-quest`
+**qa:inspect:** останні рядки виводу.
+**qa:expected:** `Netlify draft target: edge-of-elements · alias story-quest → https://story-quest--edge-of-elements.netlify.app`
+і `Prepared (no upload): netlify "deploy" … "--alias" "story-quest"`. З
+`--prod --alias story-quest` — `Error: --alias is for drafts; production has no alias`.
+
+### QA-Q1-8. Guard тримає межу «products → src»
+
+**qa:mode:** cli
+**qa:open:** термінал Git Bash у `D:/work/_tools/water-3d/Ultra-Water`.
+**qa:action:** `npm run guard`
+**qa:inspect:** рядки BOUNDARY-3 і BOUNDARY-4.
+**qa:expected:** `✓ BOUNDARY-3 tilecraft-entry — tiles/tilecraftLoader.js 7, catalog/tilecraftCatalog.js 1 import(ів)`
+і `✓ BOUNDARY-4 products-on-src — 1 файл(ів) products/, 1 import(ів) з src/`;
+останній рядок `guard … с`, код виходу 0.
+
+### QA-Q1-9. Рамка виділення йде по межах кадру
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?story=test-2025/my-day-3-moments`
+**qa:action:** дочекатися поля (камера `Tiles`); клікнути по ноутбуку в середньому кадрі.
+**qa:inspect:** жовта рамка навколо кадру.
+**qa:expected:** рамка — прямокутник кадру (13 × 9.8 м), трохи повернутий, як у
+моделі; ноутбук, ваза й килимок під мишу цілком усередині, знизу під ноутбуком
+лишається смуга води (~1–2 м). Те саме для кадру з вікном: вікно під самим верхнім
+краєм, але всередині. Рамка нерухома, поки вода гойдає малюнок.
+
+### Свідомо не зроблено в Q1
+
+- **Форма тайлів каталогу** — як в R2 (полілінія); модифікатор Tilecraft не
+  застосовується. Контакт мініатюр з рельєфом перевіряє Q3 саме на цих історіях.
+- **Fingerprint історії** з каталогу — `null` у payload: клієнт Tilecraft віддає
+  розібраний об'єкт, байтів немає. Ключ сховища (slug + fingerprint) — Q6.
+- **Вибір історії в Controls** — лише `?story=`; вибір зі списку — UI продукту (Q7).
+- **Телефон і LAN-IP у CORS** — як у Q0, не зроблено; Netlify-драфт з alias не
+  викладався (лише `deploy:check`).
+
 ## Q0. Розвідка: каталог без sidecar, CORS, імпорт з Tilecraft
 
 **Прийнято власником через `handoff:next` 2026-11-24.** Guard зелений 0.33 с (BOUNDARY-3 7 import-ів, OWNER-3 0,
@@ -90,6 +249,7 @@ camera → `Tiles`.
 **qa:expected:** статус `4691 tiles · 154 groups · polyline` (попередження про
 14.2 м), рейка показує `Moment 1/2`, а на воді в кадрі нічого немає. У консолі
 центр геометрії має x ≈ 3780 (локально). Це дефект, який виправить Q1, а не регресія.
+**З Q1 заміщено QA-Q1-1:** жаба лягає на поле, 10 кадрів видно.
 
 ### QA-Q0-3. CORS для origin стенда
 

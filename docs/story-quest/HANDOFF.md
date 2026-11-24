@@ -1,10 +1,10 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-24. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0 закрито й закомічено; коду продукту ще немає. QA —
-[QA.md](QA.md).
+(далі — «спека»). Q0 і Q1 закрито й закомічено: каталог R2, `?story=`, оболонка
+`products/story-quest/`. QA — [QA.md](QA.md).
 
-> **Далі:** Q1 — каталог і оболонка продукту (Q2a незалежна — можна паралельно).
+> **Далі:** Q2a — персонаж: ходьба й камера «очима».
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Tilecraft (`TILECRAFT_ROOT`) лише читається.
@@ -17,7 +17,7 @@
 | фаза | чекає на |
 |---|---|
 | ~~Q0~~ | закрито 2026-11-24 |
-| Q1 | — |
+| ~~Q1~~ | закрито 2026-11-24 |
 | Q2a | — (незалежна від Q1) |
 | Q2b | Q2a |
 | Q3 | Q1, Q2a |
@@ -48,7 +48,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    §7 п.1 записано в спеку (sidecar не потрібен); числа — QA.md Q0, факти —
    нижче. Заміри на телефоні не зроблено — відкрите питання.
 
-2. **Q1 — каталог і оболонка продукту** (спека §4.1 «Каталог», §4, §5.1).
+~~2. **Q1 — каталог і оболонка продукту** (спека §4.1 «Каталог», §4, §5.1).
    `src/catalog/`: `list()`, `load(slug, { signal })`, стани
    `pending/ready/failed`, події; модель тим самим шляхом, що фікстура;
    `?story=<slug>`. **Приведення історії до кадрів** (рішення власника
@@ -71,7 +71,10 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      кадрів, межі); для тестового набору (нижче) зсув вмісту від центру
      поля < 1 м (`probe-story-q0.mjs` міряє `contentOffset`); відмова мережі → зрозуміле повідомлення й фікстури dev
      (спека §5); `products/story-quest/` відкривається в `dev` і в `preview`;
-     `deploy:check` показує alias.
+     `deploy:check` показує alias.~~ — ЗАКРИТО 2026-11-24; числа — QA.md Q1.
+     Адреса — `?story=<папка>/<історія>`; форму тайлів не змінювали (полілінія
+     R2). На рев'ю знайдено й виправлено: рамка виділення — `frame.points`, не
+     межі тайлів.
 
 3. **Q2a — персонаж: ходьба й камера «очима»** (спека §2 п.2, §4.1
    «Персонаж»). `src/walker/`: фігура з Tilecraft, обгортка над `moveOnSheet`
@@ -136,9 +139,11 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ### Відкриті питання
 
-- Форма тайлів історій каталогу (Q1): усі три моделі R2 — суцільна
-  полілінія, фікстура — через модифікатор Tilecraft (`hibrid`). Брати як є чи
-  модифікувати — не вирішено; від цього залежить контакт мініатюр із рельєфом (Q3).
+- Форма тайлів історій каталогу: Q1 бере як є (суцільна полілінія R2, до 7.6 м
+  на тайл), фікстура — через модифікатор Tilecraft (`hibrid`). Чи модифікувати —
+  вирішує Q3 за контактом мініатюр із рельєфом саме на цих історіях.
+- Fingerprint історії з каталогу — `null` (клієнт Tilecraft віддає розібраний
+  об'єкт без байтів); ключ сховища slug + fingerprint — рішення Q6.
 - Ввід персонажа (Q2a): `gamifier-input/-pad/-stick` Tilecraft працюють через
   `control()` гейміфаєра (22 члени) — перехідник чи свій тонкий ввід.
 - Заміри на телефоні (базовий fps з історією — не зроблено в Q0; Q2b, Q4,
@@ -148,10 +153,15 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (Q0, 2026-11-24): guard зелений 0.33 с, TYPES-1 0; `npm test` не мінявся (src/ не чіпали); `probe-story-q0` PASS 40.6 с.
+Baseline (Q1, 2026-11-24): guard зелений 0.31 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0); `npm test` 183 passed; `probe-story-q1` PASS 55.5 с.
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
+| Каталог історій | `src/catalog/index.js` (`createStoryCatalog`), `catalog.js` (`createCatalog`, `parseStoryId`, `errorCode`), Tilecraft-вхід `tilecraftCatalog.js` (`lib/story-catalog.js`); `app.catalog`, `app.loadStory` у `main.js` | спека §4.1; стани `idle/pending/ready/failed`, подія `change`, помилка `{ code, message }`; папки `public-test`, `test-2025`, у dev `local` | `tests/catalog.test.js`, `scripts/probe-story-q1.mjs` |
+| Історія = видимі кадри | `src/tiles/storyFrames.js` (`toStoryFrames`), виклик у `tilecraftLoader.js` → `fetchTileSource` для фікстури, файлу й payload каталогу | HANDOFF Q1; тайли без видимого кадру й `hid`-кадри відкидаються до компіляції | `tests/storyFrames.test.js`, `probe-story-q1` (`contentOffset` < 1 м) |
+| Рамка виділення кадру | `TileFrames.setQuads` (`entry.quad` з `frame.points`), `TileInteraction.updateHighlight`; без `points` — `entry.bounds` | FRAME-DRAG FD4 + рев'ю Q1: рамка = авторський кадр, нерухома | `tests/frameQuad.test.js`, `probe-frame-land.mjs` |
+| Оболонка продукту | `products/story-quest/index.html`, `main.js` (рядок `#storyStatus`, uk/en), `story-quest.css`; спільний CSS сцени `src/ui/scene.css` | спека §4; BOUNDARY-4: `src/**` не імпортує `products/**` | `probe-story-q1` (dev + `PREVIEW_URL`) |
+| Збірка й деплой продукту | `vite.config.js` (`rollupOptions.input`), `verify-dist.mjs`, `deploy-netlify.mjs --alias`, `static-server.mjs` (index папки, `.css`), dev-фолбек `build/tilecraft-plugin.js` (`LOCAL_CATALOG_PATH`) | спека §5, §5.1 | `npm run deploy:check -- --alias story-quest`, `test:build` |
 
 ## Головні виміряні факти
 
@@ -160,8 +170,8 @@ Baseline (Q0, 2026-11-24): guard зелений 0.33 с, TYPES-1 0; `npm test` �
 - [CORS R2 `stories`] з 2026-11-24 у правилі `localhost:5199`, `127.0.0.1:5199`, `127.0.0.1:4173`, `edge-of-elements.netlify.app`, `story-quest--edge-of-elements.netlify.app` → `curl` з `Origin` на `cdn.` і `r2.dev` дає заголовок 15/15; новий origin — у правило до деплою, перевірка — `curl -D - -H "Origin: …"`, не вкладка. (Q0)
 - [`probe-story-q0.mjs`] модель тягне Node (без CORS), у сторінку кладе синтетичним `drop` з `DataTransfer` — шлях, як у власника з файлом; `contentOffset` = відстань центру геометрії поля від `tiles.center` → «поле зібралось, але невидиме» без нього не видно. (Q0)
 
-- [`scripts/deploy-netlify.mjs`] приймає лише `--prod`, `--dry-run`, `--site` (`allowed`) → `--alias` треба додати в `allowed` і в `args`. (код)
-- [`vite.config.js`] немає `build.rollupOptions.input`, `verify-dist.mjs` перевіряє лише `index.html` → друга сторінка `products/story-quest/` без цього не потрапить у `dist`. (код)
+- [`import.meta.env` у `src/`] Vite підставляє лише дослівний текст `import.meta.env.X`; `(import.meta).env` (JSDoc-каст) лишається `undefined`, а `import.meta.env ?? {}` не дає збірці вирізати dev-гілку → писати `import.meta.env.DEV` прямо, тип — `src/types/globals.d.ts`. (Q1)
+- [нова сторінка в `products/`] друга сторінка збірки — `rollupOptions.input` у `vite.config.js` + рядок у `verify-dist.mjs`; `npm run preview` віддає `…/` як `index.html` лише після Q1 (`static-server.mjs`). (Q1)
 
 ### Каталог
 
@@ -169,6 +179,11 @@ Baseline (Q0, 2026-11-24): guard зелений 0.33 с, TYPES-1 0; `npm test` �
 - [`computeBounds` Tilecraft] рахує ВСІ тайли моделі, а `scene-compiler` тайли без `f` пропускає → 5 тайлів без кадру `frog-fairy-*` (до 187 808 од.) зсувають поле на 2199 / 3960 м; фільтр «лише тайли видимих кадрів» дає 0 м — робити до `compileTileSource`. (Q0)
 - [компіляція, desktop RTX] `my-day-3-moments` 222 + 333 мс, `frog-fairy-full` 594 + 860 мс, `story-8-frames-hibrid` 542 + 1016 мс (compile + rest); polygon-фікстура — 55 + 154 мс → полілінія в ~5–10 разів довша. (Q0)
 - [статус поля для полілінії] `polyline tile N m > 1 m; terrain contact accuracy not guaranteed`: `my-day` 1.9 м, жаба 7.6 м, білка 7.0 м → для мініатюр на суші (Q3) перевіряти контакт саме на цих історіях. (Q0)
+
+- [`?story=` в адресі] `writeTileUrl` пише `story=public-test%2Ffrog-fairy-full` (URLSearchParams кодує `/`) → `parseStoryId` читає обидві форми, у QA давати адресу зі `/`. (Q1)
+- [`frame.points` моделі] 4 кути в одиницях джерела, ті самі, що `tile.x/y`; у полі — `(p − space.origin) × space.unit`, y → z; тайли кадру можуть займати лише частину (`my-day` кадр 2: 145 з 196 од.) → межі кадру — `entry.quad`, не `entry.bounds`. (Q1)
+- [вода над тайлами] тайли лежать на −0.5…+0.2 м від рамки, а вода заломлює їх: з косої камери малюнок зсунутий на екрані відносно рамки до ~1 м, без `app.surface.mesh` збігається → перевіряти межі з вимкненою водою, не на око. (Q1)
+- [фікстура з локального каталогу] `local/story-8-frames-hibrid` = `?tiles=story-8-frames-hibrid` за тайлами, групами, кадрами й полем; максимальна полілінія 7.017 проти 6.998 м (файл каталогу vs модифікатор). (Q1)
 
 ### Персонаж
 
