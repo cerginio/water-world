@@ -315,7 +315,7 @@ export function bakeShoreMap(heightFn, extent, size = 512, obstacle = null) {
     const x = ((i + 0.5) / size - 0.5) * extent, z = ((j + 0.5) / size - 0.5) * extent;
     const h = heightFn(x, z);
     const k = j * size + i;
-    land[k] = h > 0; sea[k] = h <= 0;
+    land[k] = h > 0 ? 1 : 0; sea[k] = h <= 0 ? 1 : 0;
     bed[k] = h;
     height[k] = obstacle ? Math.max(h, obstacle(x, z)) : h;
   }

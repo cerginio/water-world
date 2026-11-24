@@ -1,11 +1,4 @@
 {
-  "total": 21,
-  "files": {
-    "src/engine/gpuTimer.js": 1,
-    "src/main.js": 7,
-    "src/scene/floaters.js": 1,
-    "src/tiles/TileField.js": 2,
-    "src/tiles/tilecraftLoader.js": 8,
-    "src/water/shoreMap.js": 2
-  }
+  "total": 0,
+  "files": {}
 }

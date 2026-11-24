@@ -18,6 +18,8 @@ class Body {
   constructor(desc) {
     this.desc = desc;
     this.object = desc.object;
+    /** @type {(() => void) | undefined} called when the body leaves the pool (a dropped tile) */
+    this.onRemove = undefined;
     this.mass = desc.density * desc.volume;
     const s = desc.size, m = this.mass;
     // solid-box inertia; good enough for every prop shape here

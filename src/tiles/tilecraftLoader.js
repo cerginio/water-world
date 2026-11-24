@@ -31,6 +31,7 @@ function loadModules() {
 }
 
 // source → { id, model, world, sidecar } (a fixture id, or a dropped File)
+/** @param {string | File} source @param {{ signal?: AbortSignal }} [options] */
 export async function fetchTileSource(source, { signal } = {}) {
   const tc = await loadModules();
   return source instanceof File ? tc.loadFile(source) : tc.loadFixture(source, { signal });

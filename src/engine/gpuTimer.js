@@ -9,6 +9,7 @@ export class GpuTimer {
     this.frame = null;
     this.ms = {};       // smoothed ms per label
     this.total = 0;     // smoothed sum of all labels
+    this.keep = false;  // benchmark: keep every frame's queries for drain()
   }
 
   get available() { return !!this.ext; }

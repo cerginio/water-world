@@ -25,7 +25,10 @@
   скрипти в `test()` (ламає посилання) і `scripts/test.mjs` без раннера.
 - **Тайпчек `strict: false`, baseline 21.** Причина: перевірка має бути
   чутливою з першого дня, а не червоною. Відкинуто: `strict: true` (baseline
-  став би смітником неявних `any` — P12).
+  став би смітником неявних `any` — P12). 2026-11-24 — baseline 0: помилки
+  розібрано анотаціями без зміни поведінки; модулі `@tilecraft` — `declare
+  module` у `src/types/tilecraft.d.ts`, бо аліас Vite веде в чекаут Tilecraft,
+  шлях до якого свій на кожній машині (відкинуто: `paths` у tsconfig).
 - **guard без git-хука і без CI.** Блокування тримає цикл фаз: навичка
   `handoff` запускає guard перед кожним комітом фази (крок eval, рівень
   guard — «only guard has the right to fail and block»), команду бере з

@@ -30,7 +30,7 @@
 | [OWNER-5](#owner-5--глобали-пише-лише-корінь-композиції) | `window.*` / `globalThis.*` / `self.*` пише лише `src/main.js` | guard-static, baseline 0 | ✓ |
 | [BUDGET-1](#budget-1--семплери-води-в-мінімумах-webgl2) | вода: фрагмент ≤ 16, вершина ≤ 16, разом ≤ 32 семплерів | guard-static | 16/16 |
 | [TEX-1](#tex-1--float-текстури-без-лінійної-фільтрації) | `FloatType` — лише з `NearestFilter`; лінійно фільтровані дані — half float (`engine/halfTexture.js`) | guard-static + проба `probe-scene-shore` | ✓ |
-| [TYPES-1](#types-1--помилки-типів-не-ростуть) | помилок `tsc --checkJs` не більше baseline, по кожному файлу | guard (окремий процес), baseline 21 ↓ | борг |
+| [TYPES-1](#types-1--помилки-типів-не-ростуть) | помилок `tsc --checkJs` не більше baseline, по кожному файлу | guard (окремий процес), baseline 0 | зелене |
 
 «↓» — baseline лише опускається: guard падає і на зростанні, і на зникненні
 запису без опущення планки (P12).
@@ -289,7 +289,9 @@ Desktop має розширення — жоден рівень перевіро
 
 **Формулювання.** `tsc --checkJs` над `src/` (tsconfig.json, `strict: false`)
 дає не більше помилок, ніж baseline, і в жодному файлі не більше, ніж там
-записано. Зараз 21 у 6 файлах. Baseline лише опускається.
+записано. Зараз 0 (2026-11-24: 21 у 6 файлах розібрано — неоголошені поля,
+JSDoc опцій, `@tilecraft` і дебаг-глобали в `src/types/*.d.ts`). Baseline лише
+опускається.
 
 **Походження.** ARCHITECTURE.md TD12, огляд 2026-11-22: клас «виклик замість
 значення» ловиться лише в браузері. Запуск через прямий `tsc.js`, не `npx`:
@@ -301,11 +303,11 @@ Desktop має розширення — жоден рівень перевіро
 окремим процесом і бере лише вердикт; baseline —
 [scripts/audit/typecheck-baseline.json](scripts/audit/typecheck-baseline.json).
 
-**Перевірюване твердження.** `typecheck: 21 помилок, baseline тримається.`
+**Перевірюване твердження.** `typecheck: 0 помилок, baseline тримається.`
 
 | мутація | guard до правила | guard після |
 |---|---|---|
-| `src/water/shoreMap.js` + `let mutationCount = 0; mutationCount = 'many';` | ✓ проходить — дефект | ✗ `typecheck: 22 помилок проти baseline 21`, `shoreMap.js(351,24): TS2322` |
+| `src/water/shoreMap.js` + `let mutationCount = 0; mutationCount = 'many';` | ✓ проходить — дефект | ✗ `typecheck: 1 помилок проти baseline 0`, `shoreMap.js(341,24): TS2322` (перевірено 2026-11-24) |
 
 **Де живе.** `npm run typecheck`, `npm run typecheck:report`.
 

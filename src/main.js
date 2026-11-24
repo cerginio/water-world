@@ -794,6 +794,7 @@ async function gpuFence() {
 // frames back-to-back (render loop paused), timed to GPU completion; also returns the
 // per-pass GPU times measured at full clocks
 let benchmarking = false;
+/** @param {number} [frames] @param {{ shot?: string, warmup?: number }} [options] */
 async function runBenchmark(frames = 300, { shot, warmup = 20 } = {}) {
   if (!Number.isInteger(frames) || frames < 1 || frames > 300 || !Number.isInteger(warmup) || warmup < 0 || warmup > 20) throw new Error('Benchmark limits: frames 1..300, warmup 0..20');
   if (shot && !Object.hasOwn(views, shot)) throw new Error(`Unknown shot: ${shot}`);
@@ -879,7 +880,7 @@ window.app = {
 
 // --- HUD + loop ------------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
-const hud = $('hud'), graph = $('pGraph').getContext('2d'), uncapButton = $('pUncap'), fpsHistory = [];
+const hud = $('hud'), graph = /** @type {HTMLCanvasElement} */ ($('pGraph')).getContext('2d'), uncapButton = $('pUncap'), fpsHistory = [];
 let bench = '', frames = 0, lastHud = performance.now(), last = performance.now(), uncapped = false;
 $('pGpu').textContent = (() => {
   const ext = gl.getExtension('WEBGL_debug_renderer_info');

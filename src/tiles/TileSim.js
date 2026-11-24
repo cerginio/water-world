@@ -336,6 +336,7 @@ export class TileSim {
       depthBuffer: false, generateMipmaps: false,
     })) : [];
     this.runCurrent = 0;
+    /** @type {Record<string, { value: any }>} the field adds its own (uTileMotionLimit) */
     this.uniforms = {
       uRest0: { value: this.rest0 }, uRest1: { value: this.rest1 },
       ...Object.fromEntries(this.target.textures.map((texture, i) => [`uState${i}`, { value: texture }])),
