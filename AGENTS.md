@@ -20,6 +20,7 @@
 | scene-ui | [docs/scene-ui/HANDOFF.md](docs/scene-ui/HANDOFF.md) | `src/ui/`, `src/scene/cameraFlight.js`, `src/scene/cameraRig.js`, `src/scene/stationPoses.js`, `index.html`, `src/main.js`, `src/tiles/TileInteraction.js`, `src/water/shoreMap.js`, `src/engine/halfTexture.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
 | scene-environment | [docs/scene-environment/HANDOFF.md](docs/scene-environment/HANDOFF.md) | `src/environment/`, `src/environment-bindings/`, `src/engine/gpuTimer.js`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
 | mood-weather | [docs/mood-weather/HANDOFF.md](docs/mood-weather/HANDOFF.md) | `src/environment/mood.js`, `src/environment/ui/`, `src/environment-bindings/seaBinding.js`, `index.html`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
+| story-quest | [docs/story-quest/HANDOFF.md](docs/story-quest/HANDOFF.md) | `src/catalog/`, `src/walker/`, `src/tiles/`, `products/story-quest/`, `scripts/deploy-netlify.mjs`, `vite.config.js`, `src/main.js` | [INVARIANTS.md](INVARIANTS.md); guard — `npm run guard` з кореня, потім focused, потім проба |
 
 ## Перевірки фази
 
