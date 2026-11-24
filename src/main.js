@@ -5,7 +5,7 @@ import { OceanSim, defaultOceanParams } from './water/OceanSim.js';
 import { OceanSurface } from './water/OceanSurface.js';
 import { bakeShoreMap } from './water/shoreMap.js';
 import { bakeWaterTextures } from './water/bakeTextures.js';
-import { createEnvironment, measureEnvironment, MOOD_MAP_V1, MOOD_TAU, SUN_PATH_V1, sampleMood, stepToward, sunAt } from './environment/index.js';
+import { createEnvironment, flowDay, measureEnvironment, MOOD_MAP_V1, moodTau, QUIET, SUN_PATH_V1, sampleMood, stepToward, sunAt, worldArousal } from './environment/index.js';
 import { bindSunLight } from './environment-bindings/hostBinding.js';
 import { bindSea, WATER_PRESETS } from './environment-bindings/seaBinding.js';
 import { bindPanelCopy } from './ui/perfCopy.js';
@@ -502,8 +502,12 @@ fQ.add(quality, 'reflectionScale', 0.25, 1, 0.05).onFinishChange(makeTargets);
 // app.mood.set(v, a, t) is at once (sky re-baked); app.mood.to(v, a, t) and the widget are smooth.
 // Until the first set the world is the Controls' own (custom); a hand change in the mood's
 // Controls folders makes it custom again (spec §4.5): the move stops where it is.
+// M3b (spec §4.3, §4.6): «Quiet down» — A9 with the weather's τ 8, the day stays; the day's flow
+// walks moodState.t dawn → sunset in 20 min on the frame clock and switches itself off there;
+// prefers-reduced-motion caps the world's arousal at 0.3 (the pebble may sit higher), τ ×1.5.
 const sea = bindSea({ ocean, surface, spray, underwater, terrain, clarity: () => w.clarity });
 const moodState = { t: 0.1, v: 1, a: -1, flow: false, custom: true };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** the move in progress: `now` is on screen, `to` is where it goes; null at rest */
 let moodMove = null, moodMirrorAt = 0;
 // the sky follows the walked day this closely (one cube face a frame, E2), not at once
@@ -529,9 +533,11 @@ const sunOnPath = (t) => {
   const sun = sunAt(SUN_PATH_V1, t);
   return Math.abs(env.target.elevation - sun.elevation) < 0.01 && Math.abs(env.target.azimuth - sun.azimuth) < 0.01;
 };
-/** moodState → targets; `smooth` false puts the world there at once */
-function applyMood({ smooth }) {
-  const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
+/** moodState → targets; `smooth` false puts the world there at once; `quiet` — «Quiet down»'s τ */
+function applyMood({ smooth, quiet = false }) {
+  const reduced = reducedMotion.matches;
+  const m = sampleMood(MOOD_MAP_V1, moodState.v, worldArousal(moodState.a, reduced));
+  const tau = moodTau({ quiet, reduced });
   const sky = { sunIntensity: m.sky.sunIntensity, cloudCoverage: m.sky.cloudCoverage, turbidity: m.sky.turbidity, cloudSpeed: m.sky.cloudSpeed };
   const sun = sunAt(SUN_PATH_V1, moodState.t);
   moodState.custom = false;
@@ -544,7 +550,8 @@ function applyMood({ smooth }) {
     moodMove = { now: { day: { t: direct ? moodState.t : dayShown }, sea: sea.read(), grade: gradeNow() }, sunDirect: direct, to: null };
   }
   moodMove.to = { day: { t: moodState.t }, sea: sea.channels(m.sea), grade: { ...m.grade } };
-  if (smooth) env.setState(moodMove.sunDirect ? { ...sky, elevation: sun.elevation, azimuth: sun.azimuth } : sky, { tau: MOOD_TAU.sky });
+  moodMove.tau = tau;
+  if (smooth) env.setState(moodMove.sunDirect ? { ...sky, elevation: sun.elevation, azimuth: sun.azimuth } : sky, { tau: tau.sky });
   else { stepMood(0, true); applySun(); }
   moodGap0 = moodGap();
 }
@@ -557,7 +564,8 @@ function moodGap() {
     + absd(e.turbidity, g.turbidity) / 8 + (absd(e.elevation, g.elevation) + absd(e.azimuth, g.azimuth)) / 180, day: 0, sea: 0, grade: 0 };
   if (moodMove?.to) {
     const { now, to } = moodMove;
-    gap.day = absd(now.day.t, to.day.t);
+    // the flowing day is always a step behind its target: that is the flow, not a move to show
+    gap.day = moodState.flow ? 0 : absd(now.day.t, to.day.t);
     gap.sea = absd(now.sea.windSpeed, to.sea.windSpeed) / 22 + absd(now.sea.waveScale, to.sea.waveScale) / 0.45;
     gap.grade = absd(now.grade.keyValue, to.grade.keyValue) / 0.1 + absd(now.grade.saturation, to.grade.saturation);
   }
@@ -573,10 +581,10 @@ function moodProgress() {
 }
 /** one frame of the move: day → sun, sea channels, grade; at once when `snap` */
 function stepMood(dt, snap = false) {
-  const { now, to } = moodMove;
-  const day = stepToward(now.day, to.day, dt, snap ? 0 : MOOD_TAU.day);
-  const waves = stepToward(now.sea, to.sea, dt, snap ? 0 : MOOD_TAU.sea);
-  const grade = stepToward(now.grade, to.grade, dt, snap ? 0 : MOOD_TAU.grade);
+  const { now, to, tau } = moodMove;
+  const day = stepToward(now.day, to.day, dt, snap ? 0 : tau.day);
+  const waves = stepToward(now.sea, to.sea, dt, snap ? 0 : tau.sea);
+  const grade = stepToward(now.grade, to.grade, dt, snap ? 0 : tau.grade);
   dayShown = now.day.t;
   if (!snap && !moodMove.sunDirect) {
     const sun = sunAt(SUN_PATH_V1, dayShown);
@@ -593,29 +601,56 @@ function stepMood(dt, snap = false) {
   if (display) moodMirrorAt = 0;
   mirrorMood(display);
 }
-/** a hand change in the Controls: the move stops where it is, the sky too */
+/** a hand change in the Controls: the move stops where it is, the sky too, and the day's flow */
 function freezeMood() {
   moodMove = null;
+  moodState.flow = false;
   env.setState({ ...env.params });
+}
+/** the day's flow, one frame (spec §4.3): the target walks, the world follows it with the day's τ */
+let flowSyncAt = 0;
+function stepFlow(dt) {
+  const { t, done } = flowDay(SUN_PATH_V1, moodState.t, dt * moodApi.flowScale);
+  moodState.t = t;
+  if (done) moodState.flow = false;
+  if (moodMove?.to) moodMove.to.day.t = t;
+  else applyMood({ smooth: true });
+  // the sun on the arc and the thumbnail: four times a second is smooth enough for 20 minutes
+  flowSyncAt += dt;
+  if (done || flowSyncAt >= 0.25) { flowSyncAt = 0; moodPad.sync(); }
 }
 const moodApi = {
   /** at once. @param {number} v valence −1…1 @param {number} a arousal −1…1 @param {number} [t] day 0…1 */
   set(v, a, t = moodState.t) { return moodApi.go(v, a, t, false); },
   /** smoothly, like the widget (spec §4.4) */
   to(v, a, t = moodState.t) { return moodApi.go(v, a, t, true); },
-  go(v, a, t, smooth) {
+  go(v, a, t, smooth, quiet = false) {
     moodState.v = clampTo(v, -1, 1, 'v');
     moodState.a = clampTo(a, -1, 1, 'a');
     moodState.t = clampTo(t, 0, 1, 't');
-    applyMood({ smooth });
+    applyMood({ smooth, quiet });
     moodPad.sync();
     return moodApi.state();
   },
+  /** «Quiet down» (spec §4.2, §4.4): to A9 with the weather's τ 8; the time of day stays */
+  quiet() { return moodApi.go(QUIET.v, QUIET.a, moodState.t, true, true); },
+  /** the day's flow on or off (spec §4.3); on, it starts from where the sun is */
+  flow(on) {
+    moodState.flow = Boolean(on) && moodState.t < 1;
+    if (moodState.flow && moodState.custom) applyMood({ smooth: true });
+    moodPad.sync();
+    return moodApi.state();
+  },
+  /** QA only: the day's flow runs this many times faster (1 — 20 minutes dawn to sunset) */
+  flowScale: 1,
   state() {
+    const reduced = reducedMotion.matches;
     const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
     // moving: the world is still on its way (the sea, the grade, the day or the sky)
+    // reduced: prefers-reduced-motion — the world's arousal stops at 0.3 (`worldA`)
     return { ...moodState, map: MOOD_MAP_V1.version, anchor: m.anchor, words: m.words,
-      moving: moodMove !== null || env.dirty, day: dayShown, progress: moodProgress() };
+      moving: moodMove !== null || env.dirty, day: dayShown, progress: moodProgress(),
+      reduced, worldA: worldArousal(moodState.a, reduced) };
   },
 };
 const moodPad = createMoodPad({
@@ -628,6 +663,8 @@ const moodPad = createMoodPad({
     applyMood({ smooth: true });
     if (wasCustom) moodPad.sync();
   },
+  quiet: () => moodApi.quiet(),
+  flow: (on) => moodApi.flow(on),
   language: railLanguage([...navigator.languages, navigator.language]),
 });
 // the folders the mood writes, and the dev shots (they set the sun): a hand change there is «custom»
@@ -638,6 +675,8 @@ gui.onChange(({ controller }) => {
   freezeMood();
   moodPad.sync();
 });
+// the system setting can change while the page is open: the world follows the new cap smoothly
+reducedMotion.addEventListener('change', () => { if (!moodState.custom) applyMood({ smooth: true }); });
 
 // --- frame ---------------------------------------------------------------------
 const gl = renderer.getContext();
@@ -660,7 +699,9 @@ function renderFrame(dt) {
   if (gl.isContextLost()) return;
   elapsed += dt;
   timer.beginFrame();
-  // the mood's move first: its day lands in the sky update below (spec §4.4)
+  // the mood's move first: its day lands in the sky update below (spec §4.4); the flowing day
+  // moves the target before it (spec §4.3)
+  if (moodState.flow && !moodState.custom) stepFlow(dt);
   if (moodMove) stepMood(dt);
   moodPad.progress(moodProgress());
   // inside the timer's frame, so a sky change shows as its own `sky` line (E0); while the sky

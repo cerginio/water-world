@@ -8,12 +8,17 @@
 // (the nearest anchor's; on the border of two cells the first word of each, crossfaded), the
 // anchor's name on hover or a long press, the invitation (collapses to its first sentence after
 // the first gesture of the session, a touch opens it again), the thumbnail and the progress ring
-// on the button, uk/en. «Quiet down», the day's flow, the keyboard and ARIA sliders come in M3b.
+// on the button, uk/en. M3b (spec §4.3, §4.6): «Quiet down» (shown while a > 0.3), the day's
+// flow toggle by the arc, the keyboard (the arc ←/→ 0.05 of the day; the window the arrows 0.25,
+// Enter to the nearest anchor; Esc folds the widget), three role="slider" (the arc; the window
+// holds two and points at the one its last arrow moved, aria-activedescendant) and a polite live
+// region with the words.
 //
 // No numbers and no range inputs (spec §6 p.9).
 //
-// The widget owns no world state. The host gives `get()` → { t, v, a, custom } and takes
-// `input({ t, v, a }, final)`: `final` is false while a finger moves and true on release.
+// The widget owns no world state. The host gives `get()` → { t, v, a, flow, custom } and takes
+// `input({ t, v, a }, final)`: `final` is false while a finger moves and true on release (a key
+// is final at once); `quiet()` — «Quiet down»; `flow(on)` — the day's flow toggle.
 // `custom` (spec §4.5) — the Controls changed the world by hand: the pebble and the sun are
 // shown half transparent until the next touch, which hands the world back to the widget.
 // The host reports how far the world is on its way with `progress(p)`, p ∈ [0, 1] (1 at rest).
@@ -31,6 +36,38 @@ export const WORDS_BORDER = 0.1;
 const LONG_PRESS_MS = 500, LONG_PRESS_SLOP = 8, NAME_LINGER_MS = 1200;
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(x) ? x : lo));
+
+/** «Quiet down» shows while the pebble is this windy (spec §4.2) */
+export const QUIET_FROM = 0.3;
+/** keyboard steps (spec §4.6): the arc in days, the window in v/a */
+export const DAY_STEP = 0.05, PAD_STEP = 0.25;
+const tidy = (/** @type {number} */ x) => Math.round(x * 1e9) / 1e9;
+
+/**
+ * A key on the arc or the window → the next state, or null when the key is not ours (spec §4.6):
+ * the arc ←/→ (and ↓/↑) step the day, Home/End go to dawn/sunset; the window's arrows move the
+ * pebble (← cloudy, → clear, ↑ wind, ↓ quiet), Enter puts it on the nearest anchor.
+ * @param {'arc' | 'pad'} what @param {string} key
+ * @param {{ t: number, v: number, a: number }} state
+ * @returns {null | { t: number, v: number, a: number, axis?: 'v' | 'a' }}
+ */
+export function keyStep(what, key, { t, v, a }) {
+  if (what === 'arc') {
+    const d = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[key];
+    if (d) return { t: tidy(clamp(t + d * DAY_STEP, 0, 1)), v, a };
+    if (key === 'Home' || key === 'End') return { t: key === 'Home' ? 0 : 1, v, a };
+    return null;
+  }
+  const dv = { ArrowLeft: -1, ArrowRight: 1 }[key] ?? 0, da = { ArrowUp: 1, ArrowDown: -1 }[key] ?? 0;
+  if (dv || da) return { t, v: tidy(clamp(v + dv * PAD_STEP, -1, 1)), a: tidy(clamp(a + da * PAD_STEP, -1, 1)), axis: dv ? 'v' : 'a' };
+  if (key === 'Enter') { const c = nearestCell(v, a); return { t, v: c.col - 1, a: c.row - 1 }; }
+  return null;
+}
+
+/** five bands of an axis −1 … +1 → a word index 0 … 4, for aria-valuetext */
+export const band = (/** @type {number} */ x) => Math.min(4, Math.floor(((clamp(x, -1, 1) + 1) / 2) * 5));
+/** the day's word index: dawn and sunset are only the ends (t = 0.1 is the morning, spec §6 p.2) */
+export const dayBand = (/** @type {number} */ t) => [0.08, 0.4, 0.6, 0.92].filter((edge) => clamp(t, 0, 1) >= edge).length;
 
 /**
  * A point in the weather window → mood. x left → right is cloudy → clear, y top → bottom is
@@ -115,7 +152,11 @@ export function moodColors(v, a, t) {
 const LOCALES = {
   uk: {
     button: 'Погода й час доби', arc: 'Час доби', pad: 'Погода',
+    sliderV: 'Ясно — хмарно', sliderA: 'Тиша — вітер', quiet: 'Затихнути', flow: 'Плин дня',
     day: ['світанок', 'полудень', 'захід'],
+    dayText: ['світанок', 'ранок', 'полудень', 'по обіді', 'захід'],
+    vText: ['хмарно', 'радше хмарно', 'посередині', 'радше ясно', 'ясно'],
+    aText: ['тиша', 'радше тихо', 'посередині', 'радше вітряно', 'вітер'],
     edges: { wind: 'вітер', quiet: 'тиша', cloudy: 'хмарно', clear: 'ясно' },
     invite: ['Зробіть вдих і довгий видих.', 'Спрямуйте внутрішній зір на те, що ви відчуваєте.',
       'Оберіть погоду, яка відповідає вашому стану або стану, до якого ви хотіли б прийти.'],
@@ -129,7 +170,11 @@ const LOCALES = {
   },
   en: {
     button: 'Weather and time of day', arc: 'Time of day', pad: 'Weather',
+    sliderV: 'Clear — cloudy', sliderA: 'Quiet — wind', quiet: 'Quiet down', flow: 'Day flow',
     day: ['dawn', 'noon', 'sunset'],
+    dayText: ['dawn', 'morning', 'noon', 'afternoon', 'sunset'],
+    vText: ['cloudy', 'rather cloudy', 'in between', 'rather clear', 'clear'],
+    aText: ['quiet', 'rather quiet', 'in between', 'rather windy', 'wind'],
     edges: { wind: 'wind', quiet: 'quiet', cloudy: 'cloudy', clear: 'clear' },
     invite: ['Breathe in, and breathe out slowly.', 'Turn your inner eye to what you feel.',
       'Choose the weather that matches your state, or the state you would like to reach.'],
@@ -196,11 +241,12 @@ const MOTIFS = {
 const MOTIF_AT = [48, 150, 252];
 
 /**
- * @param {{ get: () => { t: number, v: number, a: number, custom: boolean },
+ * @param {{ get: () => { t: number, v: number, a: number, flow?: boolean, custom: boolean },
  *   input: (state: { t: number, v: number, a: number }, final: boolean) => void,
+ *   quiet?: () => void, flow?: (on: boolean) => void,
  *   language?: string, parent?: HTMLElement }} options
  */
-export function createMoodPad({ get, input, language = 'en', parent = document.body }) {
+export function createMoodPad({ get, input, quiet = () => {}, flow = () => {}, language = 'en', parent = document.body }) {
   const lang = LOCALES[language] ? language : 'en';
   const text = LOCALES[lang];
   const anchorAt = (/** @type {{ row: number, col: number }} */ c) => MOOD_MAP_V1.grid[c.row][c.col];
@@ -240,7 +286,9 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
   invite.append(inviteFirst, inviteRest);
 
   // the sun's arc: warm at the ends, white at the top; dawn · noon · sunset under it (spec §4.2)
-  const arc = svgEl('svg', { class: 'mood-arc', viewBox: `0 0 ${ARC_W} ${ARC_H}`, role: 'group', 'aria-label': text.arc });
+  // the arc is the first of the three sliders (spec §4.6); the day as words, never a number on screen
+  const arc = svgEl('svg', { class: 'mood-arc', viewBox: `0 0 ${ARC_W} ${ARC_H}`, role: 'slider', tabindex: 0,
+    'aria-label': text.arc, 'aria-valuemin': 0, 'aria-valuemax': 1, 'aria-orientation': 'horizontal' });
   const grad = svgEl('linearGradient', { id: 'moodArcGrad', x1: 0, x2: 1, y1: 0, y2: 0 });
   for (const [offset, color] of [[0, '#ffad66'], [0.5, '#ffffff'], [1, '#ff9457']]) {
     grad.append(svgEl('stop', { offset, 'stop-color': color }));
@@ -258,11 +306,43 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
   }
   const sunDot = svgEl('circle', { class: 'mood-sun', r: 9 });
   arc.append(defs, path, dayWords, sunDot);
+  // the day's flow (spec §4.3): a small toggle in the arc's top right corner, off by default
+  const flowBtn = document.createElement('button');
+  flowBtn.type = 'button';
+  flowBtn.className = 'mood-flow';
+  flowBtn.setAttribute('aria-label', text.flow);
+  flowBtn.title = text.flow;
+  flowBtn.setAttribute('aria-pressed', 'false');
+  const flowIcon = svgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  flowIcon.append(svgEl('path', { d: 'M 4 17 A 8.5 8.5 0 0 1 20 17', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8,
+    'stroke-linecap': 'round', 'stroke-dasharray': '2.2 3' }),
+  svgEl('circle', { cx: 15.5, cy: 9.6, r: 3.2, fill: 'currentColor' }),
+  svgEl('path', { d: 'M 17.4 14.2 l 2.6 2.8 l 0.4 -3.6', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8,
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+  flowBtn.append(flowIcon);
+  const sky = document.createElement('div');
+  sky.className = 'mood-sky';
+  sky.append(arc, flowBtn);
 
   const pad = document.createElement('div');
   pad.className = 'mood-window';
   pad.setAttribute('role', 'group');
   pad.setAttribute('aria-label', text.pad);
+  pad.tabIndex = 0;
+  // the window's two sliders (spec §4.6): the focus stays on the window, which points at the one
+  // its last arrow moved (aria-activedescendant), so the arrows work in two dimensions
+  const sliders = ['v', 'a'].map((axis) => {
+    const el = document.createElement('span');
+    el.id = axis === 'v' ? 'moodSliderV' : 'moodSliderA';
+    el.className = 'mood-sr';
+    el.setAttribute('role', 'slider');
+    el.setAttribute('aria-label', axis === 'v' ? text.sliderV : text.sliderA);
+    el.setAttribute('aria-valuemin', '-1');
+    el.setAttribute('aria-valuemax', '1');
+    el.setAttribute('aria-orientation', axis === 'v' ? 'horizontal' : 'vertical');
+    return el;
+  });
+  pad.setAttribute('aria-activedescendant', sliders[0].id);
   // the illustrations: nine soft sky-over-sea cells that flow into each other, and a motif on each
   const art = document.createElement('div');
   art.className = 'mood-art';
@@ -293,18 +373,33 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
   name.setAttribute('aria-hidden', 'true');
   const pebble = document.createElement('span');
   pebble.className = 'mood-pebble';
-  pad.append(art, ...edges, pebble, name);
+  pad.append(art, ...edges, pebble, name, ...sliders);
 
   // the emotional words (spec §4.2): two layers, the new words fade in over the old
   const words = document.createElement('div');
   words.className = 'mood-words';
   const layers = [document.createElement('span'), document.createElement('span')];
   layers[0].className = 'on';
-  layers[1].setAttribute('aria-hidden', 'true');
-  words.append(...layers);
+  for (const l of layers) l.setAttribute('aria-hidden', 'true');
+  // a screen reader hears the words once the pebble rests, not every step of a drag (spec §4.6)
+  const live = document.createElement('span');
+  live.className = 'mood-sr';
+  live.setAttribute('aria-live', 'polite');
+  words.append(...layers, live);
 
-  panel.append(invite, arc, pad, words);
-  root.append(panel, button);
+  // «Quiet down» (spec §4.2): kept in the layout and shown while the pebble is windy, so the sheet
+  // does not jump when it appears
+  const quietBtn = document.createElement('button');
+  quietBtn.type = 'button';
+  quietBtn.className = 'mood-quiet';
+  quietBtn.textContent = text.quiet;
+  const foot = document.createElement('div');
+  foot.className = 'mood-foot';
+  foot.append(words, quietBtn);
+
+  panel.append(invite, sky, pad, foot);
+  // the button first: Tab from it goes into the open panel (spec §4.6); the panel is fixed, the order is not seen
+  root.append(button, panel);
   parent.append(root);
 
   /** the state on screen: the host's, or the widget's own while a finger is down */
@@ -313,14 +408,13 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
   let wordsShown = '', thumbKey = '', gestured = false, nameTimer = 0;
 
   function setWords(next) {
+    if (!drag && live.textContent !== next) live.textContent = next;
     if (next === wordsShown) return;
     wordsShown = next;
     const [on, off] = layers[0].classList.contains('on') ? layers : [layers[1], layers[0]];
     off.textContent = next;
     off.classList.add('on');
-    off.removeAttribute('aria-hidden');
     on.classList.remove('on');
-    on.setAttribute('aria-hidden', 'true');
   }
 
   function place() {
@@ -330,6 +424,14 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
     sunDot.setAttribute('cx', s.x.toFixed(2));
     sunDot.setAttribute('cy', s.y.toFixed(2));
     panel.classList.toggle('custom', Boolean(shown.custom));
+    quietBtn.classList.toggle('show', shown.a > QUIET_FROM);
+    flowBtn.setAttribute('aria-pressed', String(Boolean(shown.flow)));
+    arc.setAttribute('aria-valuenow', shown.t.toFixed(2));
+    arc.setAttribute('aria-valuetext', text.dayText[dayBand(shown.t)]);
+    for (const [el, x, said] of /** @type {[HTMLElement, number, string[]][]} */ ([[sliders[0], shown.v, text.vText], [sliders[1], shown.a, text.aText]])) {
+      el.setAttribute('aria-valuenow', x.toFixed(2));
+      el.setAttribute('aria-valuetext', said[band(x)]);
+    }
     setWords(wordsText(wordsCells(shown.v, shown.a), (k) => text.words[k] ?? k));
     // the thumbnail: the chosen weather and time of day, the sun where it stands on the arc
     const key = `${shown.v.toFixed(3)},${shown.a.toFixed(3)},${shown.t.toFixed(3)}`;
@@ -382,13 +484,36 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
   }
 
   const send = (/** @type {boolean} */ final) => input({ t: shown.t, v: shown.v, a: shown.a }, final);
+  /** the first gesture of the session folds the invitation to its first sentence (spec §4.2) */
+  const gesture = () => { if (!gestured) { gestured = true; setInviteOpen(false); } };
+
+  // the keyboard (spec §4.6): each key is a final input — the world follows smoothly
+  for (const [el, what] of /** @type {[Element, 'pad' | 'arc'][]} */ ([[pad, 'pad'], [arc, 'arc']])) {
+    el.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+      if (drag || e.altKey || e.ctrlKey || e.metaKey) return;
+      const next = keyStep(what, e.key, shown);
+      if (!next) return;
+      e.preventDefault();
+      gesture();
+      if (next.axis) pad.setAttribute('aria-activedescendant', sliders[next.axis === 'v' ? 0 : 1].id);
+      Object.assign(shown, { t: next.t, v: next.v, a: next.a, custom: false });
+      place();
+      send(true);
+    });
+  }
+  quietBtn.addEventListener('click', () => {
+    // the pebble glides to A9 instead of jumping; the world follows with the slower τ
+    pebble.classList.add('gliding');
+    setTimeout(() => pebble.classList.remove('gliding'), 1600);
+    quiet();
+  });
+  flowBtn.addEventListener('click', () => flow(!shown.flow));
 
   for (const [el, what] of /** @type {[Element, 'pad' | 'arc'][]} */ ([[pad, 'pad'], [arc, 'arc']])) {
     el.addEventListener('pointerdown', (/** @type {PointerEvent} */ e) => {
       if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
       e.preventDefault();
-      // the first gesture of the session folds the invitation to its first sentence (spec §4.2)
-      if (!gestured) { gestured = true; setInviteOpen(false); }
+      gesture();
       const timer = what === 'pad' && e.pointerType !== 'mouse'
         ? setTimeout(() => { if (drag) showName({ x: drag.x, y: drag.y }); }, LONG_PRESS_MS) : 0;
       drag = { id: e.pointerId, what, x: e.clientX, y: e.clientY, timer };
@@ -432,6 +557,13 @@ export function createMoodPad({ get, input, language = 'en', parent = document.b
     else showName(null);
   };
   button.addEventListener('click', () => setOpen(!root.classList.contains('open')));
+  // Esc folds the widget from anywhere in it and gives the focus back to the button (spec §4.6)
+  root.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+    if (e.key !== 'Escape' || panel.hidden) return;
+    e.preventDefault();
+    setOpen(false);
+    button.focus();
+  });
 
   let progressShown = 1;
   place();

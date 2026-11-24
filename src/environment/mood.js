@@ -139,3 +139,38 @@ export function stepToward(current, target, dt, tau) {
   walk(current, target);
   return moving;
 }
+
+// ── behaviour and safety (spec §4.3, §4.6) ───────────────────────────────────────────────
+
+/** «Quiet down» (spec §4.2, §4.4): the weather goes to A9 (clear, quiet) with this τ; the day stays */
+export const QUIET = Object.freeze({ v: 1, a: -1, tau: 8 });
+
+/** prefers-reduced-motion (spec §4.6; owner 2026-11-24): the world's arousal stops here, τ is longer */
+export const REDUCED_MOTION = Object.freeze({ maxArousal: 0.3, tauScale: 1.5 });
+
+/**
+ * τ per group for a move: the usual ones (MOOD_TAU), the weather slower for «Quiet down»,
+ * everything ×1.5 under reduced motion.
+ * @param {{ quiet?: boolean, reduced?: boolean }} [options]
+ * @returns {{ day: number, sky: number, grade: number, sea: number }}
+ */
+export function moodTau({ quiet = false, reduced = false } = {}) {
+  const k = reduced ? REDUCED_MOTION.tauScale : 1;
+  const w = (/** @type {number} */ tau) => (quiet ? QUIET.tau : tau) * k;
+  return { day: MOOD_TAU.day * k, sky: w(MOOD_TAU.sky), grade: w(MOOD_TAU.grade), sea: w(MOOD_TAU.sea) };
+}
+
+/** the arousal the world gets: the pebble's, capped under reduced motion (the pebble may sit higher) */
+export function worldArousal(/** @type {number} */ a, /** @type {boolean} */ reduced) {
+  return reduced ? Math.min(a, REDUCED_MOTION.maxArousal) : a;
+}
+
+/**
+ * The day's flow (spec §4.3): the sun walks from dawn to sunset in `path.flowMinutes` and stops
+ * there. @param {typeof SUN_PATH_V1} path @param {number} t @param {number} dt seconds
+ * @returns {{ t: number, done: boolean }} done — sunset reached: the flow switches itself off
+ */
+export function flowDay(path, t, dt) {
+  const next = Math.min(1, Math.max(0, t) + Math.max(0, dt) / (path.flowMinutes * 60));
+  return { t: next, done: next >= 1 };
+}

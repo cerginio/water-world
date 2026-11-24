@@ -110,3 +110,42 @@ describe('thumbnail colours', () => {
     expect(rgb(moodColors(0, 0, 0).skyLow)[0]).toBeGreaterThan(rgb(moodColors(0, 0, 0.5).skyLow)[0]);
   });
 });
+
+// MOOD-WEATHER M3b: the keyboard and the screen reader's words (spec §4.6).
+import { band, dayBand, keyStep } from '../src/environment/ui/moodPad.js';
+
+describe('keyboard', () => {
+  const s = { t: 0.1, v: 1, a: -1 };
+  test('the arc: ←/→ step 0.05 of the day, clamped at dawn and sunset', () => {
+    expect(keyStep('arc', 'ArrowRight', s)).toEqual({ t: 0.15, v: 1, a: -1 });
+    expect(keyStep('arc', 'ArrowLeft', s)).toEqual({ t: 0.05, v: 1, a: -1 });
+    expect(keyStep('arc', 'ArrowLeft', { ...s, t: 0.02 }).t).toBe(0);
+    expect(keyStep('arc', 'ArrowRight', { ...s, t: 0.99 }).t).toBe(1);
+    expect(keyStep('arc', 'Enter', s)).toBeNull();
+  });
+  test('the window: the arrows move the pebble 0.25 (← cloudy, ↑ wind), clamped at the edges', () => {
+    expect(keyStep('pad', 'ArrowLeft', s)).toEqual({ t: 0.1, v: 0.75, a: -1, axis: 'v' });
+    expect(keyStep('pad', 'ArrowUp', s)).toEqual({ t: 0.1, v: 1, a: -0.75, axis: 'a' });
+    expect(keyStep('pad', 'ArrowRight', s).v).toBe(1);
+    expect(keyStep('pad', 'ArrowDown', s).a).toBe(-1);
+    expect(keyStep('pad', 'x', s)).toBeNull();
+  });
+  test('Enter puts the pebble on the nearest anchor', () => {
+    expect(keyStep('pad', 'Enter', { t: 0.3, v: 0.3, a: 0.6 })).toEqual({ t: 0.3, v: 0, a: 1 });
+    expect(keyStep('pad', 'Enter', { t: 0.3, v: -0.7, a: -0.2 })).toEqual({ t: 0.3, v: -1, a: 0 });
+  });
+  test('four arrows up from A9 reach the wind edge; the day words cover dawn … sunset', () => {
+    let st = { ...s };
+    for (let i = 0; i < 8; i++) st = keyStep('pad', 'ArrowUp', st);
+    expect(st.a).toBe(1);
+    expect([0, 0.1, 0.5, 0.75, 1].map(dayBand)).toEqual([0, 1, 2, 3, 4]);
+    expect([-1, 0, 1].map((x) => band(x))).toEqual([0, 2, 4]);
+  });
+  test('the screen reader\'s strings have no digits either (spec §6 p.9)', () => {
+    for (const lang of ['uk', 'en']) {
+      const l = MOOD_LOCALES[lang];
+      expect(JSON.stringify([l.sliderV, l.sliderA, l.quiet, l.flow, l.dayText, l.vText, l.aText])).not.toMatch(/\d/);
+      expect(l.dayText).toHaveLength(5);
+    }
+  });
+});

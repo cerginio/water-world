@@ -171,3 +171,41 @@ describe('stepToward (spec §4.4)', () => {
     expect(cur).toEqual({ x: 2, v: [1, 2] });
   });
 });
+
+// MOOD-WEATHER M3b: «Quiet down», reduced motion, the day's flow (spec §4.3, §4.4, §4.6).
+import { flowDay, moodTau, worldArousal } from '../src/environment/mood.js';
+
+describe('behaviour and safety', () => {
+  test('«Quiet down»: the weather τ 8 (A1 → A9 95 % at 24 s, spec §6 p.4 25 ± 5), the day keeps τ 6', () => {
+    const q = moodTau({ quiet: true });
+    expect([q.sky, q.sea, q.grade]).toEqual([8, 8, 8]);
+    expect(q.day).toBe(6);
+    expect(3 * Math.max(q.sky, q.sea, q.grade)).toBeGreaterThanOrEqual(20);
+    expect(3 * Math.max(q.sky, q.sea, q.grade)).toBeLessThanOrEqual(30);
+  });
+  test('reduced motion: τ ×1.5 for every group, «Quiet down» too', () => {
+    expect(moodTau({ reduced: true })).toEqual({ day: 9, sky: 9, grade: 9, sea: 15 });
+    expect(moodTau({ quiet: true, reduced: true }).sea).toBe(12);
+  });
+  test('reduced motion: A1 gives the sea of a = 0.3 — wind ≤ 11, waves ≤ 0.21 (spec §6 p.6, owner 2026-11-24)', () => {
+    expect(worldArousal(1, true)).toBe(0.3);
+    expect(worldArousal(-0.5, true)).toBe(-0.5);
+    expect(worldArousal(1, false)).toBe(1);
+    let wind = 0, waves = 0;
+    for (const v of [-1, -0.5, 0, 0.5, 1]) {
+      const sea = sampleMood(MOOD_MAP_V1, v, worldArousal(1, true)).sea;
+      wind = Math.max(wind, sea.windSpeed);
+      waves = Math.max(waves, sea.waveScale);
+    }
+    expect(wind).toBeLessThanOrEqual(11);
+    expect(waves).toBeLessThanOrEqual(0.21);
+  });
+  test('the day\'s flow: dawn → sunset in 20 min, stops there (spec §4.3, §6 p.11)', () => {
+    let t = 0, s = 0, done = false;
+    while (!done) ({ t, done } = flowDay(SUN_PATH_V1, t, 0.1)), (s += 0.1);
+    expect(t).toBe(1);
+    expect(s / 60).toBeCloseTo(20, 1);
+    expect(flowDay(SUN_PATH_V1, 0.5, 600)).toEqual({ t: 1, done: true });
+    expect(flowDay(SUN_PATH_V1, 0.5, 60).t).toBeCloseTo(0.55, 12);
+  });
+});
