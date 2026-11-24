@@ -7,7 +7,7 @@
 // with a reason and releases that token. Controls are enabled exactly when no lock is
 // held, so an interrupted flight and a frame drag cannot leave the camera stuck.
 import * as THREE from 'three';
-import { createFlight } from './cameraFlight.js';
+import { createFlight, flightDuration, smootherstep } from './cameraFlight.js';
 
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
 const MOVE_SPEED = 100;   // world units per second
@@ -28,12 +28,17 @@ export class CameraRig {
     this.following = null;
     this.riding = null;
     this.keys = new Set();
+    this.steering = { forward: 0, strafe: 0 };
     this.listeners = new Set();
     this._pose = { position: new THREE.Vector3(), target: new THREE.Vector3() };
     this._move = new THREE.Vector3();
     this._shift = new THREE.Vector3();
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
+    this._look = new THREE.Matrix4();
+    this._quat = new THREE.Quaternion();
+    this._eyePos = new THREE.Vector3();
+    this._eyeTarget = new THREE.Vector3();
   }
 
   // --- locks ------------------------------------------------------------------------
@@ -181,20 +186,40 @@ export class CameraRig {
 
   get eyes() { return !!this.riding; }
 
+  /** True while ride({ approach }) is still on its way into the eyes (story-quest Q2b). */
+  get boarding() { return !!this.riding?.approach; }
+
   /**
    * The camera looks through a walker's eyes: every frame it takes `eye()` = { position,
    * target } (plain {x, y, z}) as is. The controls are off under the lock 'eyes' until
    * dismount(); place() and flyTo() dismount first. interrupt() (a touch, WASD) does not:
    * the walker's own keys move the eyes. `onEnd` runs once when the ride ends.
+   *
+   * `approach` (story-quest Q2b): instead of a cut, the camera goes from where it is into
+   * the eyes — `true` for flightDuration(distance) seconds, or a number of seconds. The
+   * position eases on smootherstep towards the live eye point and stays over the terrain
+   * floor until the last 30 % (where the floor fades out, so the eyes 1.6 m over the drawn
+   * mesh are reached without a jump); the view turns by a slerp of the orientation, not by
+   * dragging the orbit target. `onArrive` runs once when the camera is in the eyes.
    * @param {() => ({ position: {x: number, y: number, z: number}, target: {x: number, y: number, z: number} } | null)} eye
-   * @param {{ onEnd?: () => void }} [options]
+   * @param {{ onEnd?: () => void, onArrive?: () => void, approach?: boolean | number }} [options]
    */
-  ride(eye, { onEnd } = {}) {
+  ride(eye, { onEnd, onArrive, approach = false } = {}) {
     this.dismount();
     this.interrupt();
     this.keys.clear();
-    this.riding = { eye, onEnd, token: this.lock('eyes') };
-    this._stepRide();
+    this.riding = { eye, onEnd, onArrive, approach: null, token: this.lock('eyes') };
+    const to = eye();
+    if (approach && to) {
+      const distance = this.camera.position.distanceTo(this._eyePos.set(to.position.x, to.position.y, to.position.z));
+      const duration = approach === true ? flightDuration(distance) : Number(approach);
+      if (duration > 0 && distance > 1e-3) {
+        this.riding.approach = { elapsed: 0, duration, position: this.camera.position.clone(),
+          quaternion: this.camera.quaternion.clone(), reach: this.camera.position.distanceTo(this.controls.target) };
+      }
+    }
+    this._stepRide(0);
+    if (!this.riding?.approach) this.riding?.onArrive?.();
   }
 
   /** Back to the free camera where the eyes were; no jump. */
@@ -208,12 +233,34 @@ export class CameraRig {
     r.onEnd?.();
   }
 
-  _stepRide() {
-    const pose = this.riding.eye();
+  _stepRide(dt) {
+    const r = this.riding, pose = r.eye();
     if (!pose) return;
-    this.camera.position.copy(pose.position);
-    this.controls.target.copy(pose.target);
-    this.camera.lookAt(this.controls.target);
+    const a = r.approach;
+    if (!a) {
+      this.camera.position.copy(pose.position);
+      this.controls.target.copy(pose.target);
+      this.camera.lookAt(this.controls.target);
+      return;
+    }
+    a.elapsed += dt;
+    const u = Math.min(1, a.elapsed / a.duration), s = smootherstep(u);
+    const eye = this._eyePos.set(pose.position.x, pose.position.y, pose.position.z);
+    const ahead = this._eyeTarget.set(pose.target.x, pose.target.y, pose.target.z);
+    const p = this.camera.position.copy(a.position).lerp(eye, s);
+    const floor = this.ground(p.x, p.z), hold = 1 - smootherstep((u - 0.7) / 0.3);
+    if (p.y < floor) p.y += (floor - p.y) * hold;
+    this._look.lookAt(eye, ahead, this.camera.up);
+    this._quat.setFromRotationMatrix(this._look);
+    this.camera.quaternion.copy(a.quaternion).slerp(this._quat, s);
+    const reach = a.reach + (eye.distanceTo(ahead) - a.reach) * s;
+    this.controls.target.set(0, 0, -reach).applyQuaternion(this.camera.quaternion).add(p);
+    this.camera.updateMatrixWorld();
+    if (u >= 1) {
+      r.approach = null;
+      this._stepRide(0);
+      r.onArrive?.();
+    }
   }
 
   // --- free camera ------------------------------------------------------------------
@@ -245,15 +292,31 @@ export class CameraRig {
     on(document, 'focusin', (e) => { if (isEditing(e.target)) this.keys.clear(); });
   }
 
+  /**
+   * An analog move of the free camera across the ground (the walker's stick out of the body,
+   * story-quest Q2b): forward / strafe in -1..1, held until changed. The speed goes with the
+   * square of the deflection — fine near the figure, the keys' full speed at the rim.
+   */
+  steer(forward = 0, strafe = 0) {
+    this.steering.forward = forward;
+    this.steering.strafe = strafe;
+  }
+
   _moveKeys(dt) {
-    if (!this.controls.enabled || this.keys.size === 0) return;
+    const { forward: sf, strafe: sr } = this.steering;
+    if (!this.controls.enabled || (this.keys.size === 0 && !sf && !sr)) return;
     const right = this._right.setFromMatrixColumn(this.camera.matrix, 0).setY(0).normalize();
     const forward = this._forward.set(0, 1, 0).cross(right).normalize();
     const k = this.keys;
-    const f = Number(k.has('KeyW')) - Number(k.has('KeyS'));
-    const r = Number(k.has('KeyD')) - Number(k.has('KeyA'));
+    let f = Number(k.has('KeyW')) - Number(k.has('KeyS'));
+    let r = Number(k.has('KeyD')) - Number(k.has('KeyA'));
+    let speed = MOVE_SPEED;
+    if (!f && !r) {
+      const m = Math.min(1, Math.hypot(sf, sr));
+      [f, r, speed] = [sf, sr, MOVE_SPEED * m * m];
+    }
     const move = this._move.copy(forward).multiplyScalar(f).addScaledVector(right, r);
-    move.normalize().multiplyScalar(MOVE_SPEED * dt);
+    move.normalize().multiplyScalar(speed * dt);
     this.camera.position.add(move);
     this.controls.target.add(move);
   }
@@ -267,7 +330,7 @@ export class CameraRig {
   /** Once a frame, before rendering. */
   update(dt) {
     if (this.flight) this._stepFlight(dt);
-    else if (this.riding) this._stepRide();
+    else if (this.riding) this._stepRide(dt);
     else {
       if (this.following) this._stepFollow(dt);
       this.controls.update();

@@ -66,7 +66,10 @@ try {
   watch(page, 'scene');
   await page.goto(`${base}?tiles=none&walk`);
   await page.waitForFunction(() => window.app?.walker?.mode === 'eyes', {}, { timeout: 60000 });
-  await page.waitForTimeout(500);
+  // since Q2b ?walk arrives after a flight over the island: the first seconds after it hitch
+  // (up to 0.85 s a frame, headless), then 16.7 ms steady — walk after that
+  await page.waitForTimeout(5000);
+  const pace = await page.evaluate(() => app.walker.walker.pace.walk);
   const start = await page.evaluate(() => {
     const w = app.walker, s = w.state;
     return { x: s.x, z: s.z, yaw: s.yaw, height: s.y, reasons: app.rig.reasons, controls: app.controls.enabled,
@@ -95,20 +98,20 @@ try {
   assert.ok(slope, 'no slope found');
   await place(page, slope.x, slope.z, slope.yaw);
   await record(page);
-  await hold(page, ['KeyW'], 3000);
+  await hold(page, ['KeyW'], 1000);
   const slopeRows = await stop(page);
   const climbed = slopeRows.at(-1).y - slopeRows[0].y;
   const walked = Math.hypot(slopeRows.at(-1).x - slopeRows[0].x, slopeRows.at(-1).z - slopeRows[0].z);
   report.slope = { at: slope, degrees: +(Math.acos(slope.ny) * 180 / Math.PI).toFixed(1), ...checkFrames(slopeRows, 'slope'),
     climbed: +climbed.toFixed(2), walked: +walked.toFixed(2) };
   assert.ok(climbed > 0.5, `slope: climbed ${climbed} m`);
-  assert.ok(walked > 3 && walked < 4.6, `slope: walked ${walked} m in 3 s at 1.4 m/s`);
+  assert.ok(walked > 0.71 * pace && walked < 1.1 * pace, `slope: walked ${walked} m in 1 s at ${pace} m/s`);
   await page.screenshot({ path: join(out, 'eyes-slope.png') });
 
   // 2. into the sea from the spawn: stops at the wading depth
   await place(page, start.x, start.z, start.yaw);
   await record(page);
-  await hold(page, ['ShiftLeft', 'KeyW'], 9000);
+  await hold(page, ['ShiftLeft', 'KeyW'], 5000);
   const seaRows = await stop(page);
   const seaEnd = seaRows.at(-1);
   report.sea = { ...checkFrames(seaRows, 'sea'), end: { ground: +seaEnd.ground.toFixed(3) },
@@ -144,7 +147,7 @@ try {
   // 3b. every course off the shore normal, on straight pieces of shore (the cell grid of
   // the first Q2a build stuck at 0–0.2 m in 1 s at 15–30°). A straight piece: the wading
   // line's normal every metre to ±3 m along it within 5° of the middle one (the beach is rough: 10–70° is usual). 1 s of walking per course,
-  // stepped in the page at 60 Hz; along the shore ≥ 85 % of 1.4·|sin(course)|.
+  // stepped in the page at 60 Hz; along the shore ≥ 85 % of pace·|sin(course)|.
   report.sweep = await page.evaluate(() => {
     const w = app.walker.walker, wet = (x, z) => !app.ground(x, z) || app.ground(x, z).height < -0.5;
     // the wading line from (x, z) along (dx, dz), to 1 mm, and the ground's downhill there
@@ -185,7 +188,7 @@ try {
   assert.ok(report.sweep.length >= 20, `sweep: ${report.sweep.length / 10} straight piece(s) of shore found`);
   for (const { at, deg, along, deepest } of report.sweep) {
     assert.ok(deepest >= -WADE - 1e-3, `sweep ${at} ${deg}°: stood on ${deepest} m`);
-    assert.ok(along >= 0.85 * 1.4 * Math.abs(Math.sin(deg * Math.PI / 180)), `sweep ${at} ${deg}°: ${along} m along the shore in 1 s`);
+    assert.ok(along >= 0.85 * pace * Math.abs(Math.sin(deg * Math.PI / 180)), `sweep ${at} ${deg}°: ${along} m along the shore in 1 s`);
   }
   await place(page, start.x, start.z, start.yaw);
   await page.waitForTimeout(300);   // a frame moves the eyes there
@@ -219,9 +222,9 @@ try {
     return { feet: minY - app.walker.state.y, height: maxY - minY };
   });
   report.figure = { feetOverGround: +box.feet.toFixed(3), height: +box.height.toFixed(2) };
+  // back in goes smoothly since Q2b: 'boarding', then 'eyes'
   await page.keyboard.press('KeyV');
-  await page.waitForTimeout(300);
-  assert.equal(await page.evaluate(() => app.walker.mode), 'eyes');
+  await page.waitForFunction(() => app.walker.mode === 'eyes', {}, { timeout: 8000 });
 
   // 5. a station flight ends the ride: standing, the rail's flight owns the camera
   await page.evaluate(() => app.stations.go('island'));

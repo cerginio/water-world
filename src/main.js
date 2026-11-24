@@ -31,6 +31,7 @@ import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { TerrainContact } from './scene/TerrainContact.js';
 import { createWalkerHost } from './walker/index.js';
+import { createWalkerStick, LABELS as STICK_LABELS } from './walker/stick.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
 import { createFrameFocus } from './scene/frameFocus.js';
 import { createStationRail, railLanguage } from './ui/stationRail.js';
@@ -276,14 +277,17 @@ function placeTiles() {
   return tiles.place(anchor.start, anchor.out);
 }
 
-// --- walker (story-quest Q2a) ---------------------------------------------------------
+// --- walker (story-quest Q2a, Q2b) ----------------------------------------------------
 // Feet on the mesh as drawn (TerrainContact, as the tiles touch it), not on islandHeight.
-// The walker appears on the beach of the story coast, facing the field, and the camera goes
-// into its eyes; V (or the GUI button) toggles eyes / standing.
+// The walker appears on the beach of the story coast, facing the field. The start (Q2b,
+// STORY-QUEST-SPEC §2 п.2): the camera flies up to the island overview, holds it a moment
+// and goes down into the eyes; V (or the GUI button, or the touch button) is out of the body
+// and back into the same eyes, smoothly.
 // Built on first use: ~11 ms on a desktop (Q2a), a scene without the walker never pays it.
 let groundContact = null;
 const walkGround = (x, z) => (groundContact ??= new TerrainContact(terrain.geometry, terrain.geometry.parameters.width)).at(x, z);
-let walkerHost = null, walkerLoading = null;
+let walkerHost = null, walkerLoading = null, walkerStick = null;
+const OVERVIEW_HOLD = 1200;   // ms on the island overview before the descent
 function walkerSpawn() {
   const { coast: c } = storyAnchor(), out = storyAnchor().out;
   const inward = new THREE.Vector2(-c.x, -c.y).normalize();
@@ -291,15 +295,42 @@ function walkerSpawn() {
   for (let i = 0; i < 400 && (walkGround(p.x, p.y)?.height ?? -1) < 1; i++) p.addScaledVector(inward, 0.5);
   return { x: p.x, z: p.y, yaw: Math.atan2(out.x, out.y) };
 }
-async function walk() {
+async function walkerReady() {
   walkerLoading ??= createWalkerHost({ scene, rig, ground: walkGround, canvas: renderer.domElement, isEditing });
   walkerHost = await walkerLoading;
   if (walkerHost.mode === 'off') {
     const spawn = walkerSpawn();
     walkerHost.place(spawn.x, spawn.z, spawn.yaw);
   }
-  walkerHost.toggleEyes();
+  // touch controls on phones (?stick forces them, ?stick=0 drops them)
+  const stickArg = args.get('stick');
+  if (!walkerStick && (args.has('stick') ? stickArg !== '0' : mobile)) {
+    walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
+      labels: (navigator.language ?? '').toLowerCase().startsWith('uk') ? STICK_LABELS.uk : STICK_LABELS.en });
+    document.body.classList.add('walker-controls');
+  }
   return walkerHost;
+}
+/** Out of the body and back (V, the GUI, the touch button). */
+async function walk() {
+  const host = await walkerReady();
+  host.toggleEyes();
+  return host;
+}
+/**
+ * The start: island overview → down into the eyes. Resolves once the descent has begun; the
+ * host is 'boarding', then 'eyes'. A touch during the overview flight cuts it short, the
+ * descent still follows; already in the eyes — nothing to do.
+ */
+async function startWalk({ overview = true } = {}) {
+  const host = await walkerReady();
+  if (host.mode === 'eyes' || host.mode === 'boarding') return host;
+  if (overview) {
+    if (await rig.flyTo(stationPoses.island())) await new Promise((r) => setTimeout(r, OVERVIEW_HOLD));
+    if (host.mode === 'eyes' || host.mode === 'boarding') return host;
+  }
+  host.enterEyes({ approach: overview ? 4 : true });
+  return host;
 }
 addEventListener('keydown', (e) => {
   if (e.code !== 'KeyV' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
@@ -928,7 +959,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
 window.app = {
   still,
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
-  walk, get walker() { return walkerHost; }, ground: walkGround,
+  walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -1021,6 +1052,7 @@ function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   walkerHost?.update(dt, now);
+  walkerStick?.update();
   rig.update(dt);
   stations.update();
   renderFrame(dt);
@@ -1061,8 +1093,12 @@ function spin() {
 resize();
 applySun();
 views[ui.view]();
-// a link with ?story or ?tiles opens on the field once it has loaded and been placed (?story wins)
-if (args.has('story')) loadStory(args.get('story')).then(() => tiles.loaded && viewController.setValue('Tiles'));
-else if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
-if (args.has('walk')) walk().catch((e) => console.error('[walker]', e));
+// a link with ?story or ?tiles opens on the field once it has loaded and been placed (?story wins);
+// with ?walk it opens instead on the overview and goes down into the walker's eyes once the
+// field is there (Q2b: loading the story used to throw the camera out of the eyes)
+const walking = args.has('walk');
+const showField = () => { if (tiles.loaded && !walking) viewController.setValue('Tiles'); };
+const opening = args.has('story') ? loadStory(args.get('story')).then(showField)
+  : tilesUi.source !== 'none' ? loadTiles(tilesUi.source).then(showField) : Promise.resolve();
+if (walking) opening.then(() => startWalk()).catch((e) => console.error('[walker]', e));
 if (!stillMode) requestAnimationFrame(loop);

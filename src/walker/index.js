@@ -2,16 +2,19 @@
 // Tilecraft's figure, walking by walkOnGround, the camera through its eyes via the
 // camera owner (CameraRig.ride — OWNER-3: nothing here writes the camera).
 //
-// Modes: 'off' — not placed; 'eyes' — the person walks, the camera is the eyes, the
-// figure is hidden (the camera would sit inside its head); 'standing' — the figure stands
-// where it was left and the camera is free (out of the body proper, with its own keys and
-// stick, is Q2b).
+// Modes: 'off' — not placed; 'boarding' — the camera is on its way into the eyes (Q2b:
+// the figure stands and is shown, nothing walks); 'eyes' — the person walks, the camera is
+// the eyes, the figure is hidden (the camera would sit inside its head); 'standing' — out
+// of the body: the figure stands where it was left, the camera is free and goes by the
+// rig's keys and by the stick (rig.steer).
 import { createWalker, PACE } from './walker.js';
 import { WALK, isWater, walkOnGround } from './groundWalk.js';
 import { bindWalkerInput, keyIntent } from './keyboard.js';
 import { loadWalkerModules } from './tilecraftWalker.js';
 
 export { WALK, PACE, isWater, walkOnGround, keyIntent };
+
+const HIDE_NEAR = 1.5;   // m from the eyes: closer, a boarding camera would see the inside of the head
 
 /**
  * @param {{ scene: any, rig: any, ground: (x: number, z: number) => any,
@@ -27,8 +30,9 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
   avatar.group.visible = false;
   scene.add(avatar.group);
   const input = bindWalkerInput(canvas, isEditing, () => mode === 'eyes');
-  /** @type {'off' | 'eyes' | 'standing'} */
+  /** @type {'off' | 'boarding' | 'eyes' | 'standing'} */
   let mode = 'off';
+  let stick = { x: 0, y: 0 };
 
   const host = {
     walker,
@@ -40,16 +44,35 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
       walker.place(x, z, yaw);
       if (mode === 'off') mode = 'standing';
     },
-    /** The camera into the walker's eyes at once (the smooth descent is Q2b). */
-    enterEyes() {
+    /**
+     * The camera into the walker's eyes: at once, or with `approach` (true or seconds) from
+     * where the camera is now — mode 'boarding' until it arrives (CameraRig.ride).
+     * @param {{ approach?: boolean | number }} [options]
+     */
+    enterEyes({ approach = false } = {}) {
       if (mode === 'off') throw new Error('walker: place() first');
       input.clear();
-      rig.ride(() => walker.eyes(), { onEnd: () => { input.clear(); if (mode === 'eyes') mode = 'standing'; } });
-      mode = 'eyes';
+      rig.steer(0, 0);
+      mode = 'boarding';
+      rig.ride(() => walker.eyes(), {
+        approach,
+        onArrive: () => { input.clear(); if (mode === 'boarding') mode = 'eyes'; },
+        onEnd: () => { input.clear(); if (mode === 'eyes' || mode === 'boarding') mode = 'standing'; },
+      });
     },
     /** The camera stays where the eyes were and is free again; the figure stands. */
     leaveEyes() { rig.dismount(); },
-    toggleEyes() { if (mode === 'eyes') host.leaveEyes(); else if (mode !== 'off') host.enterEyes(); },
+    /** Out of the body and back; back in goes smoothly into the same eyes. */
+    toggleEyes() {
+      if (mode === 'eyes' || mode === 'boarding') host.leaveEyes();
+      else if (mode !== 'off') host.enterEyes({ approach: true });
+    },
+    /**
+     * The stick (stick.js), held until changed: x to the right, y forward, both -1..1. In the
+     * eyes it walks the walker (full deflection runs), out of the body it steers the camera.
+     * @param {{ x: number, y: number }} value
+     */
+    setStick(value) { stick = { x: value.x, y: value.y }; },
     /**
      * Once a frame before rig.update(): steps the walker by the held keys and the drag
      * (only in 'eyes'), then poses the figure. `intent` replaces the input (probes).
@@ -57,15 +80,24 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
      */
     update(dt, now, intent) {
       const own = input.intent();
+      if (!own.forward && !own.strafe && (stick.x || stick.y)) {
+        const m = Math.hypot(stick.x, stick.y);
+        Object.assign(own, { forward: stick.y, strafe: stick.x, run: m > 0.95 });
+      }
       if (mode === 'eyes') walker.step(dt, intent ?? own);
       else walker.state.moving = false;
+      rig.steer(mode === 'standing' ? stick.y : 0, mode === 'standing' ? stick.x : 0);
       const s = walker.state;
       avatar.update({ pose: mode === 'off' ? null : { x: s.x, y: s.y, z: s.z }, unit: walker.bodyScale,
         bodyYaw: s.yaw, motion: s.moving ? 'WALKING' : 'GROUNDED', now });
-      avatar.group.visible = mode === 'standing';
+      // boarding: shown until the camera is about to enter the head
+      const e = walker.eyes().position, c = rig.camera.position;
+      avatar.group.visible = mode === 'standing'
+        || (mode === 'boarding' && Math.hypot(c.x - e.x, c.y - e.y, c.z - e.z) > HIDE_NEAR);
     },
     dispose() {
       host.leaveEyes();
+      rig.steer(0, 0);
       input.dispose();
       avatar.dispose();
       mode = 'off';

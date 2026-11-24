@@ -4,8 +4,8 @@
 import { WALK, walkOnGround } from './groundWalk.js';
 
 export const PACE = Object.freeze({
-  walk: 1.4,     // m/s
-  run: 4,        // m/s with Shift
+  walk: 4.2,     // m/s; 1.4 (a real pace) felt too slow on the island — ×3, owner 2026-11-24 (Q2b)
+  run: 12,       // m/s with Shift or the stick pushed to the rim
   turn: 1.8,     // rad/s, keys
   pitch: 1.2,    // rad/s, keys
   maxPitch: 1.3, // rad, up and down
@@ -29,6 +29,7 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
   return {
     state,
     bodyScale,
+    pace: PACE,
     /** Puts the feet on the ground at (x, z), facing yaw (0 = +z, π/2 = +x). */
     place(x, z, yaw = state.yaw) {
       const g = world.ground(x, z);

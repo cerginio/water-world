@@ -3,9 +3,10 @@ import { pathToFileURL } from 'node:url';
 import * as THREE from 'three';
 import { resolveTilecraft } from '../build/tilecraft-config.js';
 import { WALK, clearOfWater, isWater, nearestWater, walkOnGround } from '../src/walker/groundWalk.js';
-import { createWalker } from '../src/walker/walker.js';
+import { createWalker, PACE } from '../src/walker/walker.js';
 import { axis, keyIntent } from '../src/walker/keyboard.js';
 import { CameraRig } from '../src/scene/cameraRig.js';
+import { stickVector, STICK } from '../src/walker/stick.js';
 
 // story-quest Q2a (STORY-QUEST-SPEC §4.1 «Персонаж»): the wrapper over Tilecraft's own
 // moveOnSheet — the real function from TILECRAFT_ROOT, not a stand-in, so the calling
@@ -70,7 +71,7 @@ describe('walkOnGround', () => {
       for (let i = 0; i < 60; i++) w.step(1 / 60, { forward: 1 });
       const along = Math.hypot(w.state.x - edge.x, w.state.z - edge.z);
       // the share of the step along the shore is |sin(deg)|; allow 15 % off it
-      expect(along, `course ${deg}°`).toBeGreaterThan(1.4 * Math.abs(Math.sin(deg * Math.PI / 180)) * 0.85);
+      expect(along, `course ${deg}°`).toBeGreaterThan(PACE.walk * Math.abs(Math.sin(deg * Math.PI / 180)) * 0.85);
       expect(w.state.y, `course ${deg}°`).toBeGreaterThanOrEqual(-WALK.wade - 1e-3);
     }
   });
@@ -139,22 +140,22 @@ describe('createWalker', () => {
     const w = createWalker({ moveOnSheet, ground: flat });
     w.place(0, 0, 0);
     w.step(1, { forward: 1 });
-    expect(w.state.z).toBeCloseTo(1.4, 6);
+    expect(w.state.z).toBeCloseTo(PACE.walk, 6);
     expect(w.state.x).toBeCloseTo(0, 6);
     w.step(Math.PI / 2 / 1.8, { turn: 1 });
     expect(w.state.yaw).toBeCloseTo(Math.PI / 2, 6);
     w.step(1, { forward: 1 });
-    expect(w.state.x).toBeCloseTo(1.4, 6);
+    expect(w.state.x).toBeCloseTo(PACE.walk, 6);
   });
 
   test('strafe right at yaw 0 is −x; a diagonal is no faster than straight; Shift runs', () => {
     const w = createWalker({ moveOnSheet, ground: flat });
     w.place(0, 0, 0);
     w.step(1, { strafe: 1 });
-    expect(w.state.x).toBeCloseTo(-1.4, 6);
+    expect(w.state.x).toBeCloseTo(-PACE.walk, 6);
     w.place(0, 0, 0);
-    expect(w.step(1, { forward: 1, strafe: 1 })).toBeCloseTo(1.4, 6);
-    expect(w.step(1, { forward: 1, run: true })).toBeCloseTo(4, 6);
+    expect(w.step(1, { forward: 1, strafe: 1 })).toBeCloseTo(PACE.walk, 6);
+    expect(w.step(1, { forward: 1, run: true })).toBeCloseTo(PACE.run, 6);
   });
 
   test('eyes 1.6 m over the feet; pitch clamps', () => {
@@ -229,5 +230,134 @@ describe('CameraRig.ride', () => {
     r.ride(() => eye, { onEnd: () => ended++ });
     r.flyTo({ position: new THREE.Vector3(0, 60, 0), target: new THREE.Vector3(0, 0, 0) });
     expect([r.eyes, ended, r.reasons]).toEqual([false, 2, ['flight']]);
+  });
+});
+
+// story-quest Q2b: into the eyes without a cut, the free camera on the stick
+describe('CameraRig.ride({ approach })', () => {
+  const rig = (ground = () => 0.8) => {
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(300, 200, 300);
+    const controls = { target: new THREE.Vector3(0, 0, 0), enabled: true, enableDamping: true, update() { camera.lookAt(this.target); } };
+    camera.lookAt(controls.target);
+    return new CameraRig({ camera, controls, ground });
+  };
+  const eye = { position: { x: 1, y: 3.6, z: 2 }, target: { x: 1, y: 3.6, z: 3 } };
+  const run = (r, seconds, dt = 1 / 60) => {
+    const path = [];
+    for (let t = 0; t < seconds; t += dt) {
+      r.update(dt);
+      path.push({ p: r.camera.position.clone(), q: r.camera.quaternion.clone(), boarding: r.boarding });
+    }
+    return path;
+  };
+
+  test('starts where the camera is, arrives in the eyes, onArrive once; controls off all the way', () => {
+    const r = rig();
+    let arrived = 0;
+    r.ride(() => eye, { approach: 2, onArrive: () => arrived++ });
+    expect(r.camera.position.toArray()).toEqual([300, 200, 300]);
+    expect([r.boarding, r.controls.enabled, r.reasons, arrived]).toEqual([true, false, ['eyes'], 0]);
+    const path = run(r, 2.2);
+    expect(r.boarding).toBe(false);
+    expect(arrived).toBe(1);
+    expect(r.camera.position.distanceTo(new THREE.Vector3(1, 3.6, 2))).toBeLessThan(1e-9);
+    expect(r.controls.target.distanceTo(new THREE.Vector3(1, 3.6, 3))).toBeLessThan(1e-9);
+    expect(path.every((s) => s.boarding || s.p.distanceTo(new THREE.Vector3(1, 3.6, 2)) < 1e-9)).toBe(true);
+  });
+
+  test('no jump: per-frame step is bounded and the view turns by small angles', () => {
+    const r = rig();
+    const start = r.camera.position.clone();
+    r.ride(() => eye, { approach: 3 });
+    const path = run(r, 3.1);
+    const total = start.distanceTo(new THREE.Vector3(1, 3.6, 2));
+    let prev = { p: start, q: path[0].q }, step = 0, turn = 0;
+    for (const s of path) {
+      step = Math.max(step, s.p.distanceTo(prev.p));
+      turn = Math.max(turn, s.q.angleTo(prev.q));
+      prev = s;
+    }
+    // smootherstep peaks at 1.875 × the mean speed; 180 frames
+    expect(step).toBeLessThan((total / 180) * 1.9);
+    expect(turn).toBeLessThan(0.05);
+  });
+
+  test('stays over the terrain floor on the way, reaches eyes below it at the end', () => {
+    const r = rig(() => 40);   // a ridge everywhere 40 m: the eyes (3.6) lie under the floor
+    r.ride(() => eye, { approach: 2 });
+    const path = run(r, 2.1);
+    const early = path.filter((_, i) => i < path.length * 0.6);
+    expect(early.every((s) => s.p.y >= 40 - 1e-9)).toBe(true);
+    expect(r.camera.position.y).toBeCloseTo(3.6, 9);
+  });
+
+  test('approach: true lasts flightDuration(distance); dismount mid-way frees the camera there', () => {
+    const r = rig();
+    let ended = 0;
+    r.ride(() => eye, { approach: true, onEnd: () => ended++ });
+    expect(r.riding.approach.duration).toBeGreaterThan(1.2);
+    run(r, 0.5);
+    const here = r.camera.position.clone();
+    r.dismount();
+    expect([r.eyes, r.boarding, r.controls.enabled, ended]).toEqual([false, false, true, 1]);
+    expect(r.camera.position.toArray()).toEqual(here.toArray());
+  });
+
+  test('without approach: a cut, onArrive at once', () => {
+    const r = rig();
+    let arrived = 0;
+    r.ride(() => eye, { onArrive: () => arrived++ });
+    expect([r.boarding, arrived]).toEqual([false, 1]);
+    expect(r.camera.position.toArray()).toEqual([1, 3.6, 2]);
+  });
+});
+
+describe('CameraRig.steer', () => {
+  const rig = () => {
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, 10, 0);
+    const controls = { target: new THREE.Vector3(0, 0, 10), enabled: true, enableDamping: false, update() { camera.lookAt(this.target); camera.updateMatrix(); } };
+    controls.update();
+    return new CameraRig({ camera, controls, ground: () => 0.8 });
+  };
+
+  test('full forward: the keys speed along the view on the ground; half: a quarter of it', () => {
+    const r = rig();
+    r.steer(1, 0);
+    r.update(0.1);
+    expect(r.camera.position.z).toBeCloseTo(10, 6);   // 100 m/s × 0.1 s towards +z
+    expect(r.camera.position.y).toBeCloseTo(10, 6);
+    r.steer(0.5, 0);
+    r.update(0.1);
+    expect(r.camera.position.z).toBeCloseTo(12.5, 6);
+    expect(r.controls.target.z).toBeCloseTo(22.5, 6);
+  });
+
+  test('no steering under a lock (the eyes)', () => {
+    const r = rig();
+    r.steer(1, 1);
+    r.lock('eyes');
+    r.update(0.1);
+    expect(r.camera.position.toArray()).toEqual([0, 10, 0]);
+  });
+});
+
+describe('stickVector', () => {
+  test('dead zone gives 0; the rim and past it give length 1; screen down is back', () => {
+    expect(stickVector(STICK.radius * 0.1, 0)).toEqual({ x: 0, y: 0 });
+    const rim = stickVector(0, -STICK.radius);
+    expect(rim.x).toBeCloseTo(0, 12);
+    expect(rim.y).toBeCloseTo(1, 12);
+    const far = stickVector(STICK.radius * 3, STICK.radius * 3);
+    expect(Math.hypot(far.x, far.y)).toBeCloseTo(1, 12);
+    expect(far.x).toBeGreaterThan(0);
+    expect(far.y).toBeLessThan(0);
+  });
+
+  test('length grows from 0 at the dead-zone rim, without a jump', () => {
+    const at = (share) => Math.hypot(...Object.values(stickVector(STICK.radius * share, 0)));
+    expect(at(STICK.dead + 1e-6)).toBeLessThan(1e-4);
+    expect(at(0.56)).toBeCloseTo((0.56 - STICK.dead) / (1 - STICK.dead), 12);
   });
 });
