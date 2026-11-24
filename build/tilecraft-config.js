@@ -10,10 +10,14 @@ export const tilecraftAssets = [
   'viewer/engines/three/fixtures/world-demo.json',
   'viewer/engines/three/fixtures/world-demo.world.json',
 ];
+// the dev fallback story catalog (src/catalog/, STORY-QUEST-SPEC §5): served by the dev
+// server under <base>tilecraft/catalog/, never copied into dist
+export const LOCAL_CATALOG_PATH = 'tilecraft/catalog/';
+export const LOCAL_CATALOG_SOURCE = 'viewer/engines/three/fixtures/catalog/';
 // Netlify CLI excludes dot-directories from uploads.
 export const publishedAssetPath = relative => `tilecraft/${relative.replace(/^\.pw-probe\//, 'models/')}`;
 const modules = [
-  'lib/thickness-scale.js', 'viewer/engines/pixi/polyline-lcr.js',
+  'lib/thickness-scale.js', 'lib/story-catalog.js', 'viewer/engines/pixi/polyline-lcr.js',
   ...['model-loader', 'coordinates', 'world-config', 'scene-compiler'].map(name => `viewer/engines/three/core/${name}.js`),
   'viewer/engines/three/engine/resource-scope.js',
 ];

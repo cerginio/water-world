@@ -21,6 +21,7 @@ import { declaredSamplers } from './glsl-samplers.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const SRC = join(ROOT, 'src');
+const PRODUCTS = join(ROOT, 'products');
 
 function collect(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -95,23 +96,55 @@ function ruleEnvironmentPortable(files) {
 
 /**
  * Tilecraft з цього репозиторію лише читається (spec.md §1), і решта коду не знає,
- * звідки прийшла модель: `@tilecraft` імпортує тільки `tiles/tilecraftLoader.js`.
- * Інакше збірка без Tilecraft (`source=none`) і переносимість (BUILD-DEPLOY-SPEC)
- * залежали б від кожного файлу.
+ * звідки прийшла модель: `@tilecraft` імпортують тільки вхідні файли платформи —
+ * завантажувач моделей і клієнт каталогу (STORY-QUEST-SPEC §4: список входів, а не
+ * дозвіл усім). Інакше збірка без Tilecraft (`source=none`) і переносимість
+ * (BUILD-DEPLOY-SPEC) залежали б від кожного файлу. Продукти (`products/**`) теж
+ * під правилом: вони беруть Tilecraft лише через платформу.
  */
-const TILECRAFT_ENTRY = 'src/tiles/tilecraftLoader.js';
+const TILECRAFT_ENTRIES = ['src/tiles/tilecraftLoader.js', 'src/catalog/tilecraftCatalog.js'];
 
 function ruleTilecraftEntry(files) {
   const failures = [];
-  let entryImports = 0;
+  const perEntry = new Map(TILECRAFT_ENTRIES.map(rel => [rel, 0]));
   for (const { rel, text } of files) {
     const hits = importsOf(text).filter(spec => spec.startsWith('@tilecraft'));
     if (!hits.length) continue;
-    if (rel === TILECRAFT_ENTRY) entryImports += hits.length;
-    else failures.push(`${rel}: import «${hits[0]}» — Tilecraft лише через ${TILECRAFT_ENTRY}`);
+    if (perEntry.has(rel)) perEntry.set(rel, perEntry.get(rel) + hits.length);
+    else failures.push(`${rel}: import «${hits[0]}» — Tilecraft лише через входи ${TILECRAFT_ENTRIES.join(', ')}`);
   }
-  if (!entryImports) failures.push(`${TILECRAFT_ENTRY}: жодного @tilecraft — правило дивиться не туди`);
-  return { id: 'BOUNDARY-3 tilecraft-entry', failures, note: `${entryImports} import(ів) у ${TILECRAFT_ENTRY}` };
+  // Вхід без жодного @tilecraft — зайвий рядок списку або правило дивиться не туди (P10).
+  for (const [rel, n] of perEntry) if (!n) failures.push(`${rel}: жодного @tilecraft — вхід зі списку не імпортує Tilecraft`);
+  return { id: 'BOUNDARY-3 tilecraft-entry', failures,
+    note: [...perEntry].map(([rel, n]) => `${rel.replace(/^src\//, '')} ${n}`).join(', ') + ' import(ів)' };
+}
+
+/* ── BOUNDARY-4: продукти залежать від платформи, не навпаки ──────────────── */
+
+/**
+ * Платформа (`src/**`) дає можливості без DOM-рішень і події, продукт
+ * (`products/**`) — увесь UI й рішення (STORY-QUEST-SPEC §4). Імпорт продукту з
+ * платформи зробив би сцену частиною одного продукту: другий продукт тягнув би
+ * квести першого. Поруч із BOUNDARY-2, тим самим розбором імпортів.
+ */
+const PRODUCTS_DIR = 'products/';
+
+function ruleProductsOnSrc(files) {
+  const failures = [];
+  const products = files.filter(f => f.rel.startsWith(PRODUCTS_DIR));
+  let productImports = 0;
+  for (const { rel, text } of files) {
+    for (const spec of importsOf(text)) {
+      const target = resolveFrom(rel, spec);
+      if (rel.startsWith('src/') && (target.startsWith(PRODUCTS_DIR) || /(?:^|\/)products\//.test(spec))) {
+        failures.push(`${rel}: import «${spec}» — платформа не імпортує products/**`);
+      }
+      if (rel.startsWith(PRODUCTS_DIR) && target.startsWith('src/')) productImports++;
+    }
+  }
+  if (!products.length) failures.push(`${PRODUCTS_DIR}: жодного файлу — правило дивиться не туди`);
+  else if (!productImports) failures.push(`${PRODUCTS_DIR}: жодного import з src/ — правило дивиться не туди`);
+  return { id: 'BOUNDARY-4 products-on-src', failures, note: `${products.length} файл(ів) products/, ${productImports} import(ів) з src/` };
 }
 
 /* ── OWNER-1, OWNER-2: один цикл, один renderer, один GUI ─────────────────── */
@@ -346,6 +379,7 @@ async function main() {
   const t0 = performance.now();
   const reportOnly = process.argv.includes('--report');
   const files = collect(SRC);
+  const products = collect(PRODUCTS);   // лише межові правила: BOUNDARY-3 і BOUNDARY-4
   const camera = baselineRule('OWNER-3 camera-writers', files, CAMERA_WRITE, CAMERA_BASELINE, CAMERA_OWNER,
     `камеру пише лише ${CAMERA_OWNER} (lock / place / flyTo)`);
   const ownerWrites = count(files.find(f => f.rel === CAMERA_OWNER)?.text ?? '', CAMERA_WRITE);
@@ -353,7 +387,8 @@ async function main() {
   camera.note = `${camera.note}; власник ${CAMERA_OWNER} — ${ownerWrites}`;
   const sun = baselineRule('OWNER-4 sun-writers', files, SUN_WRITE, SUN_BASELINE, SUN_OWNER,
     'сонце пишуть лише через env.set() (MOOD-WEATHER M1a)');
-  const results = [ruleEngineLeaf(files), ruleEnvironmentPortable(files), ruleTilecraftEntry(files),
+  const results = [ruleEngineLeaf(files), ruleEnvironmentPortable(files), ruleTilecraftEntry([...files, ...products]),
+    ruleProductsOnSrc([...files, ...products]),
     ruleOneLoop(files), ruleOneRendererGui(files), camera, sun, ruleGlobals(files),
     ruleFloatFilter(files), await ruleWaterSamplers()];
 
@@ -365,7 +400,7 @@ async function main() {
     return 0;
   }
 
-  console.log(`guard — ${files.length} файлів у src/\n`);
+  console.log(`guard — ${files.length} файлів у src/, ${products.length} у products/\n`);
   let failed = 0;
   for (const { id, failures, note } of results) {
     console.log(failures.length ? `✗ ${id} — ${note}` : `✓ ${id} — ${note}`);

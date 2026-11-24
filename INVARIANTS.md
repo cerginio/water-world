@@ -22,7 +22,8 @@
 |---|---|---|---|
 | [BOUNDARY-1](#boundary-1--engine--листок) | `src/engine/` імпортує лише `three` і `engine/` | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-2](#boundary-2--небо-й-атмосфера-переносні) | файли `src/environment/**` імпортують лише `three`, `three/*` і свою папку | guard-static, baseline 0 | ✓ |
-| [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортує лише `src/tiles/tilecraftLoader.js` | guard-static, baseline 0 | ✓ |
+| [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортують лише входи платформи: `src/tiles/tilecraftLoader.js`, `src/catalog/tilecraftCatalog.js` | guard-static, baseline 0 | ✓ |
+| [BOUNDARY-4](#boundary-4--продукти-залежать-від-платформи) | `src/**` не імпортує `products/**` | guard-static, baseline 0 | ✓ |
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
 | [OWNER-3](#owner-3--камеру-пише-лише-її-власник) | камеру/`controls` пише лише `src/scene/cameraRig.js` | guard-static, baseline 0 | ✓ |
@@ -88,22 +89,52 @@
 ## BOUNDARY-3 — Tilecraft лише через завантажувач
 
 **Формулювання.** Специфікатор `@tilecraft…` (статичний, side-effect чи
-динамічний `import()`) трапляється лише в `src/tiles/tilecraftLoader.js`.
+динамічний `import()`) трапляється лише у вхідних файлах платформи
+(`TILECRAFT_ENTRIES`): `src/tiles/tilecraftLoader.js` (моделі) і
+`src/catalog/tilecraftCatalog.js` (клієнт каталогу R2, story-quest Q1). Правило
+дивиться й у `products/**`: продукт бере Tilecraft лише через платформу.
+Розширюється списком входів, а не дозволом усім (STORY-QUEST-SPEC §4).
 
 **Походження.** Коміт `c90f052`, 2026-11-18 (переносима інтеграція Tilecraft):
 збірка без Tilecraft (`source=none`) і переносимість (BUILD-DEPLOY-SPEC)
 тримаються лише доти, доки решта коду не знає, звідки прийшла модель.
 
 **Механізм.** guard-static, `BOUNDARY-3 tilecraft-entry`. Розмір набору: у
-завантажувачі ≥ 1 import (зараз 7).
+кожному вході зі списку ≥ 1 import (зараз 7 і 1); вхід без жодного — помилка.
 
-**Перевірюване твердження.** `✓ BOUNDARY-3 tilecraft-entry — 7 import(ів) у src/tiles/tilecraftLoader.js`.
+**Перевірюване твердження.** `✓ BOUNDARY-3 tilecraft-entry — tiles/tilecraftLoader.js 7, catalog/tilecraftCatalog.js 1 import(ів)`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
 | `src/tiles/TileField.js` + `import { thicknessScale } from '@tilecraft/lib/thickness-scale.js'` | ✓ проходить — дефект | ✗ `TileField.js: import «@tilecraft/lib/thickness-scale.js»` |
+| `src/catalog/catalog.js` + `import '@tilecraft/lib/story-catalog.js'` (story-quest Q1) | — | ✗ `src/catalog/catalog.js: import «@tilecraft/lib/story-catalog.js» — Tilecraft лише через входи …` |
+| `products/story-quest/main.js` + `import '@tilecraft/lib/story-catalog.js'` (Q1) | ✓ проходить — products/ не сканувався | ✗ `products/story-quest/main.js: import «@tilecraft/lib/story-catalog.js»` |
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleTilecraftEntry`.
+
+## BOUNDARY-4 — продукти залежать від платформи
+
+**Формулювання.** Жоден файл `src/**` не імпортує `products/**` (відносним шляхом
+чи специфікатором зі `/products/`). `products/**` імпортує `src/**` вільно.
+
+**Походження.** Межа без інциденту, як BOUNDARY-2: STORY-QUEST-SPEC §4 —
+платформа дає можливості й події, продукт (`products/story-quest/`) — увесь UI
+й рішення. Імпорт продукту з платформи зробив би сцену частиною одного продукту:
+другий продукт тягнув би квести й картки першого. Заведено в story-quest Q1
+разом із першим продуктом.
+
+**Механізм.** guard-static, `BOUNDARY-4 products-on-src`, тим самим розбором
+імпортів, що BOUNDARY-1…3. Правило дивиться туди, куди треба: без жодного файлу
+в `products/` або без жодного import з `src/` у них воно падає.
+
+**Перевірюване твердження.** `✓ BOUNDARY-4 products-on-src — 1 файл(ів) products/, 1 import(ів) з src/`.
+
+| мутація | guard до правила | guard після |
+|---|---|---|
+| `src/main.js` + `import '../products/story-quest/main.js';` | ✓ проходить — дефект | ✗ `src/main.js: import «../products/story-quest/main.js» — платформа не імпортує products/**` |
+| прибрати `products/story-quest/main.js` | — | ✗ `products/: жодного файлу — правило дивиться не туди` |
+
+**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleProductsOnSrc`.
 
 ## OWNER-1 — один цикл кадру
 

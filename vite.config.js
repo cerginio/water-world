@@ -8,7 +8,11 @@ export default defineConfig(({ mode }) => {
   const tilecraftRoot = resolveTilecraft(mode);
   return {
     root: projectRoot,
-    build: { sourcemap: false, license: { fileName: 'licenses.md' } },
+    build: {
+      sourcemap: false, license: { fileName: 'licenses.md' },
+      // the scene and the Story Quest product shell (STORY-QUEST-SPEC §4, products/**)
+      rollupOptions: { input: { main: resolve(projectRoot, 'index.html'), storyQuest: resolve(projectRoot, 'products/story-quest/index.html') } },
+    },
     server: {
       port: 5199,
       strictPort: true,

@@ -26,6 +26,7 @@ import { WaveCaustics } from './water/Caustics.js';
 import { TileField } from './tiles/TileField.js';
 import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
+import { createStoryCatalog } from './catalog/index.js';
 import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
@@ -413,7 +414,11 @@ fFloat.add(underwater.params, 'shaftRange', 5, 120, 1);
 fFloat.add(underwater.params, 'meniscus', 0, 1, 0.01);
 fFloat.add(look, 'underwater', 0.2, 2, 0.01).name('underwater exposure');
 
-// Tilecraft models on the water (spec.md §8); ?tiles=<fixture> picks one, bare ?tiles the hibrid
+// Tilecraft models on the water (spec.md §8); ?tiles=<fixture> picks one, bare ?tiles the hibrid;
+// ?story=<folder>/<slug> takes a story from the R2 catalog (STORY-QUEST-SPEC §4.1) the same way
+// dev only: Tilecraft's fixtures/catalog/ when R2 is unreachable (STORY-QUEST-SPEC §5). Written
+// as import.meta.env.DEV verbatim: Vite substitutes only this exact text, and the build drops the branch
+const catalog = createStoryCatalog({ localBase: import.meta.env.DEV ? new URL(`${import.meta.env.BASE_URL}tilecraft/catalog/`, location.origin).href : null });
 const fTiles = gui.addFolder('Tiles');
 readTileUrl(args, tiles.params);
 let tilesUrlSource = args.has('tiles') ? args.get('tiles') || TILE_SOURCES[0] : 'none';
@@ -426,7 +431,7 @@ const tilesUi = {
 let frameController = null;
 async function loadTiles(source) {
   tilesUrlSource = source;
-  tilesUi.source = source instanceof File ? 'file…' : source;
+  tilesUi.source = source instanceof File ? 'file…' : typeof source === 'object' ? 'story' : source;
   sourceController.updateDisplay();
   await tiles.load(source);
   frameController = frameController.options(['all', ...tiles.frames]).onChange(rebuildTiles);
@@ -440,7 +445,8 @@ async function rebuildTiles() {
   saveTilesUrl();
 }
 fileInput.onchange = () => fileInput.files[0] && loadTiles(fileInput.files[0]);
-const sourceController = fTiles.add(tilesUi, 'source', ['none', ...TILE_SOURCES, 'file…']).onChange((v) => {
+const sourceController = fTiles.add(tilesUi, 'source', ['none', ...TILE_SOURCES, 'file…', 'story']).onChange((v) => {
+  if (v === 'story') return;   // informational: a catalog story is chosen by ?story=, not here
   if (v === 'file…') fileInput.click();
   else loadTiles(v);
 });
@@ -468,7 +474,22 @@ fTiles.add({ releaseToDrift: () => {
   if (f) { tiles.interaction.cancel(); tiles.releaseFrame(f.id); }
 } }, 'releaseToDrift').name('Відпустити у дрейф');
 fTiles.add(tilesUi, 'status').disable().listen();
-if (!args.has('tiles')) fTiles.close();
+fTiles.add({ get story() {
+  const { story, state, error } = catalog;
+  return story || error ? `${story?.id ?? '—'} · ${state}${error ? ` · ${error.code}` : ''}` : '—';
+} }, 'story').disable().listen();
+if (!args.has('tiles') && !args.has('story')) fTiles.close();
+// a catalog story: fetched by the catalog, then the same path as a fixture. A failure is
+// the catalog's { code, message }; the scene stays as it was
+async function loadStory(id) {
+  try {
+    await loadTiles(await catalog.load(id));
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    tiles.status = `error: ${catalog.error?.message ?? e.message}`;
+    console.error('[catalog]', e);
+  }
+}
 addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', (e) => {
   e.preventDefault();
@@ -872,7 +893,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
 }
 window.app = {
   still,
-  camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles,
+  camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -1004,6 +1025,7 @@ function spin() {
 resize();
 applySun();
 views[ui.view]();
-// a link with ?tiles opens on the field once it has loaded and been placed
-if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
+// a link with ?story or ?tiles opens on the field once it has loaded and been placed (?story wins)
+if (args.has('story')) loadStory(args.get('story')).then(() => tiles.loaded && viewController.setValue('Tiles'));
+else if (tilesUi.source !== 'none') loadTiles(tilesUi.source).then(() => tiles.loaded && viewController.setValue('Tiles'));
 if (!stillMode) requestAnimationFrame(loop);

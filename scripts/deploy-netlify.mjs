@@ -6,15 +6,24 @@ import { projectRoot } from '../build/tilecraft-config.js';
 import { verifyDist } from './verify-dist.mjs';
 
 const input = process.argv.slice(2);
-const allowed = new Set(['--prod', '--dry-run', '--site']);
+const allowed = new Set(['--prod', '--dry-run', '--site', '--alias']);
+// a draft alias gives a stable address <alias>--<site>.netlify.app — the one the R2 CORS
+// rule can name (STORY-QUEST-SPEC §5.1: `--alias story-quest`); production has none
+const ALIAS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 let site = process.env.NETLIFY_SITE_ID;
+let alias = null;
 for (let index = 0; index < input.length; index++) {
   if (!allowed.has(input[index])) throw new Error(`Unknown argument: ${input[index]}`);
   if (input[index] === '--site') {
     site = input[++index];
     if (!site || site.startsWith('--')) throw new Error('--site requires a project ID or name');
   }
+  if (input[index] === '--alias') {
+    alias = input[++index];
+    if (!alias || !ALIAS.test(alias)) throw new Error('--alias requires a lowercase name such as story-quest');
+  }
 }
+if (alias && input.includes('--prod')) throw new Error('--alias is for drafts; production has no alias');
 if (!site) {
   try { site = JSON.parse(readFileSync(resolve(projectRoot, '.netlify/state.json'), 'utf8')).siteId; }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -24,7 +33,8 @@ await build({ configFile: resolve(projectRoot, 'vite.config.js') });
 verifyDist();
 const args = ['deploy', '--no-build', '--dir', 'dist', '--site', site];
 if (input.includes('--prod')) args.push('--prod');
-console.log(`Netlify ${input.includes('--prod') ? 'production' : 'draft'} target: ${site}`);
+if (alias) args.push('--alias', alias);
+console.log(`Netlify ${input.includes('--prod') ? 'production' : 'draft'} target: ${site}${alias ? ` · alias ${alias} → https://${alias}--${site}.netlify.app` : ''}`);
 if (input.includes('--dry-run')) {
   console.log(`Prepared (no upload): netlify ${args.map(arg => JSON.stringify(arg)).join(' ')}`);
 } else {

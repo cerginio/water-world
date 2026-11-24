@@ -1,0 +1,123 @@
+/* The scene page's chrome: #perf, the tech strip, the station rail, the weather slot.
+   Shared by index.html and products/story-quest/index.html (one scene, two pages). */
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
+#perf {
+  position: fixed; left: 8px; top: 8px; width: max-content; min-width: 250px; box-sizing: border-box; padding: 10px 12px;
+  font: 12px/1.35 system-ui, sans-serif; color: #e8f4ff; background: rgba(6, 10, 14, 0.6); border-radius: 8px;
+}
+#pGpu { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#pSpec { font-size: 11px; opacity: 0.6; }
+.pRow { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; }
+#pFps { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pRow > i { font-style: normal; font-weight: 700; color: #2cc9ff; }
+.pRow > span { margin-left: auto; text-align: right; font-size: 11px; font-variant-numeric: tabular-nums; }
+#pMode { font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: 2px; color: #2cc9ff; }
+#perf canvas { width: 100%; height: 24px; margin: 2px 0 8px; }
+#perf button {
+  display: block; width: 100%; padding: 6px; border: 0; border-radius: 5px; cursor: pointer;
+  font: 600 12px system-ui, sans-serif; color: #071018; background: #2cc9ff;
+}
+#pUncap.on { color: #ebebeb; background: #424242; }
+#pSky { margin-top: 4px; }
+/* double tap copies the panel text (src/ui/perfCopy.js); no double-tap zoom here */
+#perf { touch-action: manipulation; }
+#perf[data-copied="ok"] { outline: 2px solid #2cc9ff; }
+#perf[data-copied="fail"] { outline: 2px solid #ff5a4a; }
+#hud { margin-top: 8px; font: 10px/1.35 ui-monospace, Consolas, monospace; white-space: pre; opacity: 0.75; }
+#hud:empty { display: none; }
+/* phones (class set by main.js): smaller, and down at the bottom, clear of the settings panel */
+.mobile #perf { top: auto; bottom: 8px; min-width: 190px; padding: 8px 10px; font-size: 10px; }
+.mobile #pFps { font-size: 26px; }
+.mobile #hud { font-size: 8px; }
+#perf[hidden], #techStrip[hidden] { display: none; }
+/* three-finger tap on touch screens: the F2 / F3 keys as buttons (SCENE-UI-SPEC §3.2) */
+/* the strip and a bottom #perf stand above the station rail (SCENE-UI-SPEC §3.2, §4.6) */
+:root { --rail-top: calc(12px + 64px + env(safe-area-inset-bottom)); }
+#techStrip {
+  position: fixed; left: 50%; bottom: calc(var(--rail-top) + 8px); transform: translateX(-50%);
+  display: flex; gap: 8px; padding: 6px; border-radius: 10px; background: rgba(6, 10, 14, 0.6); z-index: 10;
+}
+#techStrip button {
+  min-width: 44px; min-height: 44px; padding: 0 14px; border: 0; border-radius: 6px; cursor: pointer;
+  font: 600 13px system-ui, sans-serif; color: #e8f4ff; background: #424242;
+}
+#techStrip button[aria-pressed="true"] { color: #071018; background: #2cc9ff; }
+.mobile #perf { bottom: calc(var(--rail-top) + 8px); }
+.tech-strip.mobile #perf { bottom: calc(var(--rail-top) + 72px); }
+
+/* station rail (SCENE-UI-SPEC §4.1): four nodes, ● on the station, ◎ the last one,
+   a bead runs between them during a flight */
+#stationRail {
+  position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: grid; grid-template-columns: repeat(4, 76px); height: 64px; z-index: 9;
+  font: 500 12px/1.2 system-ui, sans-serif; color: #e8f4ff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+/* through the dot centres: .station padding-top 10 + half the 14 px dot = 17 px = top 16 + half of 2 px */
+#stationRail .track {
+  position: absolute; left: 38px; right: 38px; top: 16px; height: 2px; background: rgba(232, 244, 255, 0.45);
+  pointer-events: none;
+}
+#stationRail .bead {
+  position: absolute; top: -3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #e8f4ff;
+}
+#stationRail .bead[hidden] { display: none; }
+#stationRail .station {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 44px; min-height: 44px; padding: 10px 0 0; border: 0; background: none; color: inherit; font: inherit;
+  text-shadow: inherit; cursor: pointer;
+}
+#stationRail .dot {
+  width: 14px; height: 14px; box-sizing: border-box; border-radius: 50%; border: 2px solid #e8f4ff;
+  background: rgba(6, 10, 14, 0.55);
+}
+#stationRail .station.on .dot { background: #e8f4ff; }
+#stationRail .station.last .dot { box-shadow: inset 0 0 0 2px rgba(6, 10, 14, 0.55), inset 0 0 0 5px #e8f4ff; }
+#stationRail .station[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+#stationRail .station:focus-visible { outline: 2px solid #2cc9ff; outline-offset: 2px; border-radius: 6px; }
+/* reduced motion: fade out, place, fade in (SCENE-UI-SPEC §4.4) */
+/* phones (SCENE-UI-SPEC §4.6): the rail spans the width with 16 px margins over the
+   safe area, leaving a slot on the right for the round weather button (MOOD-WEATHER §4.1) */
+.mobile { --rail-top: calc(16px + 64px + env(safe-area-inset-bottom)); --weather-slot: calc(56px + 8px); }
+.mobile #stationRail {
+  left: calc(16px + env(safe-area-inset-left)); right: calc(16px + var(--weather-slot) + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom)); transform: none; grid-template-columns: repeat(4, 1fr);
+}
+.mobile #stationRail .track { left: 12.5%; right: 12.5%; }
+/* a phone on its side has no room for #perf over the strip: it goes up, as on desktop */
+@media (max-height: 500px) {
+  .mobile #perf, .tech-strip.mobile #perf { top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
+  /* never down onto the rail: a GPU timer line more (E2b: `sky` ticks while the clouds drift)
+     reached it at 412 px; the panel scrolls instead */
+  .mobile #perf { max-height: calc(100% - var(--rail-top) - 16px - env(safe-area-inset-top)); overflow-y: auto; }
+}
+.mobile #moodPad .mood-button { left: auto; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + 4px + env(safe-area-inset-bottom)); }
+/* phones: the window takes what is left above the rail after the arc (84/240 of the window)
+   and, upright, the invitation unfolded, the words and «Quiet down» (--mood-extra) */
+.mobile #moodPad {
+  --mood-extra: 162px;
+  --pad: min(320px, calc(100vw - 48px - env(safe-area-inset-left) - env(safe-area-inset-right)),
+    calc((100dvh - var(--rail-top) - 56px - var(--mood-extra) - env(safe-area-inset-top)) / 1.35));
+}
+.mobile #moodPad .mood-panel {
+  left: calc(8px + env(safe-area-inset-left)); right: calc(8px + env(safe-area-inset-right));
+  bottom: calc(var(--rail-top) + 8px); padding: 10px 16px 12px;
+}
+/* a phone on its side: the invitation and the words go left of the arc and the window */
+@media (max-height: 500px) {
+  .mobile #moodPad { --mood-extra: 0px; }
+  .mobile #moodPad .mood-panel {
+    display: grid; grid-template-columns: minmax(0, 340px) var(--pad); grid-template-rows: auto var(--pad); justify-content: center;
+    grid-template-areas: "invite arc" "words window"; column-gap: 20px; row-gap: 6px; align-items: start;
+  }
+  .mobile #moodPad .mood-invite { grid-area: invite; width: auto; align-self: center; }
+  .mobile #moodPad .mood-sky { grid-area: arc; }
+  .mobile #moodPad .mood-window { grid-area: window; }
+  .mobile #moodPad .mood-foot { grid-area: words; align-self: center; }
+  .mobile #moodPad .mood-words { width: 100%; }
+}
+#stationFade {
+  position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 8;
+  transition: opacity 250ms linear;
+}
+#stationFade.dark { opacity: 1; }

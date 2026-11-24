@@ -1,7 +1,9 @@
 import { resolve } from 'node:path';
 import { normalizePath } from 'vite';
 import MagicString from 'magic-string';
-import { publishedAssetPath, readTilecraftAsset, tilecraftAssets } from './tilecraft-config.js';
+import { LOCAL_CATALOG_PATH, LOCAL_CATALOG_SOURCE, publishedAssetPath, readTilecraftAsset, tilecraftAssets } from './tilecraft-config.js';
+
+const LOCAL_CATALOG_FILE = /^[a-z0-9]+(?:-[a-z0-9]+)*\.json$/;
 
 export function tilecraftPlugin(root) {
   const loader = normalizePath(resolve(root, 'viewer/engines/three/core/model-loader.js'));
@@ -38,7 +40,11 @@ export function tilecraftPlugin(root) {
       const assets = new Map(tilecraftAssets.map(relative => [`${base}${publishedAssetPath(relative)}`, relative]));
       server.middlewares.use((request, response, next) => {
         const pathname = (request.url ?? '').split('?')[0];
-        const relative = assets.get(pathname);
+        // dev only, never emitted: Tilecraft's fixtures/catalog/ as the fallback catalog
+        // when R2 is unreachable (STORY-QUEST-SPEC §5); a canonical file name, no paths
+        const local = pathname.startsWith(`${base}${LOCAL_CATALOG_PATH}`) ? pathname.slice(`${base}${LOCAL_CATALOG_PATH}`.length) : null;
+        const relative = local === null ? assets.get(pathname)
+          : LOCAL_CATALOG_FILE.test(local) ? `${LOCAL_CATALOG_SOURCE}${local}` : null;
         if (!relative) return next();
         if (request.method !== 'GET' && request.method !== 'HEAD') {
           response.writeHead(405, { Allow: 'GET, HEAD' });
