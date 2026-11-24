@@ -48,3 +48,65 @@ describe('sun arc', () => {
     expect(arcToDay(1000, -100)).toBeLessThanOrEqual(1);
   });
 });
+
+// MOOD-WEATHER M3: the content (spec §4.2) — whose words show under the window, and the locales.
+import { MOOD_MAP_V1 } from '../src/environment/mood.js';
+import { MOOD_LOCALES, moodColors, nearestCell, wordsCells, wordsText } from '../src/environment/ui/moodPad.js';
+
+const uk = (/** @type {string} */ k) => MOOD_LOCALES.uk.words[k];
+const id = (/** @type {{ row: number, col: number }[]} */ cells) => cells.map(({ row, col }) => MOOD_MAP_V1.grid[row][col].id);
+
+describe('emotional words', () => {
+  test('A9 shows «спокій · умиротворення» (spec §6 p.7)', () => {
+    expect(wordsText(wordsCells(1, -1), uk)).toBe('спокій · умиротворення');
+    expect(wordsText(wordsCells(0.8, -0.75), uk)).toBe('спокій · умиротворення');
+  });
+  test('the nearest anchor inside a cell', () => {
+    expect(id(wordsCells(-1, 1))).toEqual(['A1']);
+    expect(id(wordsCells(0.1, -0.1))).toEqual(['A5']);
+    expect(id(wordsCells(-0.7, -0.2))).toEqual(['A4']);
+  });
+  test('on the border of A9 and A6 — the first word of each, the nearer first (spec §4.2)', () => {
+    expect(id(wordsCells(1, -0.53))).toEqual(['A9', 'A6']);
+    expect(wordsText(wordsCells(1, -0.53), uk)).toBe('спокій · задоволення');
+    expect(id(wordsCells(1, -0.47))).toEqual(['A6', 'A9']);
+    expect(id(wordsCells(1, -0.65))).toEqual(['A9']);
+  });
+  test('where four cells meet, the nearest two', () => {
+    expect(wordsCells(0.52, 0.47)).toHaveLength(2);
+    expect(id(wordsCells(0.53, 0.47))[0]).toBe('A6');
+  });
+  test('nearest cell rounds to the anchor grid', () => {
+    expect(nearestCell(1, -1)).toEqual({ row: 0, col: 2 });
+    expect(nearestCell(-1, 1)).toEqual({ row: 2, col: 0 });
+  });
+});
+
+describe('locales', () => {
+  test('every name and word key of the map has a string in uk and en', () => {
+    for (const lang of ['uk', 'en']) {
+      for (const m of MOOD_MAP_V1.grid.flat()) {
+        expect(MOOD_LOCALES[lang].names[m.name], `${lang} ${m.name}`).toBeTruthy();
+        for (const w of m.words) expect(MOOD_LOCALES[lang].words[w], `${lang} ${w}`).toBeTruthy();
+      }
+    }
+  });
+  test('the approved names and words (spec §3.1, §4.2; owner 2026-11-23)', () => {
+    const names = (lang) => MOOD_MAP_V1.grid.flat().sort((p, q) => p.id.localeCompare(q.id)).map((m) => MOOD_LOCALES[lang].names[m.name]);
+    expect(names('uk')).toEqual(['Шторм', 'Рвані хмари', 'Бриз', 'Похмуро', 'Сонце з-за хмар', 'Тепле сонце', 'Туман', 'Тихо й хмарно', 'Штиль']);
+    expect(names('en')).toEqual(['Storm', 'Torn clouds', 'Breeze', 'Overcast', 'Sun through clouds', 'Warm sun', 'Fog', 'Quiet and cloudy', 'Calm']);
+    expect(wordsText(wordsCells(-1, 1), (k) => MOOD_LOCALES.en.words[k])).toBe('tension · too much at once');
+  });
+  test('no digits anywhere in the widget\'s strings (spec §6 p.9)', () => {
+    expect(JSON.stringify(MOOD_LOCALES)).not.toMatch(/\d/);
+  });
+});
+
+describe('thumbnail colours', () => {
+  test('clear is bluer than cloudy; the ends of the day are warmer at the horizon', () => {
+    const rgb = (s) => s.match(/\d+/g).map(Number);
+    const [cr, , cb] = rgb(moodColors(1, -1, 0.5).skyTop), [gr, , gb] = rgb(moodColors(-1, -1, 0.5).skyTop);
+    expect(cb - cr).toBeGreaterThan(gb - gr);
+    expect(rgb(moodColors(0, 0, 0).skyLow)[0]).toBeGreaterThan(rgb(moodColors(0, 0, 0.5).skyLow)[0]);
+  });
+});

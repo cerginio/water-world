@@ -546,6 +546,30 @@ function applyMood({ smooth }) {
   moodMove.to = { day: { t: moodState.t }, sea: sea.channels(m.sea), grade: { ...m.grade } };
   if (smooth) env.setState(moodMove.sunDirect ? { ...sky, elevation: sun.elevation, azimuth: sun.azimuth } : sky, { tau: MOOD_TAU.sky });
   else { stepMood(0, true); applySun(); }
+  moodGap0 = moodGap();
+}
+// the ring round the widget's button (spec §4.1): how far each group is from its target, as a
+// share of where the last change of the target left it; the slowest group sets the progress
+const absd = (p, q) => Math.abs(p - q);
+function moodGap() {
+  const e = env.params, g = env.target;
+  const gap = { sky: absd(e.cloudCoverage, g.cloudCoverage) + absd(e.sunIntensity, g.sunIntensity) / 10
+    + absd(e.turbidity, g.turbidity) / 8 + (absd(e.elevation, g.elevation) + absd(e.azimuth, g.azimuth)) / 180, day: 0, sea: 0, grade: 0 };
+  if (moodMove?.to) {
+    const { now, to } = moodMove;
+    gap.day = absd(now.day.t, to.day.t);
+    gap.sea = absd(now.sea.windSpeed, to.sea.windSpeed) / 22 + absd(now.sea.waveScale, to.sea.waveScale) / 0.45;
+    gap.grade = absd(now.grade.keyValue, to.grade.keyValue) / 0.1 + absd(now.grade.saturation, to.grade.saturation);
+  }
+  return gap;
+}
+let moodGap0 = null;
+function moodProgress() {
+  if (!moodGap0 || moodState.custom || !(moodMove || env.dirty)) { moodGap0 = null; return 1; }
+  const gap = moodGap();
+  let left = 0;
+  for (const k of Object.keys(gap)) if (moodGap0[k] > 1e-4) left = Math.max(left, Math.min(1, gap[k] / moodGap0[k]));
+  return 1 - left;
 }
 /** one frame of the move: day → sun, sea channels, grade; at once when `snap` */
 function stepMood(dt, snap = false) {
@@ -591,7 +615,7 @@ const moodApi = {
     const m = sampleMood(MOOD_MAP_V1, moodState.v, moodState.a);
     // moving: the world is still on its way (the sea, the grade, the day or the sky)
     return { ...moodState, map: MOOD_MAP_V1.version, anchor: m.anchor, words: m.words,
-      moving: moodMove !== null || env.dirty, day: dayShown };
+      moving: moodMove !== null || env.dirty, day: dayShown, progress: moodProgress() };
   },
 };
 const moodPad = createMoodPad({
@@ -638,6 +662,7 @@ function renderFrame(dt) {
   timer.beginFrame();
   // the mood's move first: its day lands in the sky update below (spec §4.4)
   if (moodMove) stepMood(dt);
+  moodPad.progress(moodProgress());
   // inside the timer's frame, so a sky change shows as its own `sky` line (E0); while the sky
   // moves (env.setState with τ) one cube face a frame, the IBL and a full shadow at rest (E2);
   // drifting clouds tick it every frame and re-bake the cube now and then (E2b)

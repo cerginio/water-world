@@ -2,7 +2,7 @@
 // No three, no DOM, no Ultra-Water: the host binds the `sea` channels itself
 // (src/environment-bindings/seaBinding.js) and writes `sky` + `sun` through env.set().
 //
-// Words and names are locale keys; the strings live in the widget's locales (M3).
+// Words and names are locale keys; the strings live in the widget's locales (ui/moodPad.js).
 
 /**
  * @typedef {{ sunIntensity: number, cloudCoverage: number, turbidity: number, cloudSpeed: number }} MoodSky
@@ -25,21 +25,21 @@ const anchor = (id, name, words, [sunIntensity, cloudCoverage, turbidity, cloudS
 const CLEAR = { clear: 1 }, TROPICAL = { tropical: 1 }, MURKY_HALF = { clear: 0.5, 'murky brown': 0.5 };
 
 // spec §3.2, column by column
-const A1 = anchor('A1', 'storm', ['tension', 'anxiety', 'overload'],
+const A1 = anchor('A1', 'storm', ['tension', 'too-much'],
   [7, 0.95, 5, 4], [22, 0.45, 1.2, 1.5, 1.6, 2.5, MURKY_HALF, 0.5, 6], [0.12, 1.2, 0.8]);
-const A2 = anchor('A2', 'fresh-wind', ['excitement', 'alertness'],
+const A2 = anchor('A2', 'torn-clouds', ['excitement', 'focus'],
   [9, 0.45, 2, 3], [15, 0.3, 0.9, 1.15, 1.3, 1.6, CLEAR, 1, 1.5], [0.18, 1.15, 1.25]);
-const A3 = anchor('A3', 'clear-breeze', ['joy', 'elation', 'energy'],
+const A3 = anchor('A3', 'breeze', ['joy', 'energy'],
   [10, 0.2, 1.5, 2], [10, 0.18, 0.7, 0.9, 1.0, 1.0, TROPICAL, 1.3, 0.8], [0.22, 1.12, 1.4]);
-const A4 = anchor('A4', 'grey-day', ['sadness', 'upset'],
+const A4 = anchor('A4', 'overcast', ['sadness', 'heaviness'],
   [8, 0.88, 4, 1], [6, 0.1, 0.5, 0.7, 0.8, 0.6, CLEAR, 0.6, 3], [0.14, 1.0, 0.8]);
-const A5 = anchor('A5', 'changeable', ['balance', 'nothing-special'],
+const A5 = anchor('A5', 'sun-through-clouds', ['balance', 'ordinary'],
   [9, 0.38, 2, 1], [7, 0.12, 0.6, 0.8, 0.9, 0.8, CLEAR, 1, 1], [0.18, 1.1, 1.25]);
-const A6 = anchor('A6', 'sunny', ['contentment', 'warmth', 'gratitude'],
+const A6 = anchor('A6', 'warm-sun', ['contentment', 'gratitude'],
   [9.5, 0.15, 1.8, 0.8], [5, 0.1, 0.6, 0.7, 0.8, 0.6, CLEAR, 1.1, 0.9], [0.2, 1.12, 1.35]);
-const A7 = anchor('A7', 'haze', ['numbness', 'detachment', 'in-a-fog'],
+const A7 = anchor('A7', 'fog', ['muted', 'distant'],
   [8, 0.6, 8, 0.3], [2, 0.05, 0.35, 0.5, 0.5, 0.3, CLEAR, 0.7, 8], [0.15, 0.92, 0.7]);
-const A8 = anchor('A8', 'quiet-overcast', ['tiredness', 'pensiveness'],
+const A8 = anchor('A8', 'quiet-cloudy', ['tiredness', 'pensiveness'],
   [8.5, 0.55, 2.5, 0.5], [2.5, 0.06, 0.4, 0.5, 0.5, 0.3, CLEAR, 0.9, 1.5], [0.16, 1.02, 1.0]);
 const A9 = anchor('A9', 'calm', ['calm', 'peace'],
   [9, 0.12, 1.6, 0.2], [1.5, 0.04, 0.3, 0.4, 0.4, 0.2, TROPICAL, 1.5, 0.8], [0.2, 1.08, 1.3]);
