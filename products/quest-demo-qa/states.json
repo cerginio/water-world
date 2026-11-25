@@ -1,0 +1,737 @@
+{
+  "groups": [
+    {
+      "id": "island",
+      "title": {
+        "uk": "Острів",
+        "en": "Island"
+      }
+    },
+    {
+      "id": "minis",
+      "title": {
+        "uk": "Мініатюри",
+        "en": "Miniatures"
+      }
+    },
+    {
+      "id": "raft",
+      "title": {
+        "uk": "Пліт і кайт",
+        "en": "Raft and kite"
+      }
+    },
+    {
+      "id": "flight",
+      "title": {
+        "uk": "Політ",
+        "en": "Flight"
+      }
+    },
+    {
+      "id": "fates",
+      "title": {
+        "uk": "Долі",
+        "en": "Fates"
+      }
+    },
+    {
+      "id": "water",
+      "title": {
+        "uk": "Вода",
+        "en": "Water"
+      }
+    }
+  ],
+  "cards": [
+    {
+      "id": "island-eyes",
+      "group": "island",
+      "title": {
+        "uk": "На пляжі «очима»",
+        "en": "On the beach, in the eyes"
+      },
+      "covers": [
+        "QA-Q2a-1",
+        "QA-Q2a-2",
+        "QA-Q2a-3",
+        "QA-Q2a-4",
+        "QA-Q2a-5",
+        "QA-Q2a-7"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "walker.place",
+          "args": {
+            "at": "beach"
+          }
+        }
+      ],
+      "expect": {
+        "mode": "eyes",
+        "walker.deck": null,
+        "walker.flight": false,
+        "walker.swim": false
+      }
+    },
+    {
+      "id": "island-out-of-body",
+      "group": "island",
+      "title": {
+        "uk": "«Поза тілом» на пляжі",
+        "en": "Out of the body on the beach"
+      },
+      "covers": [
+        "QA-Q2a-6",
+        "QA-Q2b-2",
+        "QA-Q2b-3"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "walker.place",
+          "args": {
+            "at": "beach"
+          }
+        },
+        {
+          "cmd": "walker.eyes",
+          "args": {
+            "on": false
+          }
+        }
+      ],
+      "expect": {
+        "mode": "standing"
+      }
+    },
+    {
+      "id": "mini-carried",
+      "group": "minis",
+      "title": {
+        "uk": "Мініатюра в руках",
+        "en": "A miniature in the hands"
+      },
+      "covers": [
+        "QA-Q3-3",
+        "QA-Q3-4",
+        "QA-Q3-6"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.take",
+          "args": {
+            "frame": 0
+          }
+        }
+      ],
+      "expect": {
+        "mode": "eyes",
+        "carried": 0
+      }
+    },
+    {
+      "id": "mini-hydrated",
+      "group": "minis",
+      "title": {
+        "uk": "Мініатюра у воді — кадр на воді",
+        "en": "The miniature in the water — a frame afloat"
+      },
+      "covers": [
+        "QA-Q3-5",
+        "QA-Q4-1",
+        "QA-Q4b-6"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "walker.look",
+          "args": {
+            "at": "frame:0"
+          }
+        }
+      ],
+      "expect": {
+        "frames.0.mini": "water",
+        "frames.0.deck": true,
+        "carried": null
+      }
+    },
+    {
+      "id": "raft-board",
+      "group": "raft",
+      "title": {
+        "uk": "На плоті без кайта",
+        "en": "On the raft, no kite"
+      },
+      "covers": [
+        "QA-Q4-1",
+        "QA-Q4-2",
+        "QA-Q4-6",
+        "QA-Q5b-5"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        }
+      ],
+      "expect": {
+        "walker.deck": 0,
+        "kite": false
+      }
+    },
+    {
+      "id": "raft-kite-shore",
+      "group": "raft",
+      "title": {
+        "uk": "Пліт під кайтом біля берега",
+        "en": "Raft under the kite by the shore"
+      },
+      "covers": [
+        "QA-Q4-3",
+        "QA-Q4-5",
+        "QA-Q4-9",
+        "QA-Q5a-1",
+        "QA-Q5a-2",
+        "QA-Q5a-3",
+        "QA-Q5a-4"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        }
+      ],
+      "expect": {
+        "walker.deck": 0,
+        "kite": true,
+        "openSea": false
+      }
+    },
+    {
+      "id": "raft-kite-open-sea",
+      "group": "raft",
+      "title": {
+        "uk": "Пліт під кайтом у відкритому морі",
+        "en": "Raft under the kite, open sea"
+      },
+      "covers": [
+        "QA-Q4-4",
+        "QA-Q4-5",
+        "QA-Q4-8",
+        "QA-Q4b-1",
+        "QA-QDa-2"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        }
+      ],
+      "expect": {
+        "walker.deck": 0,
+        "kite": true,
+        "openSea": true
+      }
+    },
+    {
+      "id": "flight-deep",
+      "group": "flight",
+      "title": {
+        "uk": "Політ над глибиною",
+        "en": "In the air over deep water"
+      },
+      "covers": [
+        "QA-Q4b-2",
+        "QA-Q4b-3",
+        "QA-Q4b-4",
+        "QA-Q5a-5",
+        "QA-Q5b-1"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        },
+        {
+          "cmd": "fly.takeOff"
+        },
+        {
+          "cmd": "fly.to",
+          "args": {
+            "at": "beside:0"
+          }
+        }
+      ],
+      "expect": {
+        "walker.flight": true,
+        "walker.landing": "water",
+        "kite": true
+      }
+    },
+    {
+      "id": "flight-to-island",
+      "group": "flight",
+      "title": {
+        "uk": "Політ до острова",
+        "en": "In the air, heading for the island"
+      },
+      "covers": [
+        "QA-Q4b-5",
+        "QA-Q4b-7"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "fly.takeOff"
+        },
+        {
+          "cmd": "walker.look",
+          "args": {
+            "at": "beach"
+          }
+        }
+      ],
+      "expect": {
+        "walker.flight": true,
+        "kite": true
+      }
+    },
+    {
+      "id": "fate-sunk",
+      "group": "fates",
+      "title": {
+        "uk": "Кадр втоплено",
+        "en": "The frame sunk"
+      },
+      "covers": [
+        "QA-Q5-1",
+        "QA-Q5-2",
+        "QA-Q5-5",
+        "QA-Q5-7"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        },
+        {
+          "cmd": "fate.give",
+          "args": {
+            "frame": 0,
+            "kind": "sink"
+          }
+        }
+      ],
+      "expect": {
+        "frames.0.fate.kind": "sink",
+        "frames.0.fate.t": {
+          "min": 1
+        },
+        "walker.flight": true
+      }
+    },
+    {
+      "id": "fate-released",
+      "group": "fates",
+      "title": {
+        "uk": "Кадр відпущено",
+        "en": "The frame let go"
+      },
+      "covers": [
+        "QA-Q5-3",
+        "QA-Q5-7"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        },
+        {
+          "cmd": "fate.give",
+          "args": {
+            "frame": 0,
+            "kind": "release"
+          }
+        }
+      ],
+      "expect": {
+        "frames.0.fate.kind": "release",
+        "frames.0.fate.t": {
+          "min": 1
+        },
+        "walker.flight": true
+      }
+    },
+    {
+      "id": "fate-broken",
+      "group": "fates",
+      "title": {
+        "uk": "Кадр розпався",
+        "en": "The frame come apart"
+      },
+      "covers": [
+        "QA-Q5-4"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        },
+        {
+          "cmd": "fate.give",
+          "args": {
+            "frame": 0,
+            "kind": "break"
+          }
+        }
+      ],
+      "expect": {
+        "frames.0.fate.kind": "break",
+        "frames.0.fate.t": {
+          "min": 1
+        },
+        "walker.flight": true
+      }
+    },
+    {
+      "id": "water-surface",
+      "group": "water",
+      "title": {
+        "uk": "У воді на поверхні",
+        "en": "In the water, at the surface"
+      },
+      "covers": [
+        "QA-Q5b-2",
+        "QA-Q5b-3",
+        "QA-Q5b-5",
+        "QA-Q5b-6"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        },
+        {
+          "cmd": "swim.in"
+        }
+      ],
+      "expect": {
+        "walker.swim.depth": 0,
+        "walker.deck": null
+      }
+    },
+    {
+      "id": "water-under-sunk",
+      "group": "water",
+      "title": {
+        "uk": "Під водою біля втопленого кадру",
+        "en": "Under the water by a sunk frame"
+      },
+      "covers": [
+        "QA-Q5b-4",
+        "QA-QDa-4"
+      ],
+      "story": "test-2025/my-day-3-moments",
+      "flags": [
+        "walk",
+        "minis"
+      ],
+      "steps": [
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "raft.board",
+          "args": {
+            "frame": 0
+          }
+        },
+        {
+          "cmd": "kite.set",
+          "args": {
+            "up": true
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 0,
+            "at": "open-sea"
+          }
+        },
+        {
+          "cmd": "minis.hydrate",
+          "args": {
+            "frame": 1
+          }
+        },
+        {
+          "cmd": "raft.moveTo",
+          "args": {
+            "frame": 1,
+            "at": "beside:0"
+          }
+        },
+        {
+          "cmd": "fate.give",
+          "args": {
+            "frame": 1,
+            "kind": "sink"
+          }
+        },
+        {
+          "cmd": "swim.in",
+          "args": {
+            "at": "over:1",
+            "depth": 30
+          }
+        },
+        {
+          "cmd": "walker.look",
+          "args": {
+            "pitch": -1.2
+          }
+        }
+      ],
+      "expect": {
+        "walker.swim.depth": {
+          "min": 25
+        },
+        "frames.1.fate.kind": "sink"
+      }
+    }
+  ]
+}

@@ -4,22 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Story Quest</title>
-  <link rel="stylesheet" href="/src/environment/ui/moodPad.css" />
-  <link rel="stylesheet" href="/src/ui/scene.css" />
+  <link rel="stylesheet" href="../shared/shell.css" />
   <link rel="stylesheet" href="./story-quest.css" />
 </head>
 <body>
-  <div id="perf" hidden>
-    <div id="pGpu"></div>
-    <div id="pSpec"></div>
-    <div class="pRow"><b id="pFps">–</b><i>FPS</i><span><em id="pMode">VSYNC</em><br><span id="pMs"></span></span></div>
-    <canvas id="pGraph" width="456" height="48"></canvas>
-    <button id="pUncap" type="button" title="Render frames back-to-back instead of once per display refresh, so the counter shows what this machine can do. The screen still updates at its own rate.">Uncap FPS</button>
-    <button id="pSky" type="button" title="Time one sky change step by step: atmosphere LUTs, cube faces, PMREM, sun shadow, ocean spectrum (SCENE-ENVIRONMENT E0). The scene pauses for a few seconds.">Measure sky</button>
-    <div id="hud"></div>
-  </div>
-  <!-- the product shell (STORY-QUEST-SPEC §4): the scene with ?story=, and the product's own UI on top -->
-  <div id="storyStatus" role="status" aria-live="polite" hidden></div>
+  <!-- the product (STORY-QUEST-SPEC §4, §4.4): the platform scene in an iframe, the product's panel -->
   <script type="module" src="./main.js"></script>
 </body>
 </html>

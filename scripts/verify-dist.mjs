@@ -11,7 +11,7 @@ export function verifyDist(directory = resolve(projectRoot, 'dist'), sourceRoot 
     assert.equal(hash(readFileSync(resolve(directory, publishedAssetPath(relative)))),
       hash(readFileSync(resolve(sourceRoot, relative))), `Asset bytes changed: ${relative}`);
   }
-  for (const filename of ['index.html', 'products/story-quest/index.html', 'licenses.md', 'THIRD_PARTY_NOTICES.md', 'TILECRAFT_LICENSE.txt', 'TILECRAFT_THIRD_PARTY_NOTICES.md']) {
+  for (const filename of ['index.html', 'products/story-quest/index.html', 'products/quest-demo-qa/index.html', 'licenses.md', 'THIRD_PARTY_NOTICES.md', 'TILECRAFT_LICENSE.txt', 'TILECRAFT_THIRD_PARTY_NOTICES.md']) {
     assert.ok(readFileSync(resolve(directory, filename)).length, `Missing ${filename}`);
   }
   function scan(folder) {

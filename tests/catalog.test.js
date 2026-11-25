@@ -174,6 +174,16 @@ describe('list', () => {
     await expect(catalog.load('local/local-a')).resolves.toMatchObject({ id: 'local/local-a' });
   });
 
+  it('local: the dev fixtures after R2 folders (the QA stand); without a fallback configured — R2 only', async () => {
+    const { fetcher } = network();
+    const dev = createCatalog({ runtime, fetcher, localBase: 'http://localhost:5199/tilecraft/catalog/' });
+    const { stories, fallback } = await dev.list({ local: true });
+    expect(stories.map((s) => s.id)).toEqual(['public-test/public-test-a', 'test-2025/test-2025-a', 'local/local-a']);
+    expect(fallback).toBe(false);
+    const prod = await createCatalog({ runtime, fetcher }).list({ local: true });
+    expect(prod.stories.map((s) => s.folder)).toEqual(['public-test', 'test-2025']);
+  });
+
   it('R2 down without a fallback (production) rejects with the kind', async () => {
     const { fetcher } = network({ down: new Set(['public-test', 'test-2025']) });
     const catalog = createCatalog({ runtime, fetcher });

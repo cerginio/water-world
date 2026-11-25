@@ -172,3 +172,7 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 .walker-controls.mobile #perf { bottom: calc(var(--rail-top) + 224px); }
 .walker-controls.tech-strip.mobile #perf { bottom: calc(var(--rail-top) + 288px); }
+
+/* in a product's iframe (&embed, STORY-QUEST-SPEC §4.4): the product's panel has the weather and
+   the story, so the mood pad and the station rail step aside; the walker's controls stay */
+body.embed :is(#moodPad, #moodPanel, #stationRail, #stationFade) { display: none !important; }

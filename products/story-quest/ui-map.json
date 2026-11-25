@@ -1,0 +1,6 @@
+{
+  "zones": [
+    { "id": "story", "title": { "uk": "Історія", "en": "Story" } },
+    { "id": "weather", "title": { "uk": "Погода", "en": "Weather" }, "open": false }
+  ]
+}

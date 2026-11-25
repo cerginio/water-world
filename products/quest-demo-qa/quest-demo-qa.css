@@ -1,0 +1,15 @@
+/* the stand's own bits: the state cards and their steps, the Tech zone */
+.card-group h3 { margin-top: 8px; }
+.card-pick { width: 100%; }
+.zone .card-pick[data-state="running"] { border-color: var(--accent); }
+.zone .card-pick[data-state="done"] { border-color: var(--ok); background: #dcfce7; }
+.zone .card-pick[data-state="failed"] { border-color: var(--bad); background: #fee2e2; }
+.card-steps { margin: 4px 0 6px; padding-left: 22px; font-size: 12px; display: grid; gap: 2px; }
+.card-steps li[data-status="wait"] { color: #6b7680; }
+.card-steps li[data-status="run"] { color: var(--accent); font-weight: 600; }
+.card-steps li[data-status="done"] { color: var(--ok); }
+.card-steps li[data-status="failed"] { color: var(--bad); font-weight: 600; }
+.card-reason { font-weight: 400; overflow-wrap: anywhere; }
+.tech-toggle { display: flex; align-items: center; gap: 6px; min-height: 32px; }
+.tech-rate { font-weight: 600; }
+.tech-state { margin: 0; max-height: 40vh; overflow: auto; font-size: 11px; background: #fff8; padding: 6px; border-radius: 6px; white-space: pre-wrap; }

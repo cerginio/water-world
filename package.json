@@ -14,7 +14,7 @@
     "deploy:check": "node scripts/deploy-netlify.mjs --dry-run",
     "guard": "node scripts/audit/guard.mjs",
     "test": "vitest run",
-    "lint": "oxlint src scripts build",
+    "lint": "oxlint src scripts build products",
     "typecheck": "node scripts/audit/typecheck.mjs",
     "typecheck:report": "node scripts/audit/typecheck.mjs --report"
   },

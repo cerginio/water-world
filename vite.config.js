@@ -10,8 +10,9 @@ export default defineConfig(({ mode }) => {
     root: projectRoot,
     build: {
       sourcemap: false, license: { fileName: 'licenses.md' },
-      // the scene and the Story Quest product shell (STORY-QUEST-SPEC §4, products/**)
-      rollupOptions: { input: { main: resolve(projectRoot, 'index.html'), storyQuest: resolve(projectRoot, 'products/story-quest/index.html') } },
+      // the scene, the Story Quest product and the QA stand of states (STORY-QUEST-SPEC §4, §4.4; products/**)
+      rollupOptions: { input: { main: resolve(projectRoot, 'index.html'), storyQuest: resolve(projectRoot, 'products/story-quest/index.html'),
+        questDemoQa: resolve(projectRoot, 'products/quest-demo-qa/index.html') } },
     },
     server: {
       port: 5199,

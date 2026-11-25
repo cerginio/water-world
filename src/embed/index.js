@@ -2,7 +2,7 @@
 // postMessage. Only the parent window of the same origin is heard and answered; the route's
 // facts (raft, miniatures, fates) go to it as events once the story's scene is up.
 import { createEmbedServer, until } from './protocol.js';
-import { createCommands, WAIT } from './commands.js';
+import { catalogState, createCommands, WAIT } from './commands.js';
 import { worldFromApp } from './world.js';
 
 const RAFT_EVENTS = ['board', 'leave', 'kite', 'sea', 'takeoff', 'land'];
@@ -30,6 +30,8 @@ export function startEmbed({ app, spawn, target = window }) {
     if (e.source !== parent || e.origin !== target.location.origin) return;
     server.receive(e.data).catch((err) => console.error('[embed]', err));
   });
+  // the catalog at once: a product words «loading» / «failed» and offers the list without a scene
+  world.catalog.addEventListener('change', () => server.emit('catalog.change', catalogState(world.catalog)));
   // the facts of the route, once there is a scene to have them
   until(() => world.ready() || world.failed(), WAIT.ready, 'the story').then(() => {
     const failed = world.failed();

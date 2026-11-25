@@ -1141,6 +1141,7 @@ window.app = {
   get raft() { return raft; }, kiteAction, kiteHint, flyAction, flyHint,
   get fates() { return fates; }, fateAction, fateTarget, fateHints, undoFate, keepFate,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
+  fps: () => fpsHistory.at(-1) ?? null,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
 };
@@ -1287,6 +1288,9 @@ const opening = args.has('story') ? loadStory(args.get('story')).then(showField)
 if (walking) opening.then(() => startWalk()).catch((e) => console.error('[walker]', e));
 // in a product's iframe (STORY-QUEST-SPEC §4.4): the contract's commands over postMessage
 if (args.has('embed')) {
+  // the product's panel has the weather and the story: the scene's own mood pad and station rail
+  // step aside (scene.css `body.embed`); the walker's stick and buttons stay — they are the scene
+  document.body.classList.add('embed');
   // app.embed — the same commands from the console (QA; a product only has postMessage)
   import('./embed/index.js').then(({ startEmbed }) => { window.app.embed = startEmbed({ app: window.app, spawn: walkerSpawn }).commands; })
     .catch((e) => console.error('[embed]', e));

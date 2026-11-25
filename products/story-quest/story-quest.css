@@ -1,10 +1,1 @@
-/* Story Quest product chrome (Q1: only the story status line) */
-#storyStatus {
-  position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 11;
-  max-width: min(560px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 14px; border-radius: 8px;
-  font: 14px/1.4 system-ui, sans-serif; color: #e8f4ff; background: rgba(6, 10, 14, 0.72);
-}
-#storyStatus[hidden] { display: none; }
-#storyStatus[data-state="failed"] { outline: 2px solid #ff5a4a; }
-#storyStatus ul { margin: 6px 0 0; padding-left: 18px; }
-#storyStatus a { color: #2cc9ff; }
+/* Story Quest's own chrome over the shared shell (products/shared/shell.css); Q7 brings the rest */

@@ -72,8 +72,9 @@ export function createCatalog({ runtime, fetcher = (...a) => fetch(...a), folder
 
   // every folder's index; a folder that fails is reported, not fatal. All of R2 down
   // (and a dev fallback configured) → the local fixtures, marked `fallback`.
-  /** @param {{ signal?: AbortSignal }} [options] */
-  async function list({ signal } = {}) {
+  // `local` (dev only, the QA stand): the local fixtures too, after R2's folders.
+  /** @param {{ signal?: AbortSignal, local?: boolean }} [options] */
+  async function list({ signal, local = false } = {}) {
     const read = async (folder) => {
       const index = await (await clientOf(folder)).fetchIndex(bound(signal));
       return index.stories.map(({ slug, title, credit, frameCount, sizeBytes, publishedAt }) =>
@@ -89,6 +90,10 @@ export function createCatalog({ runtime, fetcher = (...a) => fetch(...a), folder
     if (!stories.length && errors.length === folders.length && localBase) {
       stories.push(...await read(LOCAL_FOLDER));
       catalog.fallback = true;
+    } else if (local && localBase) {
+      try { stories.push(...await read(LOCAL_FOLDER)); } catch (e) {
+        errors.push({ folder: LOCAL_FOLDER, code: errorCode(e), message: String(e?.message ?? e) });
+      }
     }
     if (!stories.length && errors.length) throw Object.assign(new Error(errors[0].message), { code: errors[0].code, errors });
     return { stories, errors, fallback: catalog.fallback };

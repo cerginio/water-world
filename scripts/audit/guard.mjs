@@ -131,20 +131,50 @@ const PRODUCTS_DIR = 'products/';
 
 function ruleProductsOnSrc(files) {
   const failures = [];
-  const products = files.filter(f => f.rel.startsWith(PRODUCTS_DIR));
-  let productImports = 0;
+  let checked = 0;
   for (const { rel, text } of files) {
+    if (!rel.startsWith('src/')) continue;
+    checked++;
     for (const spec of importsOf(text)) {
-      const target = resolveFrom(rel, spec);
-      if (rel.startsWith('src/') && (target.startsWith(PRODUCTS_DIR) || /(?:^|\/)products\//.test(spec))) {
+      if (resolveFrom(rel, spec).startsWith(PRODUCTS_DIR) || /(?:^|\/)products\//.test(spec)) {
         failures.push(`${rel}: import «${spec}» — платформа не імпортує products/**`);
       }
-      if (rel.startsWith(PRODUCTS_DIR) && target.startsWith('src/')) productImports++;
     }
   }
-  if (!products.length) failures.push(`${PRODUCTS_DIR}: жодного файлу — правило дивиться не туди`);
-  else if (!productImports) failures.push(`${PRODUCTS_DIR}: жодного import з src/ — правило дивиться не туди`);
-  return { id: 'BOUNDARY-4 products-on-src', failures, note: `${products.length} файл(ів) products/, ${productImports} import(ів) з src/` };
+  if (!checked) failures.push('src/: жодного файлу — правило дивиться не туди');
+  return { id: 'BOUNDARY-4 src-off-products', failures, note: `${checked} файл(ів) src/` };
+}
+
+/* ── BOUNDARY-5: продукт говорить зі сценою лише через контракт ──────────────── */
+
+/**
+ * З QDb продукт — сторінка-хост: сцена в <iframe ?…&embed>, розмова — лише командами й подіями
+ * контракту (STORY-QUEST-SPEC §4.4). `products/**` не імпортує `src/**` (ні відносним шляхом, ні
+ * `/src/…`) і не читає `window.app` сцени через `contentWindow`. Без винятків: інакше продукт знову
+ * залежить від нутрощів сцени, а не від контракту, і стенд перестає доводити, що контракту досить.
+ */
+const SCENE_APP = /\bcontentWindow\s*\??\.\s*app\b/g;
+const SHARED_DIR = 'products/shared/';
+
+function ruleProductsOffSrc(files) {
+  const failures = [];
+  let checked = 0, shared = 0;
+  for (const { rel, text } of files) {
+    if (!rel.startsWith(PRODUCTS_DIR)) continue;
+    checked++;
+    if (rel.startsWith(SHARED_DIR)) shared++;
+    for (const spec of importsOf(text)) {
+      const target = resolveFrom(rel, spec);
+      if (target.startsWith('src/') || /^\/?src\//.test(spec) || target.startsWith('../src/')) {
+        failures.push(`${rel}: import «${spec}» — продукт говорить зі сценою лише через контракт (src/embed), не імпортом`);
+      }
+    }
+    if (SCENE_APP.test(text)) failures.push(`${rel}: contentWindow.app — продукт не читає window.app сцени`);
+    SCENE_APP.lastIndex = 0;
+  }
+  // правило дивиться туди, куди треба: спільна оболонка є і перевірена
+  if (!shared) failures.push(`${SHARED_DIR}: жодного файлу — правило дивиться не туди`);
+  return { id: 'BOUNDARY-5 products-off-src', failures, note: `${checked} файл(ів) products/, з них ${shared} у shared/` };
 }
 
 /* ── OWNER-1, OWNER-2: один цикл, один renderer, один GUI ─────────────────── */
@@ -379,7 +409,7 @@ async function main() {
   const t0 = performance.now();
   const reportOnly = process.argv.includes('--report');
   const files = collect(SRC);
-  const products = collect(PRODUCTS);   // лише межові правила: BOUNDARY-3 і BOUNDARY-4
+  const products = collect(PRODUCTS);   // лише межові правила: BOUNDARY-3 і BOUNDARY-5
   const camera = baselineRule('OWNER-3 camera-writers', files, CAMERA_WRITE, CAMERA_BASELINE, CAMERA_OWNER,
     `камеру пише лише ${CAMERA_OWNER} (lock / place / flyTo)`);
   const ownerWrites = count(files.find(f => f.rel === CAMERA_OWNER)?.text ?? '', CAMERA_WRITE);
@@ -388,7 +418,7 @@ async function main() {
   const sun = baselineRule('OWNER-4 sun-writers', files, SUN_WRITE, SUN_BASELINE, SUN_OWNER,
     'сонце пишуть лише через env.set() (MOOD-WEATHER M1a)');
   const results = [ruleEngineLeaf(files), ruleEnvironmentPortable(files), ruleTilecraftEntry([...files, ...products]),
-    ruleProductsOnSrc([...files, ...products]),
+    ruleProductsOnSrc(files), ruleProductsOffSrc(products),
     ruleOneLoop(files), ruleOneRendererGui(files), camera, sun, ruleGlobals(files),
     ruleFloatFilter(files), await ruleWaterSamplers()];
 

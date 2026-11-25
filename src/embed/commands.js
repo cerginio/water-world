@@ -15,6 +15,10 @@ export const WAIT = Object.freeze({
 });
 const KINDS = ['release', 'sink', 'break'];
 
+/** The catalog as plain data (the `catalog.change` event carries the same). */
+export const catalogState = (catalog) => ({ state: catalog.state, story: catalog.story?.id ?? null,
+  error: catalog.error ? { code: catalog.error.code ?? 'unknown', message: String(catalog.error.message ?? '') } : null });
+
 /** @typedef {import('./world.js').EmbedWorld} EmbedWorld */
 
 /**
@@ -246,6 +250,30 @@ export function createCommands(world, { wait = {} } = {}) {
       if (!s.swim) throw new EmbedError('not-possible', 'not in the water');
       host.walker.swimAt(s.x, s.z, 0);
       return readState(world);
+    },
+
+    /** The story catalog by folders (`local` — the dev fixtures too, the QA stand). No scene needed. */
+    'catalog.list': async ({ local = false }) => {
+      try {
+        const { stories, errors, fallback } = await world.catalog.list({ local: !!local });
+        return { stories: stories.map((s) => ({ id: s.id, folder: s.folder, slug: s.slug, title: s.title ?? s.slug,
+          frameCount: s.frameCount ?? null })), errors: errors.map(({ folder, code }) => ({ folder, code })), fallback };
+      } catch (e) {
+        throw new EmbedError('catalog-failed', `${e.code ?? 'unknown'}: ${String(e.message ?? e)}`);
+      }
+    },
+    /** Where the catalog is: the story in the address, loading, loaded, or failed with a code. */
+    'catalog.read': async () => catalogState(world.catalog),
+    /**
+     * The scene's technical panels (lil-gui Controls, the FPS panel), shown or hidden; the frame
+     * rate either way. The QA stand's «Тех» zone; a product leaves them hidden.
+     */
+    'scene.tech': async ({ controls, fps }) => {
+      const panels = world.tech;
+      if (typeof controls === 'boolean' && controls !== panels.controls) panels.toggle('controls');
+      if (typeof fps === 'boolean' && fps !== panels.fps) panels.toggle('fps');
+      const rate = world.fps();
+      return { controls: panels.controls, fps: panels.fps, rate: rate === null ? null : Math.round(rate) };
     },
 
     /** The weather: valence, arousal and the time of day, at once (app.mood.set). */

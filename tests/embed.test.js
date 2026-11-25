@@ -104,8 +104,9 @@ describe('embed commands', () => {
 
   it('the list is closed: the cards\' steps Q2a–Q5b and the weather, nothing else', () => {
     expect(Object.keys(createCommands(world())).sort()).toEqual([
+      'catalog.list', 'catalog.read',
       'fate.give', 'fate.keep', 'fate.undo', 'fly.land', 'fly.takeOff', 'fly.to', 'kite.set',
-      'minis.hydrate', 'minis.take', 'mood.set', 'raft.board', 'raft.moveTo', 'state.read',
+      'minis.hydrate', 'minis.take', 'mood.set', 'raft.board', 'raft.moveTo', 'scene.tech', 'state.read',
       'swim.dive', 'swim.in', 'swim.rise', 'walker.eyes', 'walker.look', 'walker.place']);
     expect(Object.isFrozen(createCommands(world()))).toBe(true);
   });
@@ -124,6 +125,31 @@ describe('embed commands', () => {
     const c = createCommands(world({ fates: { give: () => { throw new Error('touched'); } } }));
     await expect(c['fate.give']({ frame: 0, kind: 'burn' })).rejects.toMatchObject({ reason: 'bad-args' });
     await expect(c['mood.set']({ v: 2, a: 0 })).rejects.toMatchObject({ reason: 'bad-args' });
+  });
+
+  it('catalog.list: plain stories by folder; a catalog down is a catalog-failed refusal', async () => {
+    const seen = [];
+    const catalog = { list: async (o) => { seen.push(o); return { fallback: false, errors: [{ folder: 'b', code: 'network', message: 'x' }],
+      stories: [{ id: 'a/s', folder: 'a', slug: 's', title: 'S', frameCount: 3, sizeBytes: 9 }] }; } };
+    const c = createCommands(world({ catalog, ready: () => false }));
+    await expect(c['catalog.list']({ local: true })).resolves.toEqual({ fallback: false, errors: [{ folder: 'b', code: 'network' }],
+      stories: [{ id: 'a/s', folder: 'a', slug: 's', title: 'S', frameCount: 3 }] });
+    expect(seen).toEqual([{ local: true }]);
+    const down = createCommands(world({ catalog: { list: async () => { throw Object.assign(new Error('down'), { code: 'network' }); } } }));
+    await expect(down['catalog.list']({})).rejects.toMatchObject({ reason: 'catalog-failed' });
+  });
+
+  it('catalog.read: the state and the error code as plain data', async () => {
+    const catalog = { state: 'failed', story: { id: 'a/s' }, error: { code: 'not-found', message: 'gone' } };
+    await expect(createCommands(world({ catalog }))['catalog.read']({}))
+      .resolves.toEqual({ state: 'failed', story: 'a/s', error: { code: 'not-found', message: 'gone' } });
+  });
+
+  it('scene.tech: toggles only what differs, answers the panels and the rate', async () => {
+    const tech = { controls: false, fps: true, toggle(name) { this[name] = !this[name]; } };
+    const c = createCommands(world({ tech, fps: () => 59.6 }));
+    await expect(c['scene.tech']({ controls: true, fps: true })).resolves.toEqual({ controls: true, fps: true, rate: 60 });
+    await expect(c['scene.tech']({})).resolves.toEqual({ controls: true, fps: true, rate: 60 });
   });
 
   it('a frame that is not a deck cannot be boarded', async () => {

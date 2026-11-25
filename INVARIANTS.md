@@ -24,6 +24,7 @@
 | [BOUNDARY-2](#boundary-2--небо-й-атмосфера-переносні) | файли `src/environment/**` імпортують лише `three`, `three/*` і свою папку | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортують лише входи платформи: `src/tiles/tilecraftLoader.js`, `src/catalog/tilecraftCatalog.js`, `src/walker/tilecraftWalker.js` | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-4](#boundary-4--продукти-залежать-від-платформи) | `src/**` не імпортує `products/**` | guard-static, baseline 0 | ✓ |
+| [BOUNDARY-5](#boundary-5--продукт-говорить-зі-сценою-лише-через-контракт) | `products/**` не імпортує `src/**` і не читає `contentWindow.app` сцени | guard-static, baseline 0 | ✓ |
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
 | [OWNER-3](#owner-3--камеру-пише-лише-її-власник) | камеру/`controls` пише лише `src/scene/cameraRig.js` | guard-static, baseline 0 | ✓ |
@@ -119,26 +120,56 @@
 ## BOUNDARY-4 — продукти залежать від платформи
 
 **Формулювання.** Жоден файл `src/**` не імпортує `products/**` (відносним шляхом
-чи специфікатором зі `/products/`). `products/**` імпортує `src/**` вільно.
+чи специфікатором зі `/products/`). Зворотний напрям — BOUNDARY-5.
 
 **Походження.** Межа без інциденту, як BOUNDARY-2: STORY-QUEST-SPEC §4 —
 платформа дає можливості й події, продукт (`products/story-quest/`) — увесь UI
 й рішення. Імпорт продукту з платформи зробив би сцену частиною одного продукту:
 другий продукт тягнув би квести й картки першого. Заведено в story-quest Q1
-разом із першим продуктом.
+разом із першим продуктом; у QDb самоперевірка «є import з src/» пішла разом із
+самими імпортами (BOUNDARY-5).
 
-**Механізм.** guard-static, `BOUNDARY-4 products-on-src`, тим самим розбором
-імпортів, що BOUNDARY-1…3. Правило дивиться туди, куди треба: без жодного файлу
-в `products/` або без жодного import з `src/` у них воно падає.
+**Механізм.** guard-static, `BOUNDARY-4 src-off-products`, тим самим розбором
+імпортів, що BOUNDARY-1…3. Без жодного файлу в `src/` правило падає.
 
-**Перевірюване твердження.** `✓ BOUNDARY-4 products-on-src — 1 файл(ів) products/, 1 import(ів) з src/`.
+**Перевірюване твердження.** `✓ BOUNDARY-4 src-off-products — 85 файл(ів) src/`.
 
 | мутація | guard до правила | guard після |
 |---|---|---|
 | `src/main.js` + `import '../products/story-quest/main.js';` | ✓ проходить — дефект | ✗ `src/main.js: import «../products/story-quest/main.js» — платформа не імпортує products/**` |
-| прибрати `products/story-quest/main.js` | — | ✗ `products/: жодного файлу — правило дивиться не туди` |
+| `src/embed/state.js` + `import '../products/story-quest/main.js';` (QDb) | — | ✗ `src/embed/state.js: import «../products/story-quest/main.js» — платформа не імпортує products/**` |
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleProductsOnSrc`.
+
+## BOUNDARY-5 — продукт говорить зі сценою лише через контракт
+
+**Формулювання.** Жоден файл `products/**` не імпортує `src/**` (відносним шляхом,
+`/src/…` чи `src/…`) і не звертається до `contentWindow.app` сцени. Сцена для
+продукту — `<iframe ?…&embed>` і контракт `src/embed/` (команди, події, `state.read`).
+Без винятків.
+
+**Походження.** Межа без інциденту, рішення власника 2026-11-25 (STORY-QUEST-SPEC
+§4, §4.4; [docs/story-quest/quest-demo-qa.md](docs/story-quest/quest-demo-qa.md)
+«Межі»). До QDb `products/story-quest/main.js` робив `import '../../src/main.js'` і
+читав `window.app.catalog` — продукт залежав від нутрощів сцени, і ніщо не
+доводило, що контракту досить для продукту. Заведено в story-quest QDb разом зі
+спільною оболонкою `products/shared/` і стендом `products/quest-demo-qa/`;
+`story-quest` перейшов на оболонку в тій самій фазі.
+
+**Механізм.** guard-static, `BOUNDARY-5 products-off-src`, тим самим розбором
+імпортів, що BOUNDARY-1…4, плюс пошук `contentWindow.app`. Правило дивиться туди,
+куди треба: без жодного файлу в `products/shared/` воно падає.
+
+**Перевірюване твердження.** `✓ BOUNDARY-5 products-off-src — 8 файл(ів) products/, з них 5 у shared/`.
+
+| мутація | guard до правила | guard після |
+|---|---|---|
+| `products/story-quest/main.js` + `import '../../src/main.js';` | ✓ проходить — дефект (BOUNDARY-4 вимагав такий import) | ✗ `products/story-quest/main.js: import «../../src/main.js» — продукт говорить зі сценою лише через контракт (src/embed), не імпортом` |
+| `products/story-quest/main.js` + `import '/src/embed/protocol.js';` | ✓ проходить — дефект | ✗ `… import «/src/embed/protocol.js» — …` |
+| `products/story-quest/main.js` + `document.querySelector('iframe').contentWindow.app` | ✓ проходить — дефект | ✗ `products/story-quest/main.js: contentWindow.app — продукт не читає window.app сцени` |
+
+**Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleProductsOffSrc`.
+Проби (`scripts/probe-*.mjs`) — не продукт: вони можуть дивитись у `app` iframe.
 
 ## OWNER-1 — один цикл кадру
 

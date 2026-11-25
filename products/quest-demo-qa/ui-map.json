@@ -1,0 +1,10 @@
+{
+  "zones": [
+    { "id": "story", "title": { "uk": "Історія", "en": "Story" }, "open": false },
+    { "id": "states", "title": { "uk": "Стани", "en": "States" } },
+    { "id": "weather", "title": { "uk": "Погода", "en": "Weather" }, "open": false },
+    { "id": "quests", "title": { "uk": "Квести", "en": "Quests" }, "open": false,
+      "empty": { "uk": "Квести з'являться в Q6.", "en": "Quests come in Q6." } },
+    { "id": "tech", "title": { "uk": "Тех", "en": "Tech" }, "open": false }
+  ]
+}

@@ -15,6 +15,9 @@
  *   hints: () => any,
  *   flyAction: () => string | null,
  *   mood: any,
+ *   catalog: any,
+ *   tech: { controls: boolean, fps: boolean, toggle: (name: string) => void },
+ *   fps: () => number | null,
  * }} EmbedWorld
  */
 
@@ -46,5 +49,8 @@ export function worldFromApp({ app, spawn }) {
     hints: () => ({ fly: app.flyHint(), kite: app.kiteHint(), mini: app.miniHint(), fates: app.fateHints() }),
     flyAction: app.flyAction,
     mood: app.mood,
+    catalog: app.catalog,
+    tech: app.techPanels,
+    fps: () => app.fps(),
   };
 }
