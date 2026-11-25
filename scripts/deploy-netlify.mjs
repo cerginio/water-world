@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { build } from 'vite';
 import { projectRoot } from '../build/tilecraft-config.js';
 import { verifyDist } from './verify-dist.mjs';
@@ -31,7 +32,7 @@ if (!site) {
 site ||= 'edge-of-elements';
 await build({ configFile: resolve(projectRoot, 'vite.config.js') });
 verifyDist();
-const args = ['deploy', '--no-build', '--dir', 'dist', '--site', site];
+const args = ['deploy', '--no-build', '--dir', resolve(projectRoot, 'dist'), '--site', site];
 if (input.includes('--prod')) args.push('--prod');
 if (alias) args.push('--alias', alias);
 console.log(`Netlify ${input.includes('--prod') ? 'production' : 'draft'} target: ${site}${alias ? ` · alias ${alias} → https://${alias}--${site}.netlify.app` : ''}`);
@@ -39,8 +40,14 @@ if (input.includes('--dry-run')) {
   console.log(`Prepared (no upload): netlify ${args.map(arg => JSON.stringify(arg)).join(' ')}`);
 } else {
   // Token, if set, is inherited via environment, never printed or passed as an argument.
-  const result = spawnSync(process.execPath, [resolve(projectRoot, 'node_modules/netlify-cli/bin/run.js'), ...args],
-    { cwd: projectRoot, stdio: 'inherit', env: process.env });
+  // netlify-cli runs from its own npx install, outside the project: in the project's tree its
+  // ts-api-utils takes our typescript 7 (no JS API) and the CLI dies on 'Intrinsic' (2026-11-25).
+  // Same version as package.json; the cwd is outside, so npx does not pick node_modules/.bin.
+  const version = JSON.parse(readFileSync(resolve(projectRoot, 'package.json'), 'utf8')).devDependencies['netlify-cli'];
+  const npx = resolve(dirname(process.execPath), 'node_modules/npm/bin/npx-cli.js');
+  if (!existsSync(npx)) throw new Error(`npx not found next to node: ${npx}`);
+  const result = spawnSync(process.execPath, [npx, '-y', `netlify-cli@${version}`, ...args],
+    { cwd: tmpdir(), stdio: 'inherit', env: process.env });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 }
