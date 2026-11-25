@@ -1,15 +1,15 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-25. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0–Q5a закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0–Q5b закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
 очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді, пліт і
 кайт до відкритого моря, політ на дошці з кайтом і посадка на ноги / на палубу; Q5 —
 долі кадру (відпустити / втопити / розпастися, зворотні, «Залишити так»); Q5a — C-кайт
-на чотирьох стропах із планкою.
+на чотирьох стропах із планкою; Q5b — плавання й пірнання до втопленого кадру.
 QA — [QA.md](QA.md).
 
-> **Далі:** Q5b — плавання й пірнання (п.12).
+> **Далі:** Q6 — квести й картки (п.13).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Телефон — лише драфт Netlify
@@ -34,7 +34,7 @@ QA — [QA.md](QA.md).
 | ~~Q4b~~ | закрито 2026-11-25 (телефон — QA-Q4b-8, QA-Q4b-9) |
 | ~~Q5~~ | закрито 2026-11-25 (телефон — QA-Q5-8, QA-Q5-9) |
 | ~~Q5a~~ | закрито 2026-11-25 (телефон — QA-Q5a-6) |
-| Q5b | Q5 (огляд втопленого кадру) |
+| ~~Q5b~~ | закрито 2026-11-25 (телефон — QA-Q5b-7) |
 | Q6 | події Q1–Q5; логіку можна почати раніше на фікстурі |
 | Q7 | Q2b, Q4, Q5, Q6 |
 
@@ -197,15 +197,13 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      ЗАКРИТО 2026-11-25; числа — QA.md Q5a. Модуль `src/tiles/cKite.js`; QA-Q4-3
      оновлено. Телефон (QA-Q5a-6) — за власником, на драфті.
 
-12. **Q5b — плавання й пірнання** (спека §2 п.6 «Плавання й пірнання»).
+~~12. **Q5b — плавання й пірнання** (спека §2 п.6 «Плавання й пірнання»).
    Персонаж пливе поверхнею й пірнає; камера під водою (через `cameraRig`);
    огляд втопленого кадру (Edge «пірнути й подивитися»); кайт, відпущений над
-   глибиною, — персонаж у воді.
-   - guard: OWNER-3 не росте.
-   - focused: юніти руху у воді (поверхня / глибина, вихід на мілину → ходьба).
-   - проба: відпустити кайт над глибиною → плавання; пірнути до втопленого
-     кадру Q5 → камера під водою бачить його; випливти до мілини → `eyes`.
-   - відкрите: підводний вигляд камери на телефоні (туман, каустики) — замір.
+   глибиною, — персонаж у воді.~~ — ЗАКРИТО 2026-11-25; числа — QA.md Q5b, рішення —
+   DECISIONS «Плавання й пірнання». Пробіл / блакитна кнопка: «У воду» (з дошки над
+   глибиною, з палуби без кайта), «Пірнути» / «Випливти». Підводний вигляд на телефоні
+   (QA-Q5b-7) — за власником, на драфті.
 
 13. **Q6 — квести й картки** (спека §3). У `products/story-quest/`: перелік
    задач §3.1 з автоматичними й ручними галочками, картки з прив'язкою,
@@ -233,14 +231,15 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 - Перешкоди на суші (каміння, валуни, плаваючі предмети) — персонаж проходить
   крізь них; спека Q2a межею називає лише воду. Чи потрібні — рішення власника.
 - Заміри на телефоні (базовий fps з історією — не зроблено в Q0; ходьба —
-  QA-Q2b-7; розмір мініатюри — QA-Q3-7; пліт і край моря — QA-Q4-7; Q7) — лише власник,
+  QA-Q2b-7; розмір мініатюри — QA-Q3-7; пліт і край моря — QA-Q4-7; підводний вигляд —
+  QA-Q5b-7; Q7) — лише власник,
   лише на драфті Netlify `story-quest--edge-of-elements.netlify.app` (рішення
   власника 2026-11-25, `AGENTS.md`); кожна фаза деплоїть його перед рев'ю (рядок
   «Деплой» у QA.md).
 
 ## Що зроблено і працює
 
-Baseline (Q5a, 2026-11-25): guard зелений 0.29 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 271 passed; `probe-story-q4` PASS 102.4 с, `probe-story-q4b` 101.9 с; `probe-tiles` падає й на HEAD (`worldQuery.maxError`).
+Baseline (Q5b, 2026-11-25): guard зелений 0.37 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 284 passed; `probe-story-q5b` PASS 113.8 с, `-q4b` 101.6 с, `-q5` 93.5 с, `-q4` 106.9 с; `probe-tiles` падає й на HEAD (`worldQuery.maxError`).
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
@@ -248,9 +247,9 @@ Baseline (Q5a, 2026-11-25): guard зелений 0.29 с (BOUNDARY-1…4, OWNER-
 | Історія = видимі кадри | `src/tiles/storyFrames.js` (`toStoryFrames`), виклик у `tilecraftLoader.js` → `fetchTileSource` для фікстури, файлу й payload каталогу | HANDOFF Q1; тайли без видимого кадру й `hid`-кадри відкидаються до компіляції | `tests/storyFrames.test.js`, `probe-story-q1` (`contentOffset` < 1 м) |
 | Рамка виділення кадру | `TileFrames.setQuads` (`entry.quad` з `frame.points`), `TileInteraction.updateHighlight`; без `points` — `entry.bounds` | FRAME-DRAG FD4 + рев'ю Q1: рамка = авторський кадр, нерухома | `tests/frameQuad.test.js`, `probe-frame-land.mjs` |
 | Оболонка продукту | `products/story-quest/index.html`, `main.js` (рядок `#storyStatus`, uk/en), `story-quest.css`; спільний CSS сцени `src/ui/scene.css` | спека §4; BOUNDARY-4: `src/**` не імпортує `products/**` | `probe-story-q1` (dev + `PREVIEW_URL`) |
-| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `JUMP_CONE` 45°; дошка: `takeOff`, `fly`, `land`, `landing`, `state.flight`), `flight.js` (`FLIGHT` 24 м/с, 3 ± 0.4 м; `stepFlight`, `landing`), `deck.js` (`deckClear`, `nearestOnDeck`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, `decks`, `pull`, меш `board`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `flyAction`/`flyHint` (Пробіл), `app.walker`, `app.ground` | спека §4.1, §4.2 v1.5; ноги на `TerrainContact`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `raft.test.js`, `flight.test.js`, `probe-story-q2a`, `-q4b` |
+| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `JUMP_CONE` 45°; дошка: `takeOff`, `fly`, `land`, `landing`, `state.flight`), `flight.js` (`FLIGHT` 24 м/с, 3 ± 0.4 м; `stepFlight`, `landing` → `ground/deck/water`), вода `swim.js` (`SWIM`, `stepSwim`, `eyeLevel`; у `walker.js` — `state.swim`, `jumpIn`, `dive`, `rise`, `under`), `deck.js` (`deckClear`, `nearestOnDeck`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, `decks`, `pull`, меш `board`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `flyAction`/`flyHint` (Пробіл: зліт, посадка, у воду, пірнути / випливти), `walkerWater` (слот 1 `WaterQuery`), `app.walker`, `app.ground` | спека §4.1, §4.2 v1.5; DECISIONS «Плавання й пірнання»; ноги на `TerrainContact`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `raft.test.js`, `flight.test.js`, `swim.test.js`, `probe-story-q2a`, `-q4b`, `-q5b` |
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
-| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»; `flight` — «Злетіти»/«Сісти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка), `probe-story-q4b` (крок 7) |
+| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»; `flight` — «Злетіти»/«Сісти»/«У воду»/«Пірнути»/«Випливти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка), `probe-story-q4b` (крок 7) |
 | Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take`, `put`, `unfoldCenter` + `freeAt`, `syncFrames`, події `take/put/unfold/hydrate`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `app.minis` | DECISIONS «Мініатюри й гідратація»: копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
 | Пліт і кайт | `src/tiles/TileRaft.js` (`TileRaft`: `decks`, `update` до кроку, `pose` після, `setKite`, `course`, `moveTo`, `drift`, `velocity`, `flying`, події `board/leave/kite/sea/takeoff/land`; `KITE`, `bar` для проб), вигляд кайта `cKite.js` (`createCKite`, `C_KITE`, `wingPoint`; `raft.model.anchors()`), `raftMotion.js` (`RAFT`, `stepRaft`, `openWater`, `inOpenSea`), `TileFrameQuery` режим 3, `TileField.lockedFrames`, `syncShadow` (кадри в конверті дрейфу); у `main.js` — `raftUpdate()`, `kiteAction()` (K), `app.raft`, `SHORE_EXTENT` | DECISIONS «Пліт і кайт»; пліт = `placed`-кадр через `moveFrame`; у польоті кайт угорі, покинутий пліт — без `pull`; INVARIANTS SIM-1 | `tests/raft.test.js`, `cKite.test.js`, `probe-story-q4.mjs` |
 | Долі кадру | `src/tiles/frameFate.js` (`FATE`, `begin`/`undo`/`keep`/`stepFate`, `fateLook`, `TILE_FATE_GLSL`, `fatePiece`), `TileFates.js` (`give`, `undo`, `keep`, `open`, `facts`, `rate`, подія `change`), `TileSim.setFate` (`uFates`); `deckAtHand` у `walker/deck.js`; у `main.js` — `fateAction`, `fateHints`, Z/X/C/H/L, `app.fates` | DECISIONS «Долі кадру»; кадр під долею — `TileField.busyFrames`, не палуба | `tests/fates.test.js`, `probe-story-q5.mjs` |
@@ -296,6 +295,10 @@ Baseline (Q5a, 2026-11-25): guard зелений 0.29 с (BOUNDARY-1…4, OWNER-
 - [старт `?walk`, перші секунди після перельоту над островом] кадри провисають до 0.85 с (headless desktop), через 5 с — рівні 16.7 мс → проби, що міряють ходьбу за часом, чекають 5 с після прибуття в очі. (Q2b)
 - [трасування в пробі через rAF] перший запис іде лише на наступному кадрі, а `page.evaluate` повертається раніше → дія проби (V) потрапляє до першого рядка; писати перший рядок синхронно. (Q2b)
 - [спуск у очі з огляду] 1163 м за 4 с: найбільший крок 9.13 м за кадр = 1.03 від межі кривої (1.875 × середня швидкість × dt) → допуск проби ≤ 1.05, тісний; довший спуск — довша `approach`, не ширший допуск. (Q2b)
+- [`floaters.collectPoints`, точки до тіл] слот 0 — камера (`camWater`), слот 1 — персонаж (`walkerWater` = `query.result[4]`), `ingest(query, 2)` → нова точка — після них і зсунути offset `ingest`. (Q5b)
+- [пляж `my-day`, заплив до берега] шельф ~1 м тягнеться десятками метрів: від −4 м до мілини > 90 м (> 30 с на 3 м/с) → старт проби — від суші назовні до −2 м. (Q5b)
+- [погляд униз −1.3 рад + Shift+W до втопленого кадру] за 6.5 с гліб зносить ~10 м убік, кадр позаду камери → огляд: після спуску R і поворот, у пробі — ціль на 8 м перед кадром і 4 м над ним. (Q5b)
+- [кадр біля пляжу між персонажем у воді й берегом] гліб до берега бере кадр (стрибок ≤ 4 м на поверхні) → до мілини в обхід кадру. (Q5b)
 - [збірка аватара] `avatar.js` Tilecraft іде окремим лінивим чанком 40 KB і бере three з `main` (один three); `test:build` перевіряє наявну `dist`, не будує → перед перевіркою `dist` — `npm run build`. (Q2a)
 
 ### Мініатюри
