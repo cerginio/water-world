@@ -10,6 +10,7 @@
 // `action.hint()` names one (the host of the miniatures decides, the button only words it).
 // Q4: the same button puts the kite up / lets it go on a raft ('kite' / 'unkite').
 // Q4b: an optional third button, `flight` — «take off» on the board / «land» ('fly' / 'land').
+// Q5b: the same button — «into the water» ('water'), «dive» / «surface» in it ('dive' / 'rise').
 // Q5: an optional column of the frame's fates, `fates` — `hints()` names the buttons now
 // (release / sink / break for the frame at hand, call / raise / gather and keep for the open
 // fate), `run(name)` does one. Under «Leave it so» a quiet line says what it means (Edge §4.4).
@@ -38,7 +39,7 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
  * @param {{ parent?: HTMLElement, host: { mode: string, setStick: (v: {x: number, y: number}) => void },
  *   onToggle: () => void, labels?: Record<string, string>,
  *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | null, run: () => unknown },
- *   flight?: { hint: () => 'fly' | 'land' | null, run: () => unknown },
+ *   flight?: { hint: () => 'fly' | 'land' | 'water' | 'dive' | 'rise' | null, run: () => unknown },
  *   fates?: { hints: () => string[], run: (name: string) => unknown } }} options
  */
 export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action, flight, fates }) {
@@ -155,11 +156,13 @@ const UNDOING = new Set(['call', 'raise', 'gather', 'keep']);
 export const LABELS = Object.freeze({
   en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down',
     kite: 'Kite', unkite: 'Let go of the kite', fly: 'Take off', land: 'Land',
+    water: 'Into the water', dive: 'Dive', rise: 'Surface',
     release: 'Let it go', sink: 'Sink it', break: 'Let it come apart',
     call: 'Call it back', raise: 'Raise it', gather: 'Gather it', keep: 'Leave it so',
     keepNote: 'The world will remember this.' },
   uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти',
     kite: 'Кайт', unkite: 'Відпустити кайт', fly: 'Злетіти', land: 'Сісти',
+    water: 'У воду', dive: 'Пірнути', rise: 'Випливти',
     release: 'Відпустити', sink: 'Втопити', break: 'Дати розпастися',
     call: 'Покликати', raise: 'Підняти', gather: 'Зібрати', keep: 'Залишити так',
     keepNote: 'Світ запам’ятає це.' },

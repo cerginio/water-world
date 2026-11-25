@@ -3,7 +3,7 @@
 // unfolds by the beach and becomes the raft (as probe-story-q4); K, then Space: the walker
 // takes off on the board, the kite stays up, the raft left behind coasts to the drift; the
 // board flies 24 m/s at 2–4 m over the mean water, the camera in the eyes (CameraRig.ride);
-// over deep water Space does not land; on a course to the island it lands by itself on the
+// over deep water nothing lands by itself (Space there is the water, Q5b); on a course to the island it lands by itself on the
 // shallows, on the feet. A second miniature, carried onto the raft and put down, unfolds
 // beside it, clear of it, and the walker jumps across; from there a flight back over the
 // first frame and Space lands on it, and it is the raft under the kite. On a phone the flight
@@ -82,7 +82,7 @@ try {
   await page.waitForFunction(() => app.walker.state.deck !== null, {}, { timeout: 10000 });
   await page.waitForTimeout(600);
   await page.keyboard.up('KeyW');
-  assert.equal((await state(page)).hint, null, 'no kite up: no take-off');
+  assert.equal((await state(page)).hint, 'water', 'no kite up: no take-off — «Into the water» (Q5b)');
 
   // 2. K, the raft out to deep water; Space: up on the board, the kite stays up
   await page.evaluate(() => {
@@ -118,10 +118,11 @@ try {
   await page.keyboard.up('KeyW');
   const deep = await state(page);
   assert.ok(deep.ground === null || deep.ground < -0.5);
-  assert.equal(deep.hint, null, 'over deep water: no «Land»');
-  await key(page, 'Space');
-  await key(page, 'KeyK');
-  assert.ok((await state(page)).flying, 'over deep water neither Space nor K lands');
+  // Q5b: over deep water the button lets the kite go into the water (probe-story-q5b); nothing
+  // comes down by itself
+  assert.equal(deep.hint, 'water', 'over deep water: «Into the water», not «Land»');
+  await page.waitForTimeout(500);
+  assert.ok((await state(page)).flying, 'over deep water the board flies on until asked');
   // the raft left behind: no kite on it, it coasts down
   const raftAfter = await motionOf(page, raftId);
   assert.ok(raftAfter.speed < raftBefore.speed - 1, `the raft left behind slows (${raftBefore.speed.toFixed(2)} → ${raftAfter.speed.toFixed(2)} m/s)`);

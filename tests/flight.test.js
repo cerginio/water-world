@@ -8,7 +8,7 @@ import { FLIGHT, landing, stepFlight } from '../src/walker/flight.js';
 import { RAFT } from '../src/tiles/raftMotion.js';
 
 // story-quest Q4b (STORY-QUEST-SPEC §2 п.6, §4.2 v1.5): the board under the kite — its speed,
-// its height over the mean water, landing on the ground and on a deck, none over deep water;
+// its height over the mean water, landing on the ground, on a deck, into deep water (Q5b);
 // a jump from one deck to another. The real Tilecraft moveOnSheet, as in raft.test.js.
 const root = resolveTilecraft('development');
 const { moveOnSheet } = await import(pathToFileURL(`${root}/viewer/engines/three/core/gamifier/sheet-motion.js`).href);
@@ -57,12 +57,12 @@ describe('stepFlight', () => {
 describe('landing', () => {
   const decks = [deckOf('raft', 300, 0)];
   const at = (x, z) => decks.find((d) => Math.abs(x - d.x) <= d.hu && Math.abs(z - d.z) <= d.hv) ?? null;
-  test('wadeable ground, a deck, or none over deep water', () => {
+  test('wadeable ground, a deck, or the water over deep water (Q5b)', () => {
     expect(landing(beach, at, 4.9, 0, WALK.wade)).toBe('ground');
-    expect(landing(beach, at, 5.2, 0, WALK.wade)).toBe(null);
+    expect(landing(beach, at, 5.2, 0, WALK.wade)).toBe('water');
     expect(landing(beach, at, 300, 0, WALK.wade)).toBe('deck');
-    expect(landing(beach, at, 250, 0, WALK.wade)).toBe(null);
-    expect(landing(() => null, at, 2000, 0, WALK.wade)).toBe(null);   // off the terrain: deep
+    expect(landing(beach, at, 250, 0, WALK.wade)).toBe('water');
+    expect(landing(() => null, at, 2000, 0, WALK.wade)).toBe('water');   // off the terrain: deep
   });
 });
 
@@ -89,14 +89,14 @@ describe('the walker on the board', () => {
     expect(w.step(0.1, { forward: 1 })).toBeGreaterThan(0.3);
   });
 
-  test('lands on a deck under the board; not over deep water', () => {
+  test('lands on a deck under the board; the kite holds until it is asked to', () => {
     const list = [deckOf('raft', 300, 0), deckOf('other', 340, 0)];
     const w = setup(list);
     w.board(list[0], 0, 0, Math.PI / 2);   // facing +x, out to sea
     w.takeOff();
     for (let i = 0; i < 60; i++) w.fly(dt, { x: 1, z: 0 });
     while (w.state.x < 320) w.fly(dt, { x: 1, z: 0 });
-    expect(w.land()).toBe(null);   // deep water between the decks: the kite holds
+    expect(w.landing()).toBe('water');   // deep water between the decks: nothing lands by itself
     expect(w.state.flight).not.toBe(null);
     while (w.state.x < 338) w.fly(dt, { x: 1, z: 0 });
     expect(w.land()).toBe('deck');

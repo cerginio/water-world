@@ -6,8 +6,8 @@
 // board slows to a hover. Pure: no three.js, no DOM.
 //
 // Landing: over ground the walker can wade on (≥ −wade) — at once, on the feet; over a deck —
-// when the person lands (walker.land()), and the deck becomes the raft; over deep water there
-// is no landing: the kite is not let go there before swimming (Q5b).
+// when the person lands (walker.land()), and the deck becomes the raft; over deep water — when
+// the person lets the kite go, into the water (swim.js, Q5b).
 
 /** @type {Readonly<{ speed: number, drag: number, height: number, bob: number, period: number, rise: number, limit: number }>} */
 export const FLIGHT = Object.freeze({
@@ -44,13 +44,14 @@ export function stepFlight(state, dt, course) {
 
 /**
  * Where the walker would land at (x, z): 'ground' — wadeable ground (≥ −wade), 'deck' — a
- * deck there (`deckAt`), or null — deep water (no landing before Q5b). Ground first: a deck
- * over the shallows is still land under the feet.
+ * deck there (`deckAt`), or 'water' — deep water, or off the terrain (swim.js, Q5b). Ground
+ * first: a deck over the shallows is still land under the feet.
+ * @returns {'ground' | 'deck' | 'water'}
  * @param {(x: number, z: number) => ({ height: number } | null)} ground
  * @param {(x: number, z: number) => any} deckAt
  */
 export function landing(ground, deckAt, x, z, wade) {
   const g = ground(x, z);
   if (g && g.height >= -wade) return 'ground';
-  return deckAt(x, z) ? 'deck' : null;
+  return deckAt(x, z) ? 'deck' : 'water';
 }

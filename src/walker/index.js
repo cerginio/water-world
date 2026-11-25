@@ -14,6 +14,10 @@
 //
 // Q4b: in the air (walker.state.flight) the same input is the board's course (flight.js),
 // and the kite's; the board is a mesh of its own under the feet, shown only in the air.
+//
+// Q5b: in the water (walker.state.swim, swim.js) the same input strokes; `water(x, z)` — the
+// water's height there (main.js: the one read at the camera). The camera stays the eyes, so
+// it goes under the water with them; nothing here writes it (OWNER-3).
 import * as THREE from 'three';
 import { createWalker, PACE } from './walker.js';
 import { WALK, isWater, walkOnGround } from './groundWalk.js';
@@ -22,6 +26,7 @@ import { loadWalkerModules } from './tilecraftWalker.js';
 
 export { WALK, PACE, isWater, walkOnGround, keyIntent };
 export { FLIGHT, stepFlight, landing } from './flight.js';
+export { SWIM, stepSwim, eyeLevel } from './swim.js';
 
 const HIDE_NEAR = 1.5;
 /** The board under the feet in the air: m, its long side along the flight. */
@@ -40,11 +45,12 @@ function buildBoard() {
  * @param {{ scene: any, rig: any, ground: (x: number, z: number) => any,
  *   canvas: HTMLElement, isEditing: (target: EventTarget | null) => boolean,
  *   character?: string, decks?: () => import('./deck.js').Deck[],
- *   pull?: { active: () => boolean, course: (dir: { x: number, z: number } | null) => void } }} options
+ *   pull?: { active: () => boolean, course: (dir: { x: number, z: number } | null) => void },
+ *   water?: (x: number, z: number) => number }} options
  */
-export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, character = 'explorer', decks, pull }) {
+export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, character = 'explorer', decks, pull, water }) {
   const { moveOnSheet, createGamifierAvatar } = await loadWalkerModules();
-  const walker = createWalker({ moveOnSheet, ground, decks });
+  const walker = createWalker({ moveOnSheet, ground, decks, water });
   const avatar = createGamifierAvatar();
   avatar.setCharacter(character);
   avatar.group.name = 'walker';

@@ -20,7 +20,8 @@ import { createCKite } from './cKite.js';
 // Q4b: the kite also flies the walker on the board (walker/flight.js). Off the raft into the
 // air the kite stays up and the raft left behind coasts down to the drift, as one let go;
 // landed on a deck, that deck is the raft under the kite; landed on the ground, the kite is
-// gone. Events 'takeoff' and 'land' (+ on: 'ground' | 'deck').
+// gone. Events 'takeoff' and 'land' (+ on: 'ground' | 'deck' | 'water' — into it, Q5b: the
+// kite is gone as on the ground).
 
 const RAFT_DECK_Y = 0.15;   // m: a deck's height until the GPU has answered (a tile top over still water)
 // m around the feet the deck height is read in (TileFrameQuery mode 3, + each tile's radius):
@@ -187,7 +188,7 @@ export class TileRaft extends EventTarget {
     }
     if (!flying && this.flying) {
       this.flying = false;
-      this.emitAt('land', { on: onId !== null ? 'deck' : 'ground' }, walker);
+      this.emitAt('land', { on: onId !== null ? 'deck' : walker?.swim ? 'water' : 'ground' }, walker);
       if (onId === null) this.setKite(false);
     }
     // the rafts: the one under the kite, and any still coasting

@@ -121,14 +121,21 @@ describe('the walker on a deck', () => {
     expect(w.state.y).toBeCloseTo(beach(w.state.x, 0).height, 9);
   });
 
-  test('a deck that is gone drops the walker onto the ground under it', () => {
-    const deck = yawed(0);
+  test('a deck that is gone drops the walker into the water under it (Q5b), or onto the shallows', () => {
+    const deck = yawed(0);   // over −1.4 m: deeper than the walker wades
     const { w, list } = setup(deck);
     w.board(deck, 0, 0);
     list.length = 0;
     w.ride(1 / 60);
     expect(w.state.deck).toBe(null);
-    expect(w.state.y).toBeCloseTo(beach(14, 0).height, 9);
+    expect(w.state.swim).toEqual({ depth: 0, target: 0 });   // not onto the bed 1.4 m down
+    const shallow = { ...yawed(0), x: 4 };   // the centre over −0.4 m
+    const s = setup(shallow);
+    s.w.board(shallow, 0, 0);
+    s.list.length = 0;
+    s.w.ride(1 / 60);
+    expect(s.w.state.swim).toBe(null);
+    expect(s.w.state.y).toBeCloseTo(beach(4, 0).height, 9);
   });
 
   test('direction(): forward along the yaw, strafe to its right, null without input', () => {

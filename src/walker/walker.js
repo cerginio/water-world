@@ -15,9 +15,16 @@
 // `fly(dt, course)` once a frame instead of step() (flight.js), `land()` onto a deck under
 // the board; over wadeable ground the board lands by itself. `state.flight` — null, or the
 // board's { vx, vz, t }.
-import { WALK, walkOnGround } from './groundWalk.js';
+//
+// Q5b: the water (swim.js). `state.swim` — null, or { depth, target } of the eyes under the
+// mean level; `state.y` is then the eyes' height less `eye`, so eyes() is the same. Into it:
+// land() over deep water, `jumpIn()` off a deck, or the deck under the feet gone (ride()).
+// step() strokes instead of walking; out onto wadeable ground or onto a deck at the surface.
+// `dive()` / `rise()` set the depth to go to. `world.water(x, z)` — the water's height there.
+import { WALK, clearOfWater, walkOnGround } from './groundWalk.js';
 import { clampToDeck, deckAt, fromDeck, nearestOnDeck, onDeck, toDeck } from './deck.js';
 import { landing, stepFlight } from './flight.js';
+import { SWIM, eyeLevel, stepSwim } from './swim.js';
 
 const SETTLE = 0.06;   // s: the feet follow a deck's height (it bobs, and is read 1–3 frames late)
 export const DECK_JUMP = 4;   // m: the farthest jump onto a deck from the water, or off it onto the shallows
@@ -41,7 +48,7 @@ export const PACE = Object.freeze({
 
 /**
  * @param {{ moveOnSheet: Function, ground: (x: number, z: number) => any,
- *   decks?: () => import('./deck.js').Deck[] }} world
+ *   decks?: () => import('./deck.js').Deck[], water?: (x: number, z: number) => number }} world
  * @param {{ bodyScale?: number, eye?: number, wade?: number }} [options]
  */
 export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye, wade = WALK.wade } = {}) {
@@ -49,12 +56,67 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
   const state = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, normal: null, moving: false, walked: 0,
     /** @type {{ id: any, u: number, v: number } | null} */ deck: null,
     /** the eyes' offset from the feet's place after a jump (eyes() adds it) */ jump: { x: 0, y: 0, z: 0 },
-    /** @type {{ vx: number, vz: number, t: number } | null} on the board in the air */ flight: null };
+    /** @type {{ vx: number, vz: number, t: number } | null} on the board in the air */ flight: null,
+    /** @type {{ depth: number, target: number } | null} in the water (Q5b) */ swim: null };
   const move = { moveOnSheet: world.moveOnSheet, ground: world.ground, bodyScale, wade };
   const radius = 0.15 * bodyScale;   // Tilecraft avatarBodyOf, as walkOnGround
   const decks = () => world.decks?.() ?? [];
   const deckOf = (id) => decks().find((d) => d.id === id) ?? null;
+  const water = (x, z) => world.water?.(x, z) ?? 0;
   const UP = { x: 0, y: 1, z: 0 };
+
+  /** Into the water at (x, z), at the surface; the eyes glide down to it. */
+  const enterWater = (x, z) => {
+    state.flight = null;
+    state.deck = null;
+    state.swim = { depth: 0, target: 0 };
+    jumpTo(x, eyeLevel(0, water(x, z)) - eye, z);
+    state.normal = UP;
+  };
+
+  /** From the water (or deep ground), a deck within a jump along `offset` boards it. */
+  const jumpOntoDeck = (offset) => {
+    const l = Math.hypot(offset.x, offset.z), dx = offset.x / l, dz = offset.z / l;
+    for (let t = l; t <= DECK_JUMP + 1e-9; t = t < 0.25 ? 0.25 : t + 0.25) {
+      const x = state.x + dx * t, z = state.z + dz * t, onto = deckAt(decks(), x, z);
+      if (!onto) continue;
+      boardAt(onto, x, z);
+      state.moving = true;
+      state.walked += t;
+      return t;
+    }
+    return 0;
+  };
+
+  /** One stroke in the water (swim.js); out onto wadeable ground, or onto a deck ahead. */
+  const swimStep = (dt, { forward = 0, strafe = 0, run = false }) => {
+    const sw = state.swim;
+    const length = Math.hypot(forward, strafe);
+    if (length > 1e-6 && sw.depth < SWIM.board) {
+      const h = heading(forward, strafe), jumped = jumpOntoDeck({ x: h.x * 0.01, z: h.z * 0.01 });
+      if (jumped) return jumped;
+    }
+    const next = stepSwim({ x: state.x, z: state.z, depth: sw.depth, target: sw.target }, dt,
+      { forward, strafe, yaw: state.yaw, pitch: state.pitch, run }, { ground: world.ground, water });
+    const g = world.ground(next.x, next.z);
+    if (g && g.height >= -wade) {
+      // the shallows: stand up there, pushed clear of the wading line as a walker is
+      const p = clearOfWater(world.ground, next.x, next.z, radius, { wade }), at = p && world.ground(p.x, p.z);
+      if (at) {
+        state.swim = null;
+        jumpTo(p.x, at.height, p.z);
+        state.normal = at.normal;
+        state.moving = true;
+        state.walked += next.moved;
+        return next.moved;
+      }
+    }
+    sw.depth = next.depth; sw.target = next.target;
+    Object.assign(state, { x: next.x, z: next.z, y: eyeLevel(next.depth, water(next.x, next.z)) - eye,
+      moving: next.moved > 1e-4 });
+    state.walked += next.moved;
+    return next.moved;
+  };
 
   /** The world offset of an intent's forward / strafe this frame (before the pace). */
   const heading = (forward, strafe) => {
@@ -75,6 +137,7 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
     jumpTo(p.x, y, p.z);   // ride() settles the feet onto the deck
     state.deck = { id: deck.id, u: c.u, v: c.v };
     state.normal = UP;
+    state.swim = null;
   };
 
   /** A step on a deck: inside the rim, off it onto wadeable ground, or along the rim. */
@@ -123,7 +186,7 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       const g = world.ground(x, z);
       if (!g) throw new Error(`walker: (${x.toFixed(1)}, ${z.toFixed(1)}) is off the terrain`);
       Object.assign(state, { x, y: g.height, z, yaw, pitch: 0, normal: g.normal, moving: false, deck: null,
-        jump: { x: 0, y: 0, z: 0 }, flight: null });
+        jump: { x: 0, y: 0, z: 0 }, flight: null, swim: null });
     },
     /**
      * Onto a deck at its (u, v) — clamped inside the rim; the feet at the deck's height.
@@ -132,24 +195,27 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
     board(deck, u = 0, v = 0, yaw = state.yaw) {
       const c = clampToDeck(deck, u, v, radius), p = fromDeck(deck, c.u, c.v);
       Object.assign(state, { x: p.x, y: deck.y, z: p.z, yaw, normal: UP, moving: false, deck: { id: deck.id, u: c.u, v: c.v },
-        jump: { x: 0, y: 0, z: 0 }, flight: null });
+        jump: { x: 0, y: 0, z: 0 }, flight: null, swim: null });
     },
     /**
      * Once a frame, in any mode: on a deck, the feet go where the deck has carried them and
-     * settle to its height; a deck that is gone (the frame left the water) drops the walker
-     * onto the ground under it, if there is any. On the ground: nothing.
+     * settle to its height; a deck that is gone (the frame left the water, or went to its
+     * fate) drops the walker onto wadeable ground under it, or into the water (Q5b). In the
+     * water the eyes ride the wave at the surface. On the ground: nothing.
      * @param {number} dt seconds
      */
     ride(dt) {
       const fade = Math.exp(-Math.max(0, dt) / GLIDE), j = state.jump;
       j.x *= fade; j.y *= fade; j.z *= fade;
       if (Math.hypot(j.x, j.y, j.z) < 1e-3) j.x = j.y = j.z = 0;
+      if (state.swim) { state.y = eyeLevel(state.swim.depth, water(state.x, state.z)) - eye; return; }
       if (!state.deck) return;
       const deck = deckOf(state.deck.id);
       if (!deck) {
         const g = world.ground(state.x, state.z);
         state.deck = null;
-        if (g) Object.assign(state, { y: g.height, normal: g.normal });
+        if (g && g.height >= -wade) Object.assign(state, { y: g.height, normal: g.normal });
+        else enterWater(state.x, state.z);
         return;
       }
       const p = fromDeck(deck, state.deck.u, state.deck.v);
@@ -168,14 +234,15 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       return true;
     },
     /**
-     * Where the board would come down now: 'ground', 'deck' or null (deep water — no landing).
+     * Where the board would come down now: 'ground', 'deck', 'water' (deep: the kite let go,
+     * into the water, Q5b), or null when not in the air.
      */
     landing() {
       return state.flight ? landing(world.ground, (x, z) => deckAt(decks(), x, z), state.x, state.z, wade) : null;
     },
     /**
-     * Down from the board: onto wadeable ground on the feet, or onto the deck under it; over
-     * deep water nothing (the kite holds). @returns {'ground' | 'deck' | null}
+     * Down from the board: onto wadeable ground on the feet, onto the deck under it, or over
+     * deep water into it (Q5b). @returns {'ground' | 'deck' | 'water' | null}
      */
     land() {
       const where = walker.landing();
@@ -187,8 +254,48 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       } else if (where === 'deck') {
         state.flight = null;
         boardAt(deckAt(decks(), state.x, state.z), state.x, state.z);
-      }
+      } else if (where === 'water') enterWater(state.x, state.z);
       return where;
+    },
+    /**
+     * Off a deck into the water (Q5b): over the rim straight ahead, clear of every deck, by the
+     * body's radius and a bit more. Onto wadeable ground if that is what lies there; another
+     * deck there — no (a step does that). @returns {'water' | 'ground' | null}
+     */
+    jumpIn() {
+      const deck = state.deck && deckOf(state.deck.id);
+      if (!deck || state.flight) return null;
+      const dx = Math.sin(state.yaw), dz = Math.cos(state.yaw), reach = 2 * Math.hypot(deck.hu, deck.hv) + 1;
+      let t = 0;
+      while (t <= reach && deckAt(decks(), state.x + dx * t, state.z + dz * t)) t += 0.25;
+      t += radius + 0.3;
+      const x = state.x + dx * t, z = state.z + dz * t;
+      if (deckAt(decks(), x, z)) return null;
+      const g = world.ground(x, z);
+      if (g && g.height >= -wade) {
+        state.deck = null;
+        jumpTo(x, g.height, z);
+        state.normal = g.normal;
+        return 'ground';
+      }
+      enterWater(x, z);
+      return 'water';
+    },
+    /** In the water: the depth to go to SWIM.dive m deeper. @returns {boolean} */
+    dive() {
+      if (!state.swim) return false;
+      state.swim.target = Math.min(SWIM.depth, Math.max(state.swim.target, state.swim.depth) + SWIM.dive);
+      return true;
+    },
+    /** In the water: up to the surface. @returns {boolean} */
+    rise() {
+      if (!state.swim) return false;
+      state.swim.target = 0;
+      return true;
+    },
+    /** In the water and not at the surface (going there or below it): «Surface» rather than «Dive». */
+    get under() {
+      return !!state.swim && (state.swim.depth > SWIM.under || state.swim.target > SWIM.under);
     },
     /**
      * Once a frame in the air, instead of step(): the board along `course` (a unit {x, z} or
@@ -228,6 +335,7 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       state.yaw += turn * PACE.turn * dt + (look?.yaw ?? 0);
       state.pitch = Math.max(-PACE.maxPitch, Math.min(PACE.maxPitch,
         state.pitch + pitch * PACE.pitch * dt + (look?.pitch ?? 0)));
+      if (state.swim) return swimStep(dt, intent);
       const length = Math.hypot(forward, strafe);
       if (length < 1e-6) { state.moving = false; return 0; }
       const scale = Math.min(1, length) / length * (run ? PACE.run : PACE.walk) * dt;
@@ -243,15 +351,8 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       // from the water, a deck within a jump ahead boards it (where the frame floats)
       const here = world.ground(state.x, state.z);
       if (!here || here.height < 0) {
-        const l = Math.hypot(offset.x, offset.z), dx = offset.x / l, dz = offset.z / l;
-        for (let t = l; t <= DECK_JUMP + 1e-9; t = t < 0.25 ? 0.25 : t + 0.25) {
-          const x = state.x + dx * t, z = state.z + dz * t, onto = deckAt(decks(), x, z);
-          if (!onto) continue;
-          boardAt(onto, x, z);
-          state.moving = true;
-          state.walked += t;
-          return t;
-        }
+        const jumped = jumpOntoDeck(offset);
+        if (jumped) return jumped;
       }
       const next = walkOnGround(state, offset, move);
       const moved = Math.hypot(next.x - state.x, next.z - state.z);

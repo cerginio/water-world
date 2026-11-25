@@ -120,7 +120,7 @@ const query = new WaterQuery(renderer, surface, 512);
 const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
 const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, terrainGeometry: terrain.geometry, mobile, floaters, camera, rig });
-let camWater = 0, wasSubmerged = false, uwComp = 1;
+let camWater = 0, walkerWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
 const reflection = new PlanarReflection(REFLECT_LAYER);
@@ -304,7 +304,7 @@ function walkerSpawn() {
 async function walkerReady() {
   walkerLoading ??= createWalkerHost({ scene, rig, ground: walkGround, canvas: renderer.domElement, isEditing,
     decks: () => raft?.decks() ?? [],
-    pull: { active: () => !!raft?.kite.up, course: (dir) => raft?.course(dir) } });
+    pull: { active: () => !!raft?.kite.up, course: (dir) => raft?.course(dir) }, water: () => walkerWater });
   walkerHost = await walkerLoading;
   if (walkerHost.mode === 'off') {
     const spawn = walkerSpawn();
@@ -394,20 +394,30 @@ function kiteHint() {
 }
 // Q4b (STORY-QUEST-SPEC §2 п.6, §4.2 v1.5): on a raft with the kite up, Space (or the touch
 // button «Take off») lifts the walker on the board; in the air Space lands — on a deck under
-// it, or by itself over wadeable ground; over deep water it does not (no swimming before Q5b).
-/** Space and the touch button: take off from the raft, or land. 'fly', 'ground', 'deck' or null. */
+// it, or by itself over wadeable ground.
+// Q5b (§2 п.6 «Плавання й пірнання»): over deep water Space (K, «Into the water») lets the kite
+// go and the walker is in the water; on a deck with the kite down Space jumps off the rim
+// ahead into it; in the water Space dives 3 m deeper, or under the water goes to the surface.
+/** Space and the touch button: 'fly', 'ground', 'deck', 'water', 'dive', 'rise' or null. */
 function flyAction() {
-  if (!walkerHost || walkerHost.mode !== 'eyes' || !raft) return null;
+  if (!walkerHost || walkerHost.mode !== 'eyes') return null;
   const w = walkerHost.walker;
+  if (w.state.swim) return w.under ? (w.rise() && 'rise') : (w.dive() && 'dive');
+  if (!raft) return null;
   if (w.state.flight) return w.land();
-  if (!raft.boarded || !raft.kite.up) return null;
+  if (!raft.boarded) return null;
+  if (!raft.kite.up) return w.jumpIn();
   return w.takeOff(raft.velocity()) ? 'fly' : null;
 }
-/** What the flight button would do now: 'fly', 'land' or null (also over deep water). */
+/** What the flight button would do now: 'fly', 'land', 'water', 'dive', 'rise' or null. */
 function flyHint() {
-  if (!walkerHost || walkerHost.mode !== 'eyes' || !raft) return null;
-  if (walkerHost.state.flight) return walkerHost.walker.landing() ? 'land' : null;
-  return raft.boarded && raft.kite.up ? 'fly' : null;
+  if (!walkerHost || walkerHost.mode !== 'eyes') return null;
+  const w = walkerHost.walker;
+  if (w.state.swim) return w.under ? 'rise' : 'dive';
+  if (!raft) return null;
+  if (w.state.flight) return w.landing() === 'water' ? 'water' : 'land';
+  if (!raft.boarded) return null;
+  return raft.kite.up ? 'fly' : 'water';
 }
 // --- the frame's fates (story-quest Q5) -------------------------------------------------
 // STORY-QUEST-SPEC §2 п.6, Edge §4.4: on a raft, from the air over a frame, or from a deck next
@@ -956,8 +966,10 @@ function renderFrame(dt) {
   if (env.active) { timer.begin('sky'); applySunLight(env.update(dt), dt); }
 
   // latest water heights (1-3 frames old) drive the camera test and the floaters
+  // slot 1: the water at the walker (story-quest Q5b: at the surface the eyes ride it)
   if (query.resultCount > 0) camWater = query.result[0];
-  floaters.ingest(query, 1);
+  if (query.resultCount > 1) walkerWater = query.result[4];
+  floaters.ingest(query, 2);
   floaters.step(dt);
 
   // water entries -> ripple rings + splash (ages on the floaters' clock)
@@ -978,7 +990,7 @@ function renderFrame(dt) {
   floatShadow.update(renderer, floaters.scene, floaters.bodies, env.sun.direction, tiles);
   spray.update();
   timer.begin('query');
-  const pts = floaters.collectPoints([camera.position]);
+  const pts = floaters.collectPoints([camera.position, walkerHost && walkerHost.mode !== 'off' ? walkerHost.state : camera.position]);
   query.submit(pts, floaters.count, floaters.layout, elapsed);
 
   const camY = camera.position.y;
