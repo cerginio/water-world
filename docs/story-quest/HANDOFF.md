@@ -1,14 +1,15 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-25. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0–Q4b закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0–Q5a закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
 очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді, пліт і
 кайт до відкритого моря, політ на дошці з кайтом і посадка на ноги / на палубу; Q5 —
-долі кадру (відпустити / втопити / розпастися, зворотні, «Залишити так»).
+долі кадру (відпустити / втопити / розпастися, зворотні, «Залишити так»); Q5a — C-кайт
+на чотирьох стропах із планкою.
 QA — [QA.md](QA.md).
 
-> **Далі:** Q5a — редизайн C-Kite (п.11, [c-kite-redesign.md](c-kite-redesign.md)).
+> **Далі:** Q5b — плавання й пірнання (п.12).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Телефон — лише драфт Netlify
@@ -32,7 +33,7 @@ QA — [QA.md](QA.md).
 | ~~Q4~~ | закрито 2026-11-25 (телефон — QA-Q4-7, тінь — QA-Q4-8; чистий прогін проби — п.7) |
 | ~~Q4b~~ | закрито 2026-11-25 (телефон — QA-Q4b-8, QA-Q4b-9) |
 | ~~Q5~~ | закрито 2026-11-25 (телефон — QA-Q5-8, QA-Q5-9) |
-| Q5a | Q4 і Q4b (поза кайта на плоті й у польоті), у черзі після Q5 |
+| ~~Q5a~~ | закрито 2026-11-25 (телефон — QA-Q5a-6) |
 | Q5b | Q5 (огляд втопленого кадру) |
 | Q6 | події Q1–Q5; логіку можна почати раніше на фікстурі |
 | Q7 | Q2b, Q4, Q5, Q6 |
@@ -173,7 +174,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      (назад), L («Залишити так»); на телефоні — стовпчик кнопок. Правка рев'ю: «Мить»
      летить до мініатюри. Телефон (QA-Q5-8, -9) — за власником, на драфті.
 
-11. **Q5a — редизайн C-Kite** ([спека для агента](c-kite-redesign.md)).
+~~11. **Q5a — редизайн C-Kite** ([спека для агента](c-kite-redesign.md)).
    Замінити ромб у `src/tiles/TileRaft.js` на процедурний C-Kite з чотирма
    стропами, видимим центральним вузлом і планкою перед персонажем на плоті
    й у польоті. Орієнтацію та деформацію полотна оновлювати в `pose()` після
@@ -192,7 +193,9 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    - Для рев’ю окремо перевірити вигляд із берега й збоку, легку деформацію
      за зміни вітру та планку під час зльоту і посадки. Актуалізувати опис
      ромба й двох строп у QA-Q4-3.
-   - Підібрати в сцені масштаб, базовий нахил і амплітуди руху за критеріями спеки.
+   - Підібрати в сцені масштаб, базовий нахил і амплітуди руху за критеріями спеки.~~ —
+     ЗАКРИТО 2026-11-25; числа — QA.md Q5a. Модуль `src/tiles/cKite.js`; QA-Q4-3
+     оновлено. Телефон (QA-Q5a-6) — за власником, на драфті.
 
 12. **Q5b — плавання й пірнання** (спека §2 п.6 «Плавання й пірнання»).
    Персонаж пливе поверхнею й пірнає; камера під водою (через `cameraRig`);
@@ -237,7 +240,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (Q5, 2026-11-25): guard зелений 0.26 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 267 passed; `probe-story-q5` PASS 92.9 с, `probe-story-q4b` 103.6 с, `probe-story-q4` 101.4 с, `probe-story-q1` 90.2 с; `probe-tiles` падає й на HEAD (`worldQuery.maxError`).
+Baseline (Q5a, 2026-11-25): guard зелений 0.29 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 271 passed; `probe-story-q4` PASS 102.4 с, `probe-story-q4b` 101.9 с; `probe-tiles` падає й на HEAD (`worldQuery.maxError`).
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
@@ -249,7 +252,7 @@ Baseline (Q5, 2026-11-25): guard зелений 0.26 с (BOUNDARY-1…4, OWNER-1
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
 | Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»; `flight` — «Злетіти»/«Сісти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка), `probe-story-q4b` (крок 7) |
 | Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take`, `put`, `unfoldCenter` + `freeAt`, `syncFrames`, події `take/put/unfold/hydrate`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `app.minis` | DECISIONS «Мініатюри й гідратація»: копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
-| Пліт і кайт | `src/tiles/TileRaft.js` (`TileRaft`: `decks`, `update` до кроку, `pose` після, `setKite`, `course`, `moveTo`, `drift`, `velocity`, `flying`, події `board/leave/kite/sea/takeoff/land`; `KITE`), `raftMotion.js` (`RAFT`, `stepRaft`, `openWater`, `inOpenSea`), `TileFrameQuery` режим 3, `TileField.lockedFrames`, `syncShadow` (кадри в конверті дрейфу); у `main.js` — `raftUpdate()`, `kiteAction()` (K), `app.raft`, `SHORE_EXTENT` | DECISIONS «Пліт і кайт»; пліт = `placed`-кадр через `moveFrame`; у польоті кайт угорі, покинутий пліт — без `pull`; INVARIANTS SIM-1 | `tests/raft.test.js`, `probe-story-q4.mjs` |
+| Пліт і кайт | `src/tiles/TileRaft.js` (`TileRaft`: `decks`, `update` до кроку, `pose` після, `setKite`, `course`, `moveTo`, `drift`, `velocity`, `flying`, події `board/leave/kite/sea/takeoff/land`; `KITE`, `bar` для проб), вигляд кайта `cKite.js` (`createCKite`, `C_KITE`, `wingPoint`; `raft.model.anchors()`), `raftMotion.js` (`RAFT`, `stepRaft`, `openWater`, `inOpenSea`), `TileFrameQuery` режим 3, `TileField.lockedFrames`, `syncShadow` (кадри в конверті дрейфу); у `main.js` — `raftUpdate()`, `kiteAction()` (K), `app.raft`, `SHORE_EXTENT` | DECISIONS «Пліт і кайт»; пліт = `placed`-кадр через `moveFrame`; у польоті кайт угорі, покинутий пліт — без `pull`; INVARIANTS SIM-1 | `tests/raft.test.js`, `cKite.test.js`, `probe-story-q4.mjs` |
 | Долі кадру | `src/tiles/frameFate.js` (`FATE`, `begin`/`undo`/`keep`/`stepFate`, `fateLook`, `TILE_FATE_GLSL`, `fatePiece`), `TileFates.js` (`give`, `undo`, `keep`, `open`, `facts`, `rate`, подія `change`), `TileSim.setFate` (`uFates`); `deckAtHand` у `walker/deck.js`; у `main.js` — `fateAction`, `fateHints`, Z/X/C/H/L, `app.fates` | DECISIONS «Долі кадру»; кадр під долею — `TileField.busyFrames`, не палуба | `tests/fates.test.js`, `probe-story-q5.mjs` |
 | «Мить» до мініатюри | `createFrameFocus({ locate })` у `src/scene/frameFocus.js`, `locate` у `main.js` (`Box3` мініатюри, доки стан ≠ `water`) | DECISIONS «Долі кадру» (останній пункт) | `tests/frameFocusLocate.test.js`, `probe-scene-frame` |
 | Збірка й деплой продукту | `vite.config.js` (`rollupOptions.input`), `verify-dist.mjs`, `deploy-netlify.mjs --alias` (CLI через `npx` поза деревом проєкту), `static-server.mjs` (index папки, `.css`), dev-фолбек `build/tilecraft-plugin.js` (`LOCAL_CATALOG_PATH`) | спека §5, §5.1; телефон — лише драфт (`AGENTS.md`) | `node scripts/deploy-netlify.mjs --alias story-quest --dry-run`, `test:build` |
@@ -316,6 +319,8 @@ Baseline (Q5, 2026-11-25): guard зелений 0.26 с (BOUNDARY-1…4, OWNER-1
 - [стрибок з кута плоту на центр сусіднього кадру] при зазорі 3.6 м пряма перетинала 4.65 м води > `DECK_JUMP` → пошук і найближчої точки кадру в межах 4 м і 45° (`JUMP_CONE`). (Q4b)
 - [мініатюра, покладена з плоту, `my-day`] з `freeAt` (кадр радіуса r не ближче r до палуби) зазор до плоту 2.69 м — у межах стрибка. (Q4b)
 - [погляд униз у польоті] дошка прямо під ногами, при pitch −0.7 її не видно → для огляду дошки F до упору (−1.3). (Q4b)
+- [C-кайт, форма з ескізу `P(u, v)`] стрілоподібність 0.16 хорди й нахил +0.12 рад: з плоту й з берега задня кромка опукла донизу — купол парашута → кінці назад на 1.5 м і нахил −0.3 рад (кінці вниз по стропах), перевіряти знімком з плоту й з берега. (Q5a)
+- [планка кайта, «очі» на плоті] планка на −53° від очей, поле зору ±25°: при pitch −0.35 її не видно → огляд планки — F до pitch ≈ −0.85. (Q5a)
 - [`ISLAND_SIZE`] 2400 → рельєф і контактна поверхня закінчуються на 1200 м; далі втоплений кадр тоне без дна (Q5). (код)
 ### Долі кадру
 
