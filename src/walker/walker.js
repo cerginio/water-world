@@ -287,6 +287,17 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       state.swim.target = Math.min(SWIM.depth, Math.max(state.swim.target, state.swim.depth) + SWIM.dive);
       return true;
     },
+    /**
+     * Into the water at (x, z) at once, `depth` m under the surface (≤ SWIM.depth; the bed
+     * stops the next stroke): the scene's contract puts a walker there (src/embed/, QDa).
+     */
+    swimAt(x, z, depth = 0) {
+      enterWater(x, z);
+      const d = Math.min(SWIM.depth, Math.max(0, depth));
+      state.swim.depth = state.swim.target = d;
+      state.y = eyeLevel(d, water(x, z)) - eye;
+      state.jump = { x: 0, y: 0, z: 0 };
+    },
     /** In the water: up to the surface. @returns {boolean} */
     rise() {
       if (!state.swim) return false;

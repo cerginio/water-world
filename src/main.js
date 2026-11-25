@@ -1285,4 +1285,10 @@ const showField = () => { if (tiles.loaded && !walking) viewController.setValue(
 const opening = args.has('story') ? loadStory(args.get('story')).then(showField)
   : tilesUi.source !== 'none' ? loadTiles(tilesUi.source).then(showField) : Promise.resolve();
 if (walking) opening.then(() => startWalk()).catch((e) => console.error('[walker]', e));
+// in a product's iframe (STORY-QUEST-SPEC §4.4): the contract's commands over postMessage
+if (args.has('embed')) {
+  // app.embed — the same commands from the console (QA; a product only has postMessage)
+  import('./embed/index.js').then(({ startEmbed }) => { window.app.embed = startEmbed({ app: window.app, spawn: walkerSpawn }).commands; })
+    .catch((e) => console.error('[embed]', e));
+}
 if (!stillMode) requestAnimationFrame(loop);
