@@ -1,11 +1,12 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-25. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0, Q1, Q2a і Q2b закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0, Q1, Q2a, Q2b і Q3 закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
-очі», «поза тілом», стік. QA — [QA.md](QA.md).
+очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді.
+QA — [QA.md](QA.md).
 
-> **Далі:** Q3 — мініатюри.
+> **Далі:** Q4 — пліт і кайт.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Tilecraft (`TILECRAFT_ROOT`) лише читається.
@@ -21,7 +22,7 @@
 | ~~Q1~~ | закрито 2026-11-24 |
 | ~~Q2a~~ | закрито 2026-11-24 |
 | ~~Q2b~~ | закрито 2026-11-25 (fps на телефоні — за власником, QA-Q2b-7) |
-| Q3 | Q1, Q2a |
+| ~~Q3~~ | закрито 2026-11-25 (розмір 1/8 на телефоні — за власником, QA-Q3-7) |
 | Q4 | Q3 |
 | Q5 | Q3 (долі кадру; пліт Q4 — для фіналу «в морі») |
 | Q6 | події Q1–Q5; логіку можна почати раніше на фікстурі |
@@ -93,13 +94,13 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    замовчуванням в оболонці продукту (без `&walk`) — Q7. Заміри fps на телефоні
    власника — QA-Q2b-7, не зроблено.
 
-5. **Q3 — мініатюри** (спека §2 п.3–4, §4.1 «Мініатюра й гідратація»).
+~~5. **Q3 — мініатюри** (спека §2 п.3–4, §4.1 «Мініатюра й гідратація»).
    Мініатюра 1/8 rest (стартове значення, підбір на телефоні); розкладка на
    суші вище мілини з мінімальною відстанню, seed = slug; персонаж бере й
-   несе; контакт із водою → розгортання до rest.
-   - focused: юніти розкладки (детермінізм за slug, відстані, усі точки на суші).
-   - проба: перезавантаження дає ту саму розкладку; мініатюра, кинута у воду,
-     стає кадром rest-розміру й плаває як фікстура.
+   несе; контакт із водою → розгортання до rest.~~ — ЗАКРИТО 2026-11-25; числа —
+   QA.md Q3, рішення — DECISIONS «Мініатюри й гідратація». Вмикає `&minis`
+   (за замовчуванням в оболонці — Q7); G / кнопка «Взяти»·«Покласти» лише в
+   «очах». Розмір 1/8 на телефоні — QA-Q3-7, не зроблено.
 
 6. **Q4 — пліт і кайт** (спека §2 п.5, §4.2, §4.3). Персонаж стоїть на
    кадрі (`TileFrameQuery`); кайт v1 тягне за курсом зі сталою силою;
@@ -138,21 +139,20 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ### Відкриті питання
 
-- Форма тайлів історій каталогу: Q1 бере як є (суцільна полілінія R2, до 7.6 м
-  на тайл), фікстура — через модифікатор Tilecraft (`hibrid`). Чи модифікувати —
-  вирішує Q3 за контактом мініатюр із рельєфом саме на цих історіях.
+- ~~Форма тайлів історій каталогу~~ — вирішено в Q3: як є (DECISIONS «Мініатюри
+  й гідратація»); переглянути, якщо Q4/Q5 поведуть кадр на мілину.
 - Fingerprint історії з каталогу — `null` (клієнт Tilecraft віддає розібраний
   об'єкт без байтів); ключ сховища slug + fingerprint — рішення Q6.
 - Перешкоди на суші (каміння, валуни, плаваючі предмети) — персонаж проходить
   крізь них; спека Q2a межею називає лише воду. Чи потрібні — рішення власника.
 - Заміри на телефоні (базовий fps з історією — не зроблено в Q0; ходьба —
-  QA-Q2b-7; Q4, Q7) — лише власник. IP ПК у локальній мережі в правилі CORS немає —
+  QA-Q2b-7; розмір мініатюри — QA-Q3-7; Q4, Q7) — лише власник. IP ПК у локальній мережі в правилі CORS немає —
   телефон на dev-стенді з `--host` каталог не прочитає, поки власник не
   впише його.
 
 ## Що зроблено і працює
 
-Baseline (Q2b, 2026-11-25): guard зелений 0.56 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0); `npm test` 211 passed; `probe-story-q2b` PASS 71.3 с, `probe-story-q2a` PASS 53.5 с.
+Baseline (Q3, 2026-11-25): guard зелений 1.18 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0); `npm test` 221 passed; `probe-story-q3` PASS 179.6 с, `probe-story-q2b` PASS 64.1 с, `probe-story-q2a` PASS 52.8 с.
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
@@ -162,7 +162,8 @@ Baseline (Q2b, 2026-11-25): guard зелений 0.56 с (BOUNDARY-1…4, OWNER-
 | Оболонка продукту | `products/story-quest/index.html`, `main.js` (рядок `#storyStatus`, uk/en), `story-quest.css`; спільний CSS сцени `src/ui/scene.css` | спека §4; BOUNDARY-4: `src/**` не імпортує `products/**` | `probe-story-q1` (dev + `PREVIEW_URL`) |
 | Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `app.walker`, `app.ground` | спека §4.1; ноги на `TerrainContact`, не на `islandHeight`; тіло ≥ 0.255 м від лінії броду −0.5 м | `tests/walker.test.js`, `probe-story-q2a.mjs` |
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
-| Стік і кнопка телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3) |
+| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — кнопка «Взяти»/«Покласти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка) |
+| Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take`, `put`, `unfoldCenter`, `syncFrames`, події `take/put/unfold/hydrate`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `app.minis` | DECISIONS «Мініатюри й гідратація»: копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
 | Збірка й деплой продукту | `vite.config.js` (`rollupOptions.input`), `verify-dist.mjs`, `deploy-netlify.mjs --alias`, `static-server.mjs` (index папки, `.css`), dev-фолбек `build/tilecraft-plugin.js` (`LOCAL_CATALOG_PATH`) | спека §5, §5.1 | `npm run deploy:check -- --alias story-quest`, `test:build` |
 
 ## Головні виміряні факти
@@ -200,6 +201,12 @@ Baseline (Q2b, 2026-11-25): guard зелений 0.56 с (BOUNDARY-1…4, OWNER-
 - [трасування в пробі через rAF] перший запис іде лише на наступному кадрі, а `page.evaluate` повертається раніше → дія проби (V) потрапляє до першого рядка; писати перший рядок синхронно. (Q2b)
 - [спуск у очі з огляду] 1163 м за 4 с: найбільший крок 9.13 м за кадр = 1.03 від межі кривої (1.875 × середня швидкість × dt) → допуск проби ≤ 1.05, тісний; довший спуск — довша `approach`, не ширший допуск. (Q2b)
 - [збірка аватара] `avatar.js` Tilecraft іде окремим лінивим чанком 40 KB і бере three з `main` (один three); `test:build` перевіряє наявну `dist`, не будує → перед перевіркою `dist` — `npm run build`. (Q2a)
+
+### Мініатюри
+
+- [`frameFootprint` кадру, що стоїть] той самий кадр `my-day` на тому самому місці дає 10.6–12.4 м по z за кілька секунд (тайли полілінії на хвилях) → розмір кадру порівнювати з допуском ~15 %, не сантиметрами. (Q3)
+- [`TileMiniatures.lay`] основа піднята над 4 кутами, тож `contactGap` кутів завжди 0 → «лежить на рельєфі» міряти як висоту основи над рельєфом під центром (0–0.048 м на наборі). (Q3)
+- [гідратація біля пляжу] від лінії броду −0.48 м пошук дає центр кадру над глибиною рівно ~1.0 м (`MINI.depth`) → пліт Q4 стартує впритул до мілини; кадр на якорі за 8 с зсувається на 0.27 м. (Q3)
 
 ### Пліт і кайт
 
