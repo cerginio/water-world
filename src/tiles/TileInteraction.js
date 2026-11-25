@@ -133,7 +133,8 @@ export class TileInteraction {
     // only after pointerup; the dblclick listener still hands a true tap to T5.
     let hit = this.picker.pick(this.camera, e.clientX, e.clientY);
     // the raft under the walker is not grabbed: the drag turns the head (story-quest Q4)
-    if (hit && this.field.lockedFrames?.has(hit.frame.id)) hit = null;
+    // nor a frame going its own fate (story-quest Q5)
+    if (hit && (this.field.lockedFrames?.has(hit.frame.id) || this.field.busyFrames?.has(hit.frame.id))) hit = null;
     this.samples.push(this.picker.lastMs); if (this.samples.length > 120) this.samples.shift();
     if (!hit) {
       this.clearSelection();

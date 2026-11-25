@@ -61,6 +61,52 @@ export function deckClear(decks, x, z, r) {
   return true;
 }
 
+/** World (x, z) to the deck's rectangle, m; 0 on or inside it. @param {Deck} deck */
+export function rimDistance(deck, x, z) {
+  const { u, v } = toDeck(deck, x, z);
+  return Math.hypot(Math.max(0, Math.abs(u) - deck.hu), Math.max(0, Math.abs(v) - deck.hv));
+}
+
+const corners = (d) => [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => fromDeck(d, a * d.hu, b * d.hv));
+
+/**
+ * The gap between two decks, rim to rim (m; 0 when they touch or overlap): for two convex
+ * rectangles apart, the least distance is from a corner of one to the other.
+ * @param {Deck} a @param {Deck} b
+ */
+export function deckGap(a, b) {
+  if (rimDistance(a, b.x, b.z) === 0 || rimDistance(b, a.x, a.z) === 0) return 0;
+  let gap = Infinity;
+  for (const p of corners(a)) gap = Math.min(gap, rimDistance(b, p.x, p.z));
+  for (const p of corners(b)) gap = Math.min(gap, rimDistance(a, p.x, p.z));
+  return gap;
+}
+
+/**
+ * The frame a fate would go to now (STORY-QUEST-SPEC §2 п.6; story-quest Q5), or null. In the
+ * air — the deck within `near` m of the board (the frame below). On a deck — another deck
+ * within `near` m rim to rim («another frame»: the walker stays where it is), else the deck
+ * underfoot (`own`: the walker takes off first). On the ground — none.
+ * @param {Deck[]} decks @param {{ deckId: any, flying: boolean, x: number, z: number }} walker
+ * @returns {{ id: any, own: boolean } | null}
+ */
+export function deckAtHand(decks, { deckId, flying, x, z }, near) {
+  if (flying) {
+    let best = null, gap = near;
+    for (const d of decks) { const g = rimDistance(d, x, z); if (g <= gap) { best = d; gap = g; } }
+    return best && { id: best.id, own: false };
+  }
+  const own = deckId === null || deckId === undefined ? null : decks.find((d) => d.id === deckId);
+  if (!own) return null;
+  let other = null, gap = near;
+  for (const d of decks) {
+    if (d.id === own.id) continue;
+    const g = deckGap(own, d);
+    if (g <= gap) { other = d; gap = g; }
+  }
+  return other ? { id: other.id, own: false } : { id: own.id, own: true };
+}
+
 /** The point of `deck` nearest to world (x, z), `margin` inside its rim. @param {Deck} deck */
 export function nearestOnDeck(deck, x, z, margin = 0) {
   const { u, v } = toDeck(deck, x, z), c = clampToDeck(deck, u, v, margin);

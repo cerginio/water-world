@@ -148,7 +148,10 @@ export class TileRaft extends EventTarget {
     const m = this.field.group.matrixWorld.elements;
     // the field's x and z axes in world XZ (a yaw: unit, orthogonal)
     const ux = m[0], uz = m[2], vx = m[8], vz = m[10];
-    this.list = this.shown().filter((f) => f.bounds && !f.bounds.isEmpty()).map((f) => {
+    // a frame under a fate (TileFates, Q5) is no deck and no raft: it goes its own way
+    const busy = this.field.busyFrames;
+    for (const id of busy ?? []) this.motion.delete(id);
+    this.list = this.shown().filter((f) => f.bounds && !f.bounds.isEmpty() && !busy?.has(f.id)).map((f) => {
       const b = f.bounds;
       const cx = (b.min.x + b.max.x) / 2 + f.offset.x, cz = (b.min.y + b.max.y) / 2 + f.offset.z;
       const c = new THREE.Vector3(cx, 0, cz).applyMatrix4(this.field.group.matrixWorld);

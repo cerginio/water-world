@@ -4,6 +4,7 @@ import { TERRAIN_CONTACT_GLSL } from '../scene/TerrainContact.js';
 import { TILE_TILT_GLSL } from './tileTilt.js';
 import { TILE_CONTACT_GLSL } from './tileContact.js';
 import { WATER_GLSL } from '../water/OceanSurface.js';
+import { BREAK_UNIFORM, TILE_FATE_GLSL } from './frameFate.js';
 
 const WIDTH = 512;
 // Shared by polygon tiles and run centroids. Positions/velocities use field axes.
@@ -54,6 +55,7 @@ uniform bool uReset;
 uniform highp sampler2D uRun;
 ${HORIZONTAL}
 ${TILE_TILT_GLSL}
+${TILE_FATE_GLSL}
 #ifdef TILE_TERRAIN_CONTACT
 ${TERRAIN_CONTACT_GLSL}
 ${TILE_CONTACT_GLSL}
@@ -82,11 +84,15 @@ void main() {
   // positions every frame — a frame in the surf drawn twice (story-quest Q4, INVARIANTS).
   vec2 anchor = s0.zw;
   if (abs(s3.w) > 0.01 && (polyline || s3.z < 0.5)) anchor -= transpose(worldXZ) * s2.zw * s3.y;
-  vec2 q = (uFieldMatrix * vec4(r.x + anchor.x + pose.x, 0.0, r.y + anchor.y + pose.y, 1.0)).xz;
+  // the frame's fate (story-quest Q5): a broken tile's drift, and how deep it is to go
+  vec4 fate = tileFate(fatePiece(uv.y * 512 + uv.x, r1), frameFate(frameId));
+  vec2 q = (uFieldMatrix * vec4(r.x + anchor.x + pose.x + fate.x, 0.0, r.y + anchor.y + pose.y + fate.z, 1.0)).xz;
   vec3 disp = waterAt(q, vec3(0.0));
+  // under the surface the waves fade out of the tile: height, orbit and tilt (3 m scale)
+  float under = 1.0 - exp(-fate.y / 3.0);
   // state1.xy: horizontal rotation vector; z: support blend; w: 2/5 cm latch.
   float contact = s1.z;
-  float orbitGain = uOrbit * (1.0-contact);
+  float orbitGain = uOrbit * (1.0-contact) * (1.0-under);
   vec2 orbit = transpose(worldXZ) * disp.xz * orbitGain;
   vec3 waterVelocity = vec3(0.0);
   if (abs(s3.w) > 0.01) {
@@ -111,6 +117,7 @@ void main() {
   surfaceTilt = normalTilt(normalize(vec3(-surfaceTilt.y, 1.0, surfaceTilt.x)), 0.34906585);
   float surfaceAngle = length(surfaceTilt);
   if (surfaceAngle > 0.34906585) surfaceTilt *= 0.34906585 / surfaceAngle;
+  surfaceTilt *= 1.0 - under;
   float groundTarget = -1e20;
   vec4 ground = vec4(0.0,1.0,0.0,-1e20);
 #ifdef TILE_TERRAIN_CONTACT
@@ -152,7 +159,7 @@ void main() {
     if (displacedFraction < 1.0) {
       // Hydrostatic draft with exact critically damped relaxation, for both
       // polygons and strips. Stability at drag=0 does not depend on density.
-      float wet = heights[0] + thickness * (0.5 - displacedFraction);
+      float wet = mix(heights[0], 0.0, under) + thickness * (0.5 - displacedFraction) - fate.y;
       float target = mix(wet, max(wet,groundTarget),contact) - r1.x;
       if (disp.y <= ground.w) target = groundTarget-r1.x;
       float frequency = 12.0 / (1.0 + 0.15 * uDrag);
@@ -223,7 +230,7 @@ void main() {
   {
     // Re-evaluate after horizontal integration and tilt: hard floor applies even
     // during the 200 ms blend, in hold, and on the invisible deep seabed.
-    vec2 finalQ = (uFieldMatrix*vec4(r.x+state0.z+pose.x,0.0,r.y+state0.w+pose.y,1.0)).xz;
+    vec2 finalQ = (uFieldMatrix*vec4(r.x+state0.z+pose.x+fate.x,0.0,r.y+state0.w+pose.y+fate.z,1.0)).xz;
     float floorY = polygonSupport(uv,finalQ,worldXZ,state1.xy)-r1.x;
     if (state0.x <= floorY) { state0.x=floorY; state0.y=max(0.0,state0.y); }
     state0.y *= exp(-40.0*contact*uDt);
@@ -342,8 +349,13 @@ export class TileSim {
       depthBuffer: false, generateMipmaps: false,
     })) : [];
     this.runCurrent = 0;
+    // one texel per frame: its fate (frameFate.js) — sink m, break clock s, -, hidden. Read
+    // with texelFetch (no filtering), by the sim and by the tile material alike
+    this.fateTexture = new THREE.DataTexture(new Float32Array(count * 4), 1, count, THREE.RGBAFormat, THREE.FloatType);
+    this.fateTexture.needsUpdate = true;
     /** @type {Record<string, { value: any }>} the field adds its own (uTileMotionLimit) */
     this.uniforms = {
+      uFates: { value: this.fateTexture }, uBreak: { value: new THREE.Vector4(...BREAK_UNIFORM) },
       uRest0: { value: this.rest0 }, uRest1: { value: this.rest1 },
       ...Object.fromEntries(this.target.textures.map((texture, i) => [`uState${i}`, { value: texture }])),
       uRun: { value: this.runTarget?.textures[0] ?? this.runRest },
@@ -383,6 +395,19 @@ export class TileSim {
       });
     });
     if (changed) this.frameTexture.needsUpdate = true;
+  }
+
+  /**
+   * A frame's fate as the tiles take it (frameFate.js fateLook): m under the surface, the
+   * break clock in s, hidden. Uploads only on a change.
+   */
+  setFate(index, sink = 0, clock = 0, hidden = false) {
+    const data = this.fateTexture.image.data, i = index * 4;
+    if (i < 0 || i + 3 >= data.length) return;
+    const next = [Math.fround(sink), Math.fround(clock), 0, hidden ? 1 : 0];
+    if (next.every((v, k) => data[i + k] === v)) return;
+    data.set(next, i);
+    this.fateTexture.needsUpdate = true;
   }
 
   get target() { return this.targets[this.current]; }
@@ -434,6 +459,7 @@ export class TileSim {
 
   dispose() {
     this.frameTexture?.dispose();
+    this.fateTexture.dispose();
     this.rest0.dispose(); this.rest1.dispose(); this.targets.forEach((t) => t.dispose()); this.quad.material.dispose();
     this.runRest.dispose(); this.runTargets.forEach((t) => t.dispose()); this.runQuad?.material.dispose();
   }

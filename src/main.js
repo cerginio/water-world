@@ -26,6 +26,8 @@ import { WaveCaustics } from './water/Caustics.js';
 import { TileField } from './tiles/TileField.js';
 import { TileMiniatures } from './tiles/TileMiniatures.js';
 import { TileRaft } from './tiles/TileRaft.js';
+import { TileFates } from './tiles/TileFates.js';
+import { FATE, KINDS as FATE_KINDS } from './tiles/frameFate.js';
 import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 import { createStoryCatalog } from './catalog/index.js';
@@ -33,7 +35,7 @@ import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { TerrainContact } from './scene/TerrainContact.js';
 import { createWalkerHost } from './walker/index.js';
-import { deckClear } from './walker/deck.js';
+import { deckAtHand, deckClear } from './walker/deck.js';
 import { createWalkerStick, LABELS as STICK_LABELS } from './walker/stick.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
 import { createFrameFocus } from './scene/frameFocus.js';
@@ -314,6 +316,7 @@ async function walkerReady() {
     walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
       action: { hint: () => miniHint() ?? kiteHint(), run: () => miniAction() ?? kiteAction() },
       flight: { hint: flyHint, run: flyAction },
+      fates: { hints: fateHints, run: runFate },
       labels: (navigator.language ?? '').toLowerCase().startsWith('uk') ? STICK_LABELS.uk : STICK_LABELS.en });
     document.body.classList.add('walker-controls');
   }
@@ -406,6 +409,64 @@ function flyHint() {
   if (walkerHost.state.flight) return walkerHost.walker.landing() ? 'land' : null;
   return raft.boarded && raft.kite.up ? 'fly' : null;
 }
+// --- the frame's fates (story-quest Q5) -------------------------------------------------
+// STORY-QUEST-SPEC §2 п.6, Edge §4.4: on a raft, from the air over a frame, or from a deck next
+// to another frame — let it go (Z), sink it (X), let it come apart (C). On the raft itself the
+// fate throws off the raft's weight: the kite lifts the walker on the board first (Q4b). The
+// way back of the latest fate (H: call / raise / gather) and «Leave it so» (L) — from
+// anywhere the walker is: in the air, on another frame, on the shore.
+let fates = null;
+function fatesUpdate(dt) {
+  if (!fates && tiles.loaded) fates = new TileFates(tiles);
+  fates?.update(dt);
+}
+/** The frame a fate would go to now: { id, own } or null (deck.js deckAtHand). */
+function fateTarget() {
+  if (!fates || !raft || walkerHost?.mode !== 'eyes') return null;
+  const s = walkerHost.state;
+  return deckAtHand(raft.decks(), { deckId: raft.deckId, flying: !!s.flight, x: s.x, z: s.z }, FATE.near);
+}
+/** Z / X / C and the touch buttons: 'release', 'sink' or 'break' for the frame at hand. */
+function fateAction(kind) {
+  const target = fateTarget();
+  if (!target) return null;
+  if (target.own) {
+    raft.setKite(true);
+    if (!walkerHost.walker.takeOff(raft.velocity())) return null;
+  }
+  return fates.give(target.id, kind) ? kind : null;
+}
+/** H: the way back of the latest fate; L: «Leave it so». 'call' | 'raise' | 'gather' | 'keep' | null. */
+function undoFate() {
+  if (!fates || !walkerHost || walkerHost.mode === 'off') return null;
+  const hint = fates.undoHint();
+  return hint && fates.undo() ? hint : null;
+}
+function keepFate() {
+  if (!fates || !walkerHost || walkerHost.mode === 'off') return null;
+  return fates.keep() ? 'keep' : null;
+}
+/** The fate buttons now: the fates for the frame at hand (lighter ones first, Edge §4.4), then the way back and «keep». */
+function fateHints() {
+  if (!fates || !walkerHost || walkerHost.mode === 'off') return [];
+  /** @type {string[]} */
+  const names = fateTarget() ? [...FATE_KINDS] : [];
+  const back = fates.undoHint();
+  if (back) names.push(back, 'keep');
+  return names;
+}
+function runFate(name) {
+  const kind = FATE_KINDS.find((k) => k === name);
+  if (kind) return fateAction(kind);
+  return name === 'keep' ? keepFate() : undoFate();
+}
+const FATE_KEYS = { KeyZ: () => fateAction('release'), KeyX: () => fateAction('sink'), KeyC: () => fateAction('break'),
+  KeyH: undoFate, KeyL: keepFate };
+addEventListener('keydown', (e) => {
+  const run = FATE_KEYS[e.code];
+  if (!run || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  if (run()) e.preventDefault();
+});
 addEventListener('keydown', (e) => {
   if (e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
   if (flyAction()) e.preventDefault();
@@ -445,7 +506,12 @@ const stationPoses = {
       fov: camera.fov, aspect: camera.aspect });
   },
 };
-const storyFrames = createFrameFocus({ tiles, camera });
+// a frame still a miniature (on the shore, in the hands, unfolding) is drawn there, not on
+// the field: «Мить» flies to the miniature (story-quest Q5 review)
+const storyFrames = createFrameFocus({ tiles, camera, locate: (entry) => {
+  const item = minis?.active ? minis.get(entry.id) : null;
+  return item && item.state !== 'water' ? new THREE.Box3().setFromObject(item.root) : null;
+} });
 const stations = createStationRail({
   rig,
   poseOf: (id) => stationPoses[id]?.() ?? null,
@@ -465,6 +531,11 @@ gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk
 gui.add({ miniAction }, 'miniAction').name('take · put (G)');
 gui.add({ kiteAction }, 'kiteAction').name('kite · let go (K)');
 gui.add({ flyAction }, 'flyAction').name('take off · land (Space)');
+gui.add({ release: () => fateAction('release') }, 'release').name('let it go (Z)');
+gui.add({ sink: () => fateAction('sink') }, 'sink').name('sink it (X)');
+gui.add({ break: () => fateAction('break') }, 'break').name('let it come apart (C)');
+gui.add({ undoFate }, 'undoFate').name('call · raise · gather (H)');
+gui.add({ keepFate }, 'keepFate').name('leave it so (L)');
 
 fSun = gui.addFolder('Sun & sky');
 // the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
@@ -1029,6 +1100,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const px = new Uint8Array(size.x * size.y * 4);
   for (let i = 0; i < frames; i++) {
+    fatesUpdate(dt);
     raftUpdate(dt);
     walkerHost?.update(dt, i * dt * 1000);
     raft?.pose(dt, walkerHost?.mode === 'off' ? null : walkerHost?.state);
@@ -1055,6 +1127,7 @@ window.app = {
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   get minis() { return minis; }, layoutMinis, miniAction, miniHint,
   get raft() { return raft; }, kiteAction, kiteHint, flyAction, flyHint,
+  get fates() { return fates; }, fateAction, fateTarget, fateHints, undoFate, keepFate,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -1146,6 +1219,7 @@ function setResolution(r) {
 function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
+  fatesUpdate(dt);
   raftUpdate(dt);
   walkerHost?.update(dt, now);
   raft?.pose(dt, walkerHost && walkerHost.mode !== 'off' ? walkerHost.state : null);

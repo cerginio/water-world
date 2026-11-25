@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TILE_TILT_GLSL } from './tileTilt.js';
 import { TILE_VERTICAL_LIMIT } from './tileBounds.js';
+import { TILE_FATE_GLSL } from './frameFate.js';
 
 const PARS = /* glsl */`
 uniform sampler2D uRest0, uRest1, uState0, uState1;
@@ -12,6 +13,7 @@ attribute float aTile;
 attribute vec3 aOffset;
 #endif
 ${TILE_TILT_GLSL}
+${TILE_FATE_GLSL}
 `;
 const INIT = /* glsl */`
 #ifdef USE_INSTANCING
@@ -25,6 +27,9 @@ const INIT = /* glsl */`
   vec4 tileState = texelFetch(uState0, tileUV, 0);
   tileState.x = clamp(tileState.x, -${TILE_VERTICAL_LIMIT.toFixed(1)}, ${TILE_VERTICAL_LIMIT.toFixed(1)});
   tileState.zw *= min(1.0, uTileMotionLimit / max(length(tileState.zw), 0.00001));
+  // the frame's fate (frameFate.js): a broken tile's drift; the sim already has its depth
+  vec4 tileFateNow = tileFate(fatePiece(tileId, tileRest1), frameFate(int(tileRest1.w) >> 2));
+  tileState.zw += tileFateNow.xz;
   vec4 tileOrientation = texelFetch(uState1, tileUV, 0);
   mat3 tileRotation = tileTilt(tileOrientation.xy);
   float surfaceOffset = mix(aSurfaceOffset, min(aSurfaceOffset, 0.001), tileOrientation.z);
@@ -63,9 +68,9 @@ export function patchTileMaterial(material, uniforms, tileBase = 0) {
 #endif`);
     // Render-only bit: hidden promotions keep their GPU simulation alive.
     vertex = vertex.replace('#include <clipping_planes_vertex>', `
-      if ((int(tileRest1.w) & 2) != 0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      if ((int(tileRest1.w) & 2) != 0 || tileFateNow.w > 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       #include <clipping_planes_vertex>`);
     shader.vertexShader = vertex;
   };
-  material.customProgramCacheKey = () => `${previousKey}-tile-state-v5`;
+  material.customProgramCacheKey = () => `${previousKey}-tile-state-v7`;
 }

@@ -31,10 +31,21 @@ export function frameCorners(entry, matrix, shift = new THREE.Vector3()) {
   return out;
 }
 
+/** The eight corners of a world box. @param {THREE.Box3} box */
+export function boxCorners(box) {
+  const out = [];
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) out.push(new THREE.Vector3(x, y, z));
+  return out;
+}
+
 /**
- * @param {{ tiles: any, camera: THREE.PerspectiveCamera }} options
+ * @param {{ tiles: any, camera: THREE.PerspectiveCamera,
+ *   locate?: (entry: any) => THREE.Box3 | null }} options
+ * `locate` — where the frame is drawn now when that is not the field (story-quest: a
+ * miniature on the shore or in the hands; the field's frame is hidden then and still lies
+ * where the story put it — the camera flew there), as a world box; null — the field's frame.
  */
-export function createFrameFocus({ tiles, camera }) {
+export function createFrameFocus({ tiles, camera, locate = () => null }) {
   const live = { entry: null, center: null, at: -Infinity, pending: false };
 
   /**
@@ -50,6 +61,7 @@ export function createFrameFocus({ tiles, camera }) {
   }
 
   const drifting = () => tiles.params.mode === 'drift';
+  const located = (entry) => { const b = locate(entry); return b && !b.isEmpty() ? b : null; };
 
   async function measure(entry) {
     const box = await tiles.frameFootprint(entry).catch((error) => { console.error('[frame focus]', error); return null; });
@@ -63,11 +75,20 @@ export function createFrameFocus({ tiles, camera }) {
   async function pose(i) {
     const entry = list()[i];
     if (!entry) return null;
+    const view = { fov: camera.fov, aspect: camera.aspect };
+    const box = located(entry);
+    if (box) {
+      // a miniature: the story view direction onto what is drawn, lifted to where it lies
+      const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+      const start = storyPose({ center: new THREE.Vector3(c.x, 0, c.z), extent: new THREE.Vector2(size.x, size.z),
+        yawDeg: tiles.params.fieldYaw, ...view });
+      start.position.y += c.y; start.target.y = c.y;
+      return fitPose(start, boxCorners(box), view);
+    }
     tiles.group.updateWorldMatrix(true, false);
     const matrix = tiles.group.matrixWorld, rest = frameRestCenter(entry, matrix);
     const center = (drifting() && await measure(entry)) || rest;
     if (drifting()) Object.assign(live, { entry, center: center.clone(), at: performance.now() });
-    const view = { fov: camera.fov, aspect: camera.aspect };
     const start = storyPose({ center, extent: entry.bounds.getSize(new THREE.Vector2()), yawDeg: tiles.params.fieldYaw, ...view });
     return fitPose(start, frameCorners(entry, matrix, center.clone().sub(rest)), view);
   }
@@ -78,7 +99,15 @@ export function createFrameFocus({ tiles, camera }) {
    */
   function aim(i) {
     const entry = list()[i];
-    if (!entry || !drifting()) return null;
+    if (!entry) return null;
+    // a miniature carried along, or a placed frame (a raft, a fate) moved on the CPU: no GPU read
+    const box = located(entry);
+    if (box) return box.getCenter(new THREE.Vector3());
+    if (!drifting()) {
+      if (entry.mode !== 'placed') return null;
+      tiles.group.updateWorldMatrix(true, false);
+      return frameRestCenter(entry, tiles.group.matrixWorld);
+    }
     if (live.entry !== entry) Object.assign(live, { entry, center: null, at: -Infinity });
     if (!live.pending && performance.now() - live.at >= REFRESH_MS) {
       live.pending = true;

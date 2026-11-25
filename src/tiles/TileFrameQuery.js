@@ -4,6 +4,7 @@ import { TILE_TILT_GLSL } from './tileTilt.js';
 import { TERRAIN_CONTACT_GLSL } from '../scene/TerrainContact.js';
 import { TILE_CONTACT_GLSL } from './tileContact.js';
 import { TILE_VERTICAL_LIMIT } from './tileBounds.js';
+import { TILE_FATE_GLSL } from './frameFate.js';
 
 // Reduce current GPU geometry to four bounds or one placement verdict. Only the
 // final 1x1 pixel is read asynchronously; no snapshot of the frame reaches CPU.
@@ -20,6 +21,7 @@ uniform float uRadius;
 uniform float uWaterHeight;
 uniform float uTileMotionLimit;
 ${TILE_TILT_GLSL}
+${TILE_FATE_GLSL}
 ${TERRAIN_CONTACT_GLSL}
 ${TILE_CONTACT_GLSL}
 out vec4 result;
@@ -86,6 +88,10 @@ void main(){
   vec4 s=texelFetch(uState0,uv,0),s1=texelFetch(uState1,uv,0);
   s.x=clamp(s.x,-${TILE_VERTICAL_LIMIT.toFixed(1)},${TILE_VERTICAL_LIMIT.toFixed(1)});
   s.zw*=min(1.0,uTileMotionLimit/max(length(s.zw),0.00001));
+  // the frame's fate as the material draws it (frameFate.js): a gone frame has no tiles
+  vec4 fate=tileFate(fatePiece(id,r1),frameFate(uFrame));
+  if(fate.w>0.5)return;
+  s.zw+=fate.xz;
   if(uMode==3){
     vec2 c=(uWorld*vec4(r.x+s.z+uOffset.x,0.0,r.y+s.w+uOffset.y,1.0)).xz;
     if(distance(c,uPoint)>uRadius+r.w)return;

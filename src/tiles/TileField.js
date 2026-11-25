@@ -45,6 +45,8 @@ export class TileField {
     this.frameRegistry = new TileFrames();
     /** frame ids a pointer may not grab: the raft under the walker (TileRaft, story-quest Q4) */
     this.lockedFrames = new Set();
+    /** frame ids under a fate (TileFates, story-quest Q5): going their own way, not grabbed */
+    this.busyFrames = new Set();
     this.frameMatrix = new THREE.Matrix4();
     this.extent = new THREE.Vector2(85, 30);   // rest bounds in metres; story-sized until a model is loaded
     this.radius = 45;      // circumscribed circle: the open-water test in place()

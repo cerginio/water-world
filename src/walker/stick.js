@@ -10,6 +10,9 @@
 // `action.hint()` names one (the host of the miniatures decides, the button only words it).
 // Q4: the same button puts the kite up / lets it go on a raft ('kite' / 'unkite').
 // Q4b: an optional third button, `flight` — «take off» on the board / «land» ('fly' / 'land').
+// Q5: an optional column of the frame's fates, `fates` — `hints()` names the buttons now
+// (release / sink / break for the frame at hand, call / raise / gather and keep for the open
+// fate), `run(name)` does one. Under «Leave it so» a quiet line says what it means (Edge §4.4).
 //
 // The stick: x to the right, y forward (screen up), both -1..1, length ≤ 1. Inside the
 // dead zone it is 0; past it the length starts at 0 again, so there is no jump at the
@@ -33,12 +36,12 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
 
 /**
  * @param {{ parent?: HTMLElement, host: { mode: string, setStick: (v: {x: number, y: number}) => void },
- *   onToggle: () => void, labels?: { stick: string, leave: string, enter: string, take: string, put: string,
- *     kite: string, unkite: string, fly: string, land: string },
+ *   onToggle: () => void, labels?: Record<string, string>,
  *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | null, run: () => unknown },
- *   flight?: { hint: () => 'fly' | 'land' | null, run: () => unknown } }} options
+ *   flight?: { hint: () => 'fly' | 'land' | null, run: () => unknown },
+ *   fates?: { hints: () => string[], run: (name: string) => unknown } }} options
  */
-export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action, flight }) {
+export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action, flight, fates }) {
   const root = document.createElement('div');
   root.id = 'walkerControls';
   const zone = document.createElement('div');
@@ -51,8 +54,23 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-toggle' });
   const act = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-action', hidden: true });
   const fly = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-fly', hidden: true });
-  root.append(zone, toggle, act, fly);
+  const column = Object.assign(document.createElement('div'), { className: 'walker-fates', hidden: true });
+  const note = Object.assign(document.createElement('p'), { className: 'walker-note', hidden: true });
+  root.append(zone, toggle, act, fly, column);
   parent.append(root);
+  /** @type {Map<string, HTMLButtonElement>} */
+  const fateButtons = new Map();
+  const fateButton = (name) => {
+    let b = fateButtons.get(name);
+    if (!b) {
+      b = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-fate', textContent: labels[name] ?? name });
+      b.dataset.action = name;
+      b.dataset.undo = String(UNDOING.has(name));
+      b.addEventListener('click', () => fates?.run(name));
+      fateButtons.set(name, b);
+    }
+    return b;
+  };
 
   let drag = null;
   const set = (dx, dy) => {
@@ -103,6 +121,18 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
     const flyWord = hop ? labels[hop] : '';
     if (fly.textContent !== flyWord) fly.textContent = flyWord;
     fly.dataset.action = hop ?? '';
+    const names = mode === 'off' ? [] : fates?.hints() ?? [];
+    const key = names.join(' ');
+    if (column.dataset.names !== key) {
+      column.dataset.names = key;
+      column.replaceChildren(...names.map(fateButton));
+      if (names.includes('keep')) {
+        note.textContent = labels.keepNote;
+        column.append(note);
+      }
+      note.hidden = !names.includes('keep');
+      column.hidden = !names.length;
+    }
   }
   update();
   return {
@@ -119,9 +149,18 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   };
 }
 
+/** The fates' ways back and «keep»: drawn softer than the fates themselves. */
+const UNDOING = new Set(['call', 'raise', 'gather', 'keep']);
+
 export const LABELS = Object.freeze({
   en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down',
-    kite: 'Kite', unkite: 'Let go of the kite', fly: 'Take off', land: 'Land' },
+    kite: 'Kite', unkite: 'Let go of the kite', fly: 'Take off', land: 'Land',
+    release: 'Let it go', sink: 'Sink it', break: 'Let it come apart',
+    call: 'Call it back', raise: 'Raise it', gather: 'Gather it', keep: 'Leave it so',
+    keepNote: 'The world will remember this.' },
   uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти',
-    kite: 'Кайт', unkite: 'Відпустити кайт', fly: 'Злетіти', land: 'Сісти' },
+    kite: 'Кайт', unkite: 'Відпустити кайт', fly: 'Злетіти', land: 'Сісти',
+    release: 'Відпустити', sink: 'Втопити', break: 'Дати розпастися',
+    call: 'Покликати', raise: 'Підняти', gather: 'Зібрати', keep: 'Залишити так',
+    keepNote: 'Світ запам’ятає це.' },
 });
