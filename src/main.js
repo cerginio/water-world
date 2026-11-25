@@ -24,6 +24,7 @@ import { FLOATER_KINDS } from './scene/floaterMeshes.js';
 import { FloaterShadow } from './scene/floaterShadow.js';
 import { WaveCaustics } from './water/Caustics.js';
 import { TileField } from './tiles/TileField.js';
+import { TileMiniatures } from './tiles/TileMiniatures.js';
 import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 import { createStoryCatalog } from './catalog/index.js';
@@ -306,6 +307,7 @@ async function walkerReady() {
   const stickArg = args.get('stick');
   if (!walkerStick && (args.has('stick') ? stickArg !== '0' : mobile)) {
     walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
+      action: { hint: miniHint, run: miniAction },
       labels: (navigator.language ?? '').toLowerCase().startsWith('uk') ? STICK_LABELS.uk : STICK_LABELS.en });
     document.body.classList.add('walker-controls');
   }
@@ -332,6 +334,37 @@ async function startWalk({ overview = true } = {}) {
   host.enterEyes({ approach: overview ? 4 : true });
   return host;
 }
+// --- miniatures (story-quest Q3) -------------------------------------------------------
+// With ?minis a loaded story lies on the island as miniatures around the walker's spawn
+// (seed = the story id); G takes the nearest one within reach or puts the carried one down —
+// under the sea it unfolds into the frame on the water (TileMiniatures.js).
+let minis = null;
+/** The loaded story's frames → miniatures (again, all of them); null without a story. */
+function layoutMinis() {
+  if (!tiles.loaded) { minis?.clear(); return null; }
+  minis ??= new TileMiniatures(tiles, { ground: walkGround, scene });
+  const spawn = walkerSpawn();
+  minis.layout(String(tiles.source), { x: spawn.x, z: spawn.z });
+  return minis;
+}
+/** G and the touch button: take the nearest miniature or put the carried one down. */
+function miniAction() {
+  if (!minis?.active || walkerHost?.mode !== 'eyes') return null;
+  const s = walkerHost.state;
+  if (minis.carried) return minis.put(s);
+  const near = minis.nearest(s.x, s.z);
+  return near ? (minis.take(near.frameId, s) && 'carried') : null;
+}
+/** What the button would do now: 'take', 'put' or null. */
+function miniHint() {
+  if (!minis?.active || walkerHost?.mode !== 'eyes') return null;
+  const s = walkerHost.state;
+  return minis.carried ? 'put' : minis.nearest(s.x, s.z) ? 'take' : null;
+}
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyG' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  if (miniAction()) e.preventDefault();
+});
 addEventListener('keydown', (e) => {
   if (e.code !== 'KeyV' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
   walk().catch((err) => console.error('[walker]', err));
@@ -376,6 +409,7 @@ const techPanels = createTechPanels({ gui, perf: document.getElementById('perf')
 const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk').name('walk · eyes (V)');
+gui.add({ miniAction }, 'miniAction').name('take · put (G)');
 
 fSun = gui.addFolder('Sun & sky');
 // the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
@@ -501,6 +535,7 @@ async function loadTiles(source) {
   frameController = frameController.options(['all', ...tiles.frames]).onChange(rebuildTiles);
   frameController.updateDisplay();
   if (tiles.loaded) placeTiles();
+  if (args.has('minis')) layoutMinis();
   saveTilesUrl();
 }
 async function rebuildTiles() {
@@ -940,6 +975,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
   const px = new Uint8Array(size.x * size.y * 4);
   for (let i = 0; i < frames; i++) {
     walkerHost?.update(dt, i * dt * 1000);
+    minis?.update(dt, walkerHost?.mode === 'off' ? null : walkerHost?.state);
     rig.update(dt);
     renderFrame(dt);
     if (i === frames - 1) {
@@ -960,6 +996,7 @@ window.app = {
   still,
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
+  get minis() { return minis; }, layoutMinis, miniAction, miniHint,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -1052,6 +1089,7 @@ function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   walkerHost?.update(dt, now);
+  minis?.update(dt, walkerHost?.mode === 'off' ? null : walkerHost?.state);
   walkerStick?.update();
   rig.update(dt);
   stations.update();

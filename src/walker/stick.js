@@ -6,6 +6,9 @@
 // (HANDOFF «Персонаж», Q0), and the part worth sharing — a deflection from a drag — is the
 // few lines of stickVector below.
 //
+// Q3: an optional second button for the miniatures — «take» / «put down», shown only while
+// `action.hint()` names one (the host of the miniatures decides, the button only words it).
+//
 // The stick: x to the right, y forward (screen up), both -1..1, length ≤ 1. Inside the
 // dead zone it is 0; past it the length starts at 0 again, so there is no jump at the
 // rim of the dead zone. The head turns by a drag on the scene (keyboard.js), not here.
@@ -28,9 +31,10 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
 
 /**
  * @param {{ parent?: HTMLElement, host: { mode: string, setStick: (v: {x: number, y: number}) => void },
- *   onToggle: () => void, labels?: { stick: string, leave: string, enter: string } }} options
+ *   onToggle: () => void, labels?: { stick: string, leave: string, enter: string, take: string, put: string },
+ *   action?: { hint: () => 'take' | 'put' | null, run: () => unknown } }} options
  */
-export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en }) {
+export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action }) {
   const root = document.createElement('div');
   root.id = 'walkerControls';
   const zone = document.createElement('div');
@@ -41,7 +45,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   knob.className = 'walker-knob';
   zone.append(knob);
   const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-toggle' });
-  root.append(zone, toggle);
+  const act = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-action', hidden: true });
+  root.append(zone, toggle, act);
   parent.append(root);
 
   let drag = null;
@@ -70,6 +75,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   zone.addEventListener('lostpointercapture', up);
   const click = () => onToggle();
   toggle.addEventListener('click', click);
+  const run = () => action?.run();
+  act.addEventListener('click', run);
   addEventListener('blur', release);
 
   /** The button's words follow the host's mode; the controls show once the walker is placed. */
@@ -79,6 +86,11 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
     const text = mode === 'standing' ? labels.enter : labels.leave;
     if (toggle.textContent !== text) toggle.textContent = text;
     zone.dataset.mode = mode;
+    const hint = action?.hint() ?? null;
+    act.hidden = !hint;
+    const word = hint ? labels[hint] : '';
+    if (act.textContent !== word) act.textContent = word;
+    act.dataset.action = hint ?? '';
   }
   update();
   return {
@@ -88,12 +100,13 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
       release();
       removeEventListener('blur', release);
       toggle.removeEventListener('click', click);
+      act.removeEventListener('click', run);
       root.remove();
     },
   };
 }
 
 export const LABELS = Object.freeze({
-  en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes' },
-  uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима' },
+  en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down' },
+  uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти' },
 });
