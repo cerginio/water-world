@@ -20,6 +20,7 @@ export function readState(world) {
   const carried = minis?.carried ?? null;
   return {
     story: world.story(),
+    fingerprint: world.fingerprint?.() ?? null,
     ready: world.ready(),
     mode: host?.mode ?? 'off',
     walker: s && { x: cm(s.x), y: cm(s.y), z: cm(s.z), yaw: cm(s.yaw), pitch: cm(s.pitch),

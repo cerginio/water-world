@@ -6,6 +6,9 @@ import { mountShell } from '../shared/shell.js';
 import { createSceneHost } from '../shared/sceneHost.js';
 import { renderZones } from '../shared/zones.js';
 import { storyZone, weatherZone } from '../shared/storyZones.js';
+import { createQuestLayer } from '../shared/questZones.js';
+import { openQuestStore } from '../shared/questStore.js';
+import questData from '../shared/quests.json';
 import uiMap from './ui-map.json';
 
 const TEXT = {
@@ -48,6 +51,8 @@ let catalogState = story ? { state: 'pending', story, error: null } : { state: '
 
 const shell = mountShell({ key: 'story-quest', title: 'Story Quest', onLocale: () => { draw(); words(); } });
 const host = createSceneHost({ iframe: shell.iframe });
+// the quest layer (spec §3): facts from the scene's events, the log and the cards on this device
+const quests = createQuestLayer({ host, store: openQuestStore('story-quest'), data: questData, locale: () => shell.locale });
 
 function open(id) {
   story = id;
@@ -104,8 +109,13 @@ host.on((name, detail) => {
 const zoneRender = {
   story: storyZone({ host, current: () => story, pick: open }),
   weather: weatherZone({ host }),
+  quests: quests.quests,
+  cards: quests.cards,
 };
 function draw() { renderZones(shell.zones, uiMap, { locale: shell.locale, render: zoneRender }); }
+
+// a handle for probe-story-quests (the page's own state; the scene's is read through the contract)
+Object.assign(window, { storyQuest: { host, quests } });
 
 document.body.dataset.storyState = catalogState.state;
 host.load({ story, flags });

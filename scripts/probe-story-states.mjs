@@ -44,12 +44,12 @@ const runCard = async (page, id, click = true) => {
 };
 
 try {
-  // 1. the stand: five zones, the catalog by folders with the local fixtures in dev
+  // 1. the stand: its zones, the catalog by folders with the local fixtures in dev
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   watch(page);
   await page.goto(`${base}products/quest-demo-qa/?story=${STORY}`);
   const zones = await page.$$eval('details.zone', (d) => d.map((x) => x.dataset.zone));
-  assert.deepEqual(zones, ['story', 'states', 'weather', 'quests', 'tech']);
+  assert.deepEqual(zones, ['story', 'states', 'weather', 'quests', 'cards', 'tech']);
   await page.click('details[data-zone="story"] > summary');
   await page.waitForSelector('.story-pick', { timeout: 90000 });
   const stories = await page.$$eval('.story-pick', (b) => b.map((x) => x.dataset.story));
@@ -144,7 +144,7 @@ try {
   const field = await scene(sq).evaluate(() => ({ loaded: app.tiles.loaded, frames: app.tiles.frames.length, story: app.catalog.story?.id }));
   report.storyQuest = { field, zones: await sq.$$eval('details.zone', (d) => d.map((x) => x.dataset.zone)) };
   assert.ok(field.loaded && field.story === STORY, JSON.stringify(field));
-  assert.deepEqual(report.storyQuest.zones, ['story', 'weather']);
+  assert.deepEqual(report.storyQuest.zones, ['story', 'quests', 'cards', 'weather']);
   await sq.screenshot({ path: join(out, 'story-quest.png') });
   await sq.goto(`${base}products/story-quest/`);
   await sq.waitForSelector('#sceneStatus button[data-story]', { timeout: 90000 });

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "tasks": [
+    { "id": "find",
+      "title": { "uk": "Знайти частини", "en": "Find the parts" },
+      "fact": { "uk": "Знайдено {k} з {n}", "en": "Found {k} of {n}" } },
+    { "id": "water",
+      "title": { "uk": "Повернути воді", "en": "Return them to the water" },
+      "fact": { "uk": { "one": "{k} частина у воді", "few": "{k} частини у воді", "many": "{k} частин у воді", "other": "{k} частини у воді" },
+                "en": { "one": "{k} part in the water", "other": "{k} parts in the water" } } },
+    { "id": "sea",
+      "title": { "uk": "Вийти в море", "en": "Go out to sea" },
+      "fact": { "uk": "У морі", "en": "At sea" } },
+    { "id": "fate",
+      "title": { "uk": "Вирішити долю кадру", "en": "Decide a frame's fate" },
+      "fact": {
+        "release": { "uk": "відпущено {k}", "en": "released {k}" },
+        "sink": { "uk": "втоплено {k}", "en": "sunk {k}" },
+        "break": { "uk": "розпалось {k}", "en": "fallen apart {k}" },
+        "kept": { "uk": "залишено так {k}", "en": "left as it is {k}" }
+      } },
+    { "id": "note",
+      "title": { "uk": "Записати думку", "en": "Write a thought down" },
+      "fact": { "uk": { "one": "{k} картка", "few": "{k} картки", "many": "{k} карток", "other": "{k} картки" },
+                "en": { "one": "{k} card", "other": "{k} cards" } } }
+  ],
+  "prompts": [
+    { "id": "feel", "uk": "Що я відчуваю зараз?", "en": "What do I feel right now?" },
+    { "id": "think", "uk": "Що я думаю зараз?", "en": "What am I thinking right now?" },
+    { "id": "part", "uk": "Що ця частина для мене?", "en": "What is this part to me?" },
+    { "id": "let", "uk": "Що я хочу з нею зробити?", "en": "What do I want to do with it?" },
+    { "id": "after", "uk": "Що змінилось після цього?", "en": "What changed after this?" }
+  ],
+  "manualPrompt": { "id": "how", "uk": "Як саме і чому?", "en": "How exactly, and why?" }
+}

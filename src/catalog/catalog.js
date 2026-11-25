@@ -37,6 +37,22 @@ export function errorCode(error) {
   return 'unknown';
 }
 
+/**
+ * The model's fingerprint (spec §3.3: a product keys its cards by the story's slug + this): FNV-1a
+ * 32 over the model's JSON. The same file gives the same print; a story republished under the same
+ * slug gives another, so its cards are not bound to frames that changed.
+ * @param {unknown} model @returns {string}
+ */
+export function fingerprintOf(model) {
+  const text = JSON.stringify(model) ?? '';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `fnv1a-${(h >>> 0).toString(16).padStart(8, '0')}-${text.length.toString(36)}`;
+}
+
 const abortError = (signal) => signal.reason ?? new DOMException('Aborted', 'AbortError');
 
 /**
@@ -50,6 +66,7 @@ export function createCatalog({ runtime, fetcher = (...a) => fetch(...a), folder
   const catalog = {
     state: /** @type {'idle' | 'pending' | 'ready' | 'failed'} */ ('idle'),
     story: null,          // { id, folder, slug } of the last load()
+    fingerprint: null,    // fingerprintOf(model) of the story ready, null otherwise
     error: null,          // { code, message } when state is 'failed'
     fallback: false,      // the last list() came from the local fixtures
     folders: known,
@@ -59,8 +76,8 @@ export function createCatalog({ runtime, fetcher = (...a) => fetch(...a), folder
     list, load,
   };
 
-  function set(state, story, error = null) {
-    Object.assign(catalog, { state, story, error });
+  function set(state, story, error = null, fingerprint = null) {
+    Object.assign(catalog, { state, story, error, fingerprint });
     events.dispatchEvent(Object.assign(new Event('change'), { detail: { state, story, error } }));
   }
 
@@ -132,8 +149,9 @@ export function createCatalog({ runtime, fetcher = (...a) => fetch(...a), folder
         if (current === own) set('failed', story, { code: errorCode(e), message: String(e?.message ?? e) });
         throw Object.assign(new Error(String(e?.message ?? e)), { code: errorCode(e), cause: e });
       }
-      if (current === own) set('ready', story);
-      return { id: story.id, model, world: null, sidecar: null, fingerprint: null, story };
+      const fingerprint = fingerprintOf(model);
+      if (current === own) set('ready', story, null, fingerprint);
+      return { id: story.id, model, world: null, sidecar: null, fingerprint, story };
     } finally {
       signal?.removeEventListener('abort', onAbort);
       if (current === own) current = null;

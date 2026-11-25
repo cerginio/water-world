@@ -5,7 +5,7 @@
 /**
  * @typedef {{
  *   host: any, raft: any, fates: any, minis: any,
- *   ready: () => boolean, failed: () => string | null, story: () => string | null,
+ *   ready: () => boolean, failed: () => string | null, story: () => string | null, fingerprint: () => string | null,
  *   ensureHost: () => Promise<any>,
  *   ground: (x: number, z: number) => ({ height: number } | null),
  *   spawn: () => { x: number, z: number, yaw: number },
@@ -34,6 +34,7 @@ export function worldFromApp({ app, spawn }) {
     ready: () => !!(app.tiles.loaded && app.raft && app.fates),
     failed: () => (app.catalog.state === 'failed' ? app.catalog.error?.code ?? 'unknown' : null),
     story: () => app.catalog.story?.id ?? null,
+    fingerprint: () => app.catalog.fingerprint ?? null,
     // the walker host without the overview flight: startWalk() resolves once it is there
     ensureHost: async () => app.walker ?? app.startWalk({ overview: false }),
     ground: app.ground,

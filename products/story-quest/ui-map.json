@@ -1,6 +1,8 @@
 {
   "zones": [
     { "id": "story", "title": { "uk": "Історія", "en": "Story" } },
+    { "id": "quests", "title": { "uk": "Квести", "en": "Quests" } },
+    { "id": "cards", "title": { "uk": "Картки", "en": "Cards" } },
     { "id": "weather", "title": { "uk": "Погода", "en": "Weather" }, "open": false }
   ]
 }

@@ -1,12 +1,15 @@
 // quest-demo-qa — the QA stand of scene states (docs/story-quest/quest-demo-qa.md; STORY-QUEST-SPEC
 // §4.4). One scene in one iframe; the zones: Story, States (the cards of states.json), Weather,
-// Quests (empty until Q6), Tech. A card reloads the scene and brings it to its state by the
+// Quests and Cards (the product's quest layer, Q6), Tech. A card reloads the scene and brings it to its state by the
 // contract's commands alone; ?card=<id> opens the stand in that state. Nothing of src/** is
 // imported and the iframe's window.app is never read (guard BOUNDARY-5).
 import { mountShell } from '../shared/shell.js';
 import { createSceneHost } from '../shared/sceneHost.js';
 import { renderZones, t } from '../shared/zones.js';
 import { storyZone, weatherZone } from '../shared/storyZones.js';
+import { createQuestLayer } from '../shared/questZones.js';
+import { openQuestStore } from '../shared/questStore.js';
+import questData from '../shared/quests.json';
 import { checkCards, runCard } from './cards.js';
 import uiMap from './ui-map.json';
 import data from './states.json';
@@ -28,6 +31,8 @@ let runId = 0;
 
 const shell = mountShell({ key: 'quest-demo-qa', title: 'quest-demo-qa', onLocale: () => draw() });
 const host = createSceneHost({ iframe: shell.iframe });
+// the same quest layer as the product, its own database: a card's facts show up as the product's would
+const quests = createQuestLayer({ host, store: openQuestStore('quest-demo-qa'), data: questData, locale: () => shell.locale });
 const el = (tag, props = {}, ...children) => {
   const node = Object.assign(document.createElement(tag), props);
   node.append(...children);
@@ -142,12 +147,14 @@ const zoneRender = {
   story: storyZone({ host, current: () => story ?? active?.card.story ?? null, pick: openStory, local: true }),
   states: (body) => { statesBody = body; drawCards(); },
   weather: weatherZone({ host }),
+  quests: quests.quests,
+  cards: quests.cards,
   tech: techZone,
 };
 function draw() { renderZones(shell.zones, uiMap, { locale: shell.locale, render: zoneRender }); }
 
 // the stand's own debugging handle for probe-story-states (the stand reads nothing of the scene's)
-Object.assign(window, { questDemo: { host, cards: data.cards, run: (id) => run(data.cards.find((c) => c.id === id)) } });
+Object.assign(window, { questDemo: { host, quests, cards: data.cards, run: (id) => run(data.cards.find((c) => c.id === id)) } });
 
 // the scene first: the zones ask it (the catalog) as they are drawn
 const first = data.cards.find((c) => c.id === params.get('card'));

@@ -39,7 +39,7 @@ export function startEmbed({ app, spawn, target = window }) {
     for (const type of RAFT_EVENTS) world.raft.addEventListener(type, (e) => server.emit(`raft.${type}`, plain(e.detail)));
     for (const type of MINI_EVENTS) world.minis?.addEventListener(type, (e) => server.emit(`minis.${type}`, plain(e.detail)));
     world.fates.addEventListener('change', (e) => server.emit('fate.change', plain(e.detail)));
-    server.emit('scene.ready', { story: world.story() });
+    server.emit('scene.ready', { story: world.story(), fingerprint: world.fingerprint() });
   }).catch((err) => server.emit('scene.failed', { reason: err.reason ?? 'failed', message: String(err.message) }));
   return { server, commands };
 }

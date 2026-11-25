@@ -96,10 +96,14 @@ describe('contract client', () => {
 });
 
 describe('panel zones', () => {
-  it('the stand has five zones, the product two of them (Story and Weather)', () => {
-    expect(zonesOf(standMap, 'uk').map((z) => z.id)).toEqual(['story', 'states', 'weather', 'quests', 'tech']);
-    expect(zonesOf(productMap, 'en').map((z) => z.id)).toEqual(['story', 'weather']);
-    expect(zonesOf(standMap, 'en').find((z) => z.id === 'quests').empty).toMatch(/Q6/);
+  // an invariant, not an inventory (spec §4.4, §8 Q7): the product is the stand without its
+  // technical zones; both carry the quest layer. Adding a zone to both is a legal change.
+  it('the product\'s zones are the stand\'s without States and Tech; both have Quests and Cards', () => {
+    const stand = zonesOf(standMap, 'uk').map((z) => z.id), product = zonesOf(productMap, 'en').map((z) => z.id);
+    expect(product.filter((id) => !stand.includes(id))).toEqual([]);
+    expect(product).not.toContain('states');
+    expect(product).not.toContain('tech');
+    for (const ids of [stand, product]) expect(ids).toEqual(expect.arrayContaining(['story', 'quests', 'cards', 'weather']));
   });
 
   it('a map with a zone twice or without an id is refused', () => {

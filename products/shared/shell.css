@@ -67,3 +67,22 @@ body[data-panel-open="true"] .panel-open { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .product-workspace, .product-panel { transition: none; }
 }
+
+/* the quest layer (questZones.js): tasks with their facts, the cards */
+.quests { display: grid; gap: 6px; }
+.quest { background: rgba(255, 255, 255, .7); border-radius: 8px; padding: 6px 8px; display: grid; gap: 4px; }
+.quest-title { display: flex; align-items: center; gap: 8px; min-height: 32px; font-weight: 600; }
+.quest-title input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
+.quest-fact { color: #45515c; padding-left: 30px; }
+.quest-actions, .card-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.quest-actions button { min-height: 32px; padding: 2px 8px; font-size: 12px; }
+.quest-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border-radius: 6px; background: #e0f2fe; }
+.card-editor { display: grid; gap: 6px; padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, .75); }
+.card-editor[hidden] { display: none; }
+.card-field { display: grid; gap: 2px; color: #45515c; }
+.card-field textarea { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid #687580; resize: vertical; min-height: 80px; color: var(--ink); }
+.cards { display: grid; gap: 6px; }
+.note-card { background: rgba(255, 255, 255, .7); border-radius: 8px; padding: 6px 8px; display: grid; gap: 2px; }
+.note-head { font-weight: 600; }
+.note-text { margin: 2px 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.quest-title input[data-auto="true"] { cursor: default; }
