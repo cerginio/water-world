@@ -42,7 +42,7 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
   "covers": ["QA-Q4-3", "QA-Q4-4", "QA-Q5a-1"],
   "story": "test-2025/my-day-3-moments",
   "flags": ["walk", "minis"],
-  "weather": { "preset": "clear" },
+  "weather": { "preset": "calm" },
   "steps": [
     { "cmd": "minis.hydrate", "args": { "frame": 0 } },
     { "cmd": "raft.board", "args": { "frame": 0 } },
@@ -53,6 +53,13 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 }
 ```
 
+- **`weather`** — `{ "preset": <якір мапи настрою>, "t"?: <час доби> }`, застосовується
+  першим кроком `mood.set` (сцена не читає погоду з адреси; QDb).
+- **`expect`** — шляхи в `state.read` (`walker.swim.depth`, `frames.1.fate.kind`):
+  `true`/`false` — істинне/хибне, `{ "min", "max" }` — межі числа, інше — рівність.
+  Після кроків стенд читає `state.read`, доки очікування не збудеться (до 10 с).
+- **Історія.** `story` картки — за замовчуванням; вибрана на стенді (зона «Історія»,
+  `?story=`) її перекриває.
 - **Застосування — телепорт командами** (§4.4). Шлях у реальному часі не
   програється. Кожен крок чекає своєї події, ціль — до 10 с на картку після
   завантаження історії.
@@ -107,11 +114,15 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 | `fate.give` · `fate.undo` · `fate.keep` | `frame`, `kind`, `settle` | доля; `settle` чекає кінця на годиннику ×10 |
 | `swim.in` · `swim.dive` · `swim.rise` | `at`, `depth` | у воду (з якоря, з плоту, з дошки), глибина одразу |
 | `mood.set` | `v`, `a`, `t` | погода |
+| `catalog.list` | `local` | історії за папками (`{ stories, errors, fallback }`); `local` — і фікстури dev (стенд); сцени не чекає (QDb) |
+| `catalog.read` | — | стан каталогу: `{ state, story, error }` (QDb) |
+| `scene.tech` | `controls`, `fps` | технічні панелі сцени й частота кадрів (зона «Тех», QDb) |
 
 Відмови: `unknown-command`, `bad-args`, `unknown-anchor`, `unknown-frame`,
-`not-on-water`, `no-miniature`, `not-possible`, `story-failed`, `timeout`.
+`not-on-water`, `no-miniature`, `not-possible`, `story-failed`, `catalog-failed`, `timeout`.
 Події: `scene.ready` / `scene.failed`, `minis.take|put|unfold|hydrate`,
-`raft.board|leave|kite|sea|takeoff|land`, `fate.change`.
+`raft.board|leave|kite|sea|takeoff|land`, `fate.change`, `catalog.change` (одразу, без
+сцени: `{ state, story, error }`).
 - `window.app` лишається налагоджувальною поверхнею для проб. Продукт його не
   читає.
 
