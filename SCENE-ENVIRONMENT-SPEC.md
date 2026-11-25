@@ -1,7 +1,9 @@
 # Scene Environment — оцінка двигуна оточення й переносний модуль
 
-Статус: чернетка v0.1 для обговорення з власником, 2026-11-22. Оцінки
-вартості — за читанням коду. Цифри мілісекунд дасть фаза E0.
+Статус: v1.0, 2026-11-24 — фази E0–E4 закрито, текст приведено до коду
+(модуль `scene-environment@1.0`). Перша редакція — чернетка v0.1 від
+2026-11-22; оцінки §2–§3 лишились оцінками за читанням коду, заміри — у
+[docs/scene-environment/QA.md](docs/scene-environment/QA.md) → E0, E2.
 
 Область: `Ultra-Water/`, новий `src/environment/`. Tilecraft
 (`D:/work/js-games/ua-dream/tilecraft`) з цього репозиторію лише читається
@@ -66,7 +68,7 @@
 зміни неба в часі (куб, PMREM, тінь). Від неї залежить плавність переходів і
 руху сонця.
 
-## 3. Оцінка нових станів (не реалізуємо, лише план)
+## 3. Оцінка нових станів (план; з них зроблено лише хмари в тлі й кубі — E2b)
 
 ### 3.1. Туман — низько-середній
 
@@ -108,6 +110,12 @@
   непомітна.
 - Тіні хмар: проєкція шуму з напрямку сонця на площину води й рельєфу.
 
+Зроблено в E2b (`clouds.js`): тло — живий зсув хмар (`cloudSpeed` × сталий
+вітер `CLOUD_WIND_DIR`, не пов'язаний із вітром моря), куб — прогін шести
+граней, коли відстав на `CLOUD_STEP`, IBL — на `CLOUD_IBL_STEP`; дрейф не є
+зміною стану (`env.dirty` лишається `false`, хост тікає за `env.active`).
+Тіней хмар немає.
+
 ## 4. Рішення про оновлення неба в часі (на E0/E2)
 
 Повне `sky.update()` = 3 LUT + 6 граней 1024² (fbm у кожному пікселі) + mip +
@@ -122,9 +130,15 @@ PMREM + тінь 4096². Варіанти:
 
 Змішування двох кубів у шейдері води неможливе: немає вільного семплера (§3.2).
 
-Пропозиція: **B + D**. Під час переходу — куб 512² по одній грані за кадр,
-тінь — раз на 0.5 с. У спокої — одне повне перепікання 1024². Рішення
-фіксуємо після замірів E0.
+Пропозиція v0.1 була **B + D** (куб 512² у русі). **Рішення після замірів E0 і
+QA E2 — B без D** ([DECISIONS.md](DECISIONS.md) «Оточення: оновлення неба в
+часі»): у русі куб 1024² перепікається по одній грані за кадр; після кожних
+шести граней (і раз у спокої) IBL = PMREM копії неба 64² з власним
+`PMREMGenerator` — один розмір і в русі, і в спокої (інший розмір
+перекомпільовує всі `MeshStandardMaterial`); тінь у русі — раз на 0.5 с, у
+спокої — одразу. `set()` перепікає все в одному `update`. Причина: PMREM
+куба 1024² на телефоні — 268–280 мс, а IBL, що стоїть у русі, стрибає в
+спокої (QA-E2-1).
 
 ## 5. Модуль `scene-environment`
 
@@ -138,8 +152,9 @@ PMREM + тінь 4096². Варіанти:
 - матриця настрою й крива сонця як дані + `sampleMood`, `sunAt`
   ([MOOD-WEATHER-SPEC.md](MOOD-WEATHER-SPEC.md) §5);
 - `FullscreenQuad` / `rawPass` (копія, ~30 рядків);
+- заміри кроків неба (`measureEnvironment`);
 - UI-компонент вікна погоди (чистий DOM, без фреймворку) — окремий вхід
-  `ui/moodPad.js`. Плагін three його монтує.
+  `ui/moodPad.js` зі своїми стилями `ui/moodPad.css`. Плагін three його монтує.
 
 Не портується: океан, прибій, рельєф, тайли, PostFX (AgX, автоекспозиція), прив'язка
 `sea` — усе це лишається в Ultra-Water.
@@ -148,49 +163,68 @@ PMREM + тінь 4096². Варіанти:
 
 ```
 src/environment/
-  index.js          публічний API (єдиний вхід)
-  atmosphere.js     ← src/scene/atmosphere.js
-  skyBake.js        ← sky.js: куб, хмари, дросель
-  skyBackground.js  ← sky.js: BG_VERT/BG_FRAG
-  sun.js            напрямок, колір, освітленість; ambient для hemisphere-хостів
-  state.js          стан, τ-згладжування, події
+  index.js          публічний API (єдиний вхід), ENVIRONMENT_VERSION, дросель (§4)
+  atmosphere.js     LUT атмосфери (← src/scene/atmosphere.js)
+  clouds.js         шар хмар (GLSL), вітер хмар (§3.3)
+  skyBake.js        куб неба, нижня півсфера
+  skyBackground.js  тло: повне небо або стриманий градієнт; LDR-експозиція й AgX
+  sun.js            напрямок і колір сонця
+  state.js          стан, τ-згладжування
   mood.js           MOOD_MAP_V1 + sampleMood, SUN_PATH_V1 + sunAt
   ldr.js            LDR-адаптер для хостів без HDR (§5.4)
+  measure.js        заміри кроків неба (E0)
   fullscreen.js     копія engine/fullscreen.js
   ui/moodPad.js     вікно погоди
+  ui/moodPad.css    стилі вікна погоди (розміщення — Ultra-Water за замовчуванням)
+  README.md         як підключити модуль; печатка копії (§5.6)
 src/environment-bindings/   (лишаються в Ultra-Water)
   seaBinding.js     sea-канали → OceanSim, surface.uniforms, spray, WATER_PRESETS
   hostBinding.js    sun → DirectionalLight/тінь; grade → PostFX
 ```
 
-Межу перевіряє статичний скрипт `npm run check:environment`: файли в
-`src/environment/**` імпортують лише `three`, `three/addons/*` і відносні
-шляхи всередині папки. Скрипт запускається разом із `check:config`.
+Межу перевіряє `npm run guard`, правило **BOUNDARY-2** (рішення власника
+2026-11-23 замість окремого `check:environment`): файли в `src/environment/**`
+імпортують лише `three`, `three/addons/*` і відносні шляхи всередині папки;
+менше 9 файлів або без `index.js` — FAIL (правило дивиться не туди). Що копія
+живе лише з `three`, перевіряє `tests/envPackage.test.js` (§5.6).
 
-### 5.3. Публічний API (ескіз)
+### 5.3. Публічний API (версія 1.0)
 
 ```js
-import { createEnvironment, MOOD_MAP_V1, sampleMood } from './environment/index.js';
+import { createEnvironment, ENVIRONMENT_VERSION, MOOD_MAP_V1, sampleMood } from './environment/index.js';
 
 const env = createEnvironment(renderer, {
-  cubeSize: 1024,               // three: 256
-  lowerHemisphere: 'sea',       // 'sea' | 'ground' | THREE.Color
+  cubeSize: 1024,               // куб неба (вода, тло); three: 256
+  envSize: 64,                  // копія неба, з якої PMREM для IBL (§4)
   output: 'hdr',                // 'hdr' (Ultra-Water) | 'ldr' (three)
+  lowerHemisphere: 'sea',       // 'sea' (hdr за замовч.) | 'ground' (ldr за замовч.)
+  background: 'sky',            // 'sky' (hdr за замовч.) | 'gradient' (ldr за замовч.)
+  params,                       // початкові параметри неба
 });
 env.background;        // Mesh — у scene
-env.cube;              // CubeTexture — scene.environment, uSkyCube (ідентичність стала)
+env.cube;              // CubeTexture неба — uSkyCube води й рельєфу (ідентичність стала)
+env.envMap;            // PMREM для scene.environment (ідентичність стала)
 env.sun.direction;     // Vector3 (стале посилання)
 env.sun.color;         // Vector3, радіанс як зараз sky.sunColor
-env.ambient;           // { sky: Color, ground: Color } — для HemisphereLight
-env.setState({ elevation, azimuth, sunIntensity, cloudCoverage, turbidity, cloudSpeed }, { tau: 6 });
-env.update(dt, timer); // → { sunChanged, cubeChanged }; хост сам перемальовує тінь
-env.on('sun-changed', fn);
-env.restoreContext();  // після webglcontextrestored
+env.params;            // поточні (згладжені) параметри — лише читати; env.target — куди йдуть
+env.setState({ elevation, azimuth, sunIntensity, cloudCoverage, turbidity, rayleigh, cloudSpeed }, { tau: 6 });
+env.set(next);         // = setState(next, { tau: 0 }): усе в наступному update
+env.dirty;             // є зміна неба, яку update ще не допік
+env.active;            // update треба кликати цього кадру (dirty або дрейф хмар)
+env.update(dt);        // → { sunChanged, cubeChanged, moving, faces, pmrem, drift }; тінь — хоста
+env.ldrLights();       // світло LDR-хоста (§5.4): sun, hemisphere, exposure, iblExposure, gain
+env.on('sun-changed', fn);   // → off()
+env.restoreContext();  // після webglcontextrestored (не з мікрозадачі webglcontextlost)
 env.dispose();
 
 const { sky, sea, grade, words } = sampleMood(MOOD_MAP_V1, v, a);
 const { elevation, azimuth, tint } = sunAt(SUN_PATH_V1, t);   // час доби
 ```
+
+`env.ambient` з ескізу v0.1 не зроблено: півсферу LDR-хоста дає
+`env.ldrLights().hemisphere`. Нижня півсфера кольором (`THREE.Color`) теж не
+зроблена — лише `'sea' | 'ground'`. Повний опис для хоста —
+[src/environment/README.md](src/environment/README.md).
 
 Правило: модуль не має власного RAF і не знає про камеру. Тік дає хост
 (Ultra-Water — `renderFrame`, three — подія `render-frame`).
@@ -213,8 +247,12 @@ const { elevation, azimuth, tint } = sunAt(SUN_PATH_V1, t);   // час доби
   (2 / 2.5, біле). Інші стани відхиляються від нього в межах **підлоги
   читабельності**: білий папір кадру ≥ 0.55 sRGB, чорний ≤ 0.25 (той самий
   критерій, що MOOD-WEATHER §6 п.5);
-- `scene.environment` — куб, перемасштабований у той самий LDR-діапазон.
-  Потрібен лише хостам із `MeshStandardMaterial`;
+- `scene.environment` — `env.envMap`, PMREM куба з власною експозицією
+  `ldrLights().iblExposure`: так, щоб IBL заміняв HemisphereLight (хост з IBL
+  ставить інтенсивність півсфери 0). Потрібен лише хостам із
+  `MeshStandardMaterial`. Множник `LDR_IBL_K` підібрано на ясному полудні; у
+  тумані на заході білий з IBL 0.32 — нижче підлоги, тому **для three IBL за
+  замовчуванням вимкнено** (E4), підлога без IBL тримається під усіма якорями;
 - нижня півсфера — `'ground'` (нейтральний ґрунт), а не море;
 - тло за замовчуванням — **стриманий градієнт неба без хмар** (колір неба й
   горизонту з поточного стану, без диска хмар); повне небо з хмарами —
@@ -222,6 +260,12 @@ const { elevation, azimuth, tint } = sunAt(SUN_PATH_V1, t);   // час доби
   повного стану незалежно від вибору тла.
 
 ### 5.5. Інтеграція в three (ціль; реалізація — у Tilecraft)
+
+Повніші вимоги, звірені з кодом Tilecraft `36dc43ab` (writer-и фону
+`aura-control` і `scene-presentation`, світло `viewer-session`, тік
+`render-frame`), і відкриті питання — у чернетці
+[docs/scene-environment/TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md](docs/scene-environment/TILECRAFT-ENVIRONMENT-SPEC-DRAFT.md).
+Нижче — вихідні вимоги цієї спеки.
 
 За архітектурою three (PAPER-CRUMPLE §3.1):
 
@@ -250,7 +294,8 @@ core/environment/*            копія модуля (§5.6)
    `setMood`/`setDay` продукту його не перезаписують, `state()` показує, чий
    вибір діє (§8 п.4).
 6. **Вартість:** куб 256², без тіней від сонця за замовчуванням, перепікання
-   лише на зміну стану. Тінь — рішення хоста: плагін дає напрямок, колір і
+   лише на зміну стану (у версії 1.0 дрейф хмар перепікає куб і з тлом
+   `'gradient'` — хост ставить `cloudSpeed: 0`). Тінь — рішення хоста: плагін дає напрямок, колір і
    `sun-changed`, тінь не створює й не перемальовує (§8 п.3).
 7. **Context loss:** `env.restoreContext()` з наявного `scene-view-lifecycle`.
 8. **Масштаб:** небо спрямоване, від масштабу сцени не залежить.
@@ -263,18 +308,24 @@ core/environment/*            копія модуля (§5.6)
 | b. Інверсія | Модуль живе в Tilecraft, Ultra-Water імпортує його через наявний alias `@tilecraft` з `resolve.dedupe: ['three']` (spec.md §3.2) | Після стабілізації API |
 | c. Окремий пакет | `packages/scene-environment` з власною версією | Якщо з'явиться третій споживач |
 
-Рішення (§8 п.2): **a → b**. Межа §5.2 і `check:environment` роблять копіювання
-механічним.
+Рішення (§8 п.2): **a → b**. Межа §5.2 (guard BOUNDARY-2) робить копіювання
+механічним. Копію робить `node scripts/pack-environment.mjs <тека>`: `.js`,
+`.css`, `.md` модуля з печаткою першим рядком і `seal.json` (sha256 кожного
+файла без печатки); повторне пакування замінює лише теку з `seal.json`.
+Версія — `ENVIRONMENT_VERSION` в `index.js`: мінорна — нова опція чи експорт,
+мажорна — змінений контракт (значення за замовчуванням, прибраний експорт,
+ідентичність `env.cube` / `env.sun.*`).
 
-## 6. Фази (пропозиція)
+## 6. Фази (усі закрито 2026-11-23…24)
 
-| Фаза | Зміст | Вихід |
-|---|---|---|
-| E0. Заміри | Мітка `sky` у `GpuTimer`; вартість `sky.update()`, PMREM, тіні, `updateSpectrum` — desktop і Samsung Xclipse 540 (§8 п.5) | Таблиця мс; вибір варіанта §4 |
-| E1. Виділення | `src/environment/` + `environment-bindings/`; `main.js` переходить на API; `check:environment` | Візуально без змін: знімки шотів до й після збігаються |
-| E2. Час | τ-згладжування стану, дросель куба (§4), тіні раз на 0.5 с, анімовані хмари в тлі | MOOD M2; неперервне сонце |
-| E3. LDR | `output: 'ldr'`, `lowerHemisphere: 'ground'`, `ldrLights()`; демо-сторінка `env-demo.html` без води: MeshStandard + MeshBasic-«кадр» під усіма дев'ятьма якорями | Підлога читабельності виміряна |
-| E4. Пакет для three | Печатка версії, README модуля, чернетка спеки для Tilecraft (§5.5) | Передача в репозиторій Tilecraft |
+| Фаза | Зміст | Вихід | Стан |
+|---|---|---|---|
+| E0. Заміри | Мітка `sky` у `GpuTimer`; вартість `sky.update()`, PMREM, тіні, `updateSpectrum` — desktop і Samsung Xclipse 540 (§8 п.5) | Таблиця мс; вибір варіанта §4 | закрито; §4 — B |
+| E1. Виділення | `src/environment/` + `environment-bindings/`; `main.js` переходить на API; guard BOUNDARY-2 | Візуально без змін: знімки шотів до й після збігаються | закрито |
+| E2. Час | τ-згладжування стану, дросель куба (§4), тіні раз на 0.5 с | MOOD M2; неперервне сонце | закрито; §7 п.3 на телефоні не виміряно |
+| E2b. Хмари | Анімовані хмари в тлі й кубі (§3.3) | Хмари пливуть без стрибка на відбитті | закрито; §7 п.4 — запис власника |
+| E3. LDR | `output: 'ldr'`, `lowerHemisphere: 'ground'`, `ldrLights()`; демо-сторінка `env-demo.html` без води: MeshStandard + MeshBasic-«кадр» під усіма дев'ятьма якорями | Підлога читабельності виміряна | закрито |
+| E4. Пакет для three | Печатка версії, README модуля, чернетка спеки для Tilecraft (§5.5) | Передача в репозиторій Tilecraft | закрито; копію в Tilecraft не покладено |
 
 Пізніше й окремо: туман (§3.1), дощ (§3.2), тіні хмар.
 
@@ -283,10 +334,12 @@ core/environment/*            копія модуля (§5.6)
 1. E1: знімки шотів `Golden hour`, `Lagoon`, `Aerial`, `Underwater` до й
    після виділення відрізняються не більше ніж на 1/255 на канал (крім
    дитеру).
-2. E1: `check:environment` падає, якщо файл у `src/environment/` імпортує
+2. E1: guard BOUNDARY-2 падає, якщо файл у `src/environment/` імпортує
    щось поза `three` і своєю папкою.
 3. E2: під час переходу A9 → A1 жоден кадр на Samsung Xclipse 540 не довший за
-   33 мс через небо (`GpuTimer`, мітка `sky`).
+   33 мс через небо (`GpuTimer`, мітка `sky`). **Не виміряно** на 2026-11-24:
+   кадр руху — `lut + face`, кожен 6-й ще `bake64 + pmrem64`; з E2b ще й хмари
+   в тлі — Measure sky на телефоні.
 4. E2: хмари в тлі рухаються неперервно; на відбитті у воді немає
    видимого «стрибка» в мить перепікання куба.
 5. E3: на `env-demo.html` кадр на `MeshBasicMaterial` під усіма дев'ятьма
