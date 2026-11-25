@@ -11,14 +11,30 @@
 // Q4: `decks` — the frames on the water the walker can stand on (walker.js); `pull` — the
 // kite: while it flies and the walker is on a deck in the eyes, the walk input (keys, stick)
 // sets the kite's course instead of walking; the head still turns.
+//
+// Q4b: in the air (walker.state.flight) the same input is the board's course (flight.js),
+// and the kite's; the board is a mesh of its own under the feet, shown only in the air.
+import * as THREE from 'three';
 import { createWalker, PACE } from './walker.js';
 import { WALK, isWater, walkOnGround } from './groundWalk.js';
 import { bindWalkerInput, keyIntent } from './keyboard.js';
 import { loadWalkerModules } from './tilecraftWalker.js';
 
 export { WALK, PACE, isWater, walkOnGround, keyIntent };
+export { FLIGHT, stepFlight, landing } from './flight.js';
 
-const HIDE_NEAR = 1.5;   // m from the eyes: closer, a boarding camera would see the inside of the head
+const HIDE_NEAR = 1.5;
+/** The board under the feet in the air: m, its long side along the flight. */
+export const BOARD = Object.freeze({ length: 1.5, width: 0.45, thick: 0.06 });
+
+function buildBoard() {
+  const board = new THREE.Mesh(new THREE.BoxGeometry(BOARD.width, BOARD.thick, BOARD.length),
+    new THREE.MeshStandardMaterial({ color: 0x2f7fd1, roughness: 0.45 }));
+  board.name = 'walker-board';
+  board.visible = false;
+  board.layers.enable(1);   // in the planar reflection, as the kite's sail
+  return board;
+}   // m from the eyes: closer, a boarding camera would see the inside of the head
 
 /**
  * @param {{ scene: any, rig: any, ground: (x: number, z: number) => any,
@@ -34,6 +50,8 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
   avatar.group.name = 'walker';
   avatar.group.visible = false;
   scene.add(avatar.group);
+  const board = buildBoard();
+  scene.add(board);
   const input = bindWalkerInput(canvas, isEditing, () => mode === 'eyes');
   /** @type {'off' | 'boarding' | 'eyes' | 'standing'} */
   let mode = 'off';
@@ -42,6 +60,7 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
   const host = {
     walker,
     avatar,
+    board,
     get mode() { return mode; },
     get state() { return walker.state; },
     /** Feet on the ground at (x, z), facing yaw; keeps the mode. */
@@ -91,12 +110,21 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
       }
       walker.ride(dt);
       const it = intent ?? own;
-      const kite = !!pull?.active() && !!walker.state.deck;
-      if (kite) pull.course(mode === 'eyes' ? walker.direction(it) : null);
-      if (mode === 'eyes') walker.step(dt, kite ? { ...it, forward: 0, strafe: 0 } : it);
+      const flying = !!walker.state.flight;
+      const kite = !!pull?.active() && (!!walker.state.deck || flying);
+      const course = mode === 'eyes' ? walker.direction(it) : null;
+      if (kite) pull.course(course);
+      if (flying) walker.fly(dt, course, mode === 'eyes' ? it : {});
+      else if (mode === 'eyes') walker.step(dt, kite ? { ...it, forward: 0, strafe: 0 } : it);
       else walker.state.moving = false;
       rig.steer(mode === 'standing' ? stick.y : 0, mode === 'standing' ? stick.x : 0);
       const s = walker.state;
+      board.visible = !!s.flight;
+      if (s.flight) {
+        const v = Math.hypot(s.flight.vx, s.flight.vz);
+        board.position.set(s.x, s.y - BOARD.thick / 2, s.z);
+        board.rotation.y = v > 0.5 ? Math.atan2(s.flight.vx, s.flight.vz) : s.yaw;
+      }
       avatar.update({ pose: mode === 'off' ? null : { x: s.x, y: s.y, z: s.z }, unit: walker.bodyScale,
         bodyYaw: s.yaw, motion: s.moving ? 'WALKING' : 'GROUNDED', now });
       // boarding: shown until the camera is about to enter the head
@@ -109,6 +137,9 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
       rig.steer(0, 0);
       input.dispose();
       avatar.dispose();
+      scene.remove(board);
+      board.geometry.dispose();
+      board.material.dispose();
       mode = 'off';
     },
   };

@@ -46,3 +46,23 @@ export function deckAt(decks, x, z) {
   }
   return best;
 }
+
+/**
+ * No deck within `r` of world (x, z) (the distance to each deck's rectangle): where a frame
+ * of radius r may unfold without lying over another (Q4b: a miniature put down from a raft).
+ * @param {Deck[]} decks
+ */
+export function deckClear(decks, x, z, r) {
+  for (const deck of decks) {
+    const { u, v } = toDeck(deck, x, z);
+    const du = Math.max(0, Math.abs(u) - deck.hu), dv = Math.max(0, Math.abs(v) - deck.hv);
+    if (Math.hypot(du, dv) < r) return false;
+  }
+  return true;
+}
+
+/** The point of `deck` nearest to world (x, z), `margin` inside its rim. @param {Deck} deck */
+export function nearestOnDeck(deck, x, z, margin = 0) {
+  const { u, v } = toDeck(deck, x, z), c = clampToDeck(deck, u, v, margin);
+  return fromDeck(deck, c.u, c.v);
+}

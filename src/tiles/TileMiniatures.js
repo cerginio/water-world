@@ -32,13 +32,16 @@ const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 /**
  * @param {any} field a TileField
- * @param {{ ground: (x: number, z: number) => any, scene: any, scale?: number, eye?: number }} options
+ * @param {{ ground: (x: number, z: number) => any, scene: any, scale?: number, eye?: number,
+ *   freeAt?: (x: number, z: number, r: number) => boolean }} options
+ *   `freeAt` — no other frame on the water within r of (x, z): an unfold does not lie over a raft (Q4b)
  */
 export class TileMiniatures extends EventTarget {
-  constructor(field, { ground, scene, scale = MINI.scale, eye = 1.6 }) {
+  constructor(field, { ground, scene, scale = MINI.scale, eye = 1.6, freeAt = /** @type {(x: number, z: number, r: number) => boolean} */ (() => true) }) {
     super();
     this.field = field;
     this.ground = ground;
+    this.freeAt = freeAt;
     this.scene = scene;
     this.scale = scale;
     this.eye = eye;
@@ -145,14 +148,15 @@ export class TileMiniatures extends EventTarget {
   /**
    * Where the frame unfolds: from (x, z) on along `dir` in 0.5 m steps until the sea under
    * its centre is deeper than MINI.depth and under 8 rim points deeper than MINI.rimDepth;
-   * none within 4 radii — (x, z) moved out by one radius.
+   * none within 4 radii — (x, z) moved out by one radius. Clear of the frames already on the
+   * water (`freeAt`): put down from a raft, it unfolds beside it (Q4b), within the same 4 radii.
    */
   unfoldCenter(item, x, z, dir) {
     const r = item.fullRadius;
     const deep = (px, pz, depth) => { const g = this.ground(px, pz); return !g || g.height < -depth; };
     for (let s = 0; s <= 4 * r; s += 0.5) {
       const cx = x + dir.x * s, cz = z + dir.z * s;
-      let ok = deep(cx, cz, MINI.depth);
+      let ok = deep(cx, cz, MINI.depth) && this.freeAt(cx, cz, r);
       for (let k = 0; ok && k < 8; k++) {
         const a = (k / 8) * Math.PI * 2;
         ok = deep(cx + Math.cos(a) * r, cz + Math.sin(a) * r, MINI.rimDepth);

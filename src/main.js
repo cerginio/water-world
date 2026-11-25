@@ -33,6 +33,7 @@ import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { TerrainContact } from './scene/TerrainContact.js';
 import { createWalkerHost } from './walker/index.js';
+import { deckClear } from './walker/deck.js';
 import { createWalkerStick, LABELS as STICK_LABELS } from './walker/stick.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
 import { createFrameFocus } from './scene/frameFocus.js';
@@ -312,6 +313,7 @@ async function walkerReady() {
   if (!walkerStick && (args.has('stick') ? stickArg !== '0' : mobile)) {
     walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
       action: { hint: () => miniHint() ?? kiteHint(), run: () => miniAction() ?? kiteAction() },
+      flight: { hint: flyHint, run: flyAction },
       labels: (navigator.language ?? '').toLowerCase().startsWith('uk') ? STICK_LABELS.uk : STICK_LABELS.en });
     document.body.classList.add('walker-controls');
   }
@@ -346,7 +348,7 @@ let minis = null;
 /** The loaded story's frames → miniatures (again, all of them); null without a story. */
 function layoutMinis() {
   if (!tiles.loaded) { minis?.clear(); return null; }
-  minis ??= new TileMiniatures(tiles, { ground: walkGround, scene });
+  minis ??= new TileMiniatures(tiles, { ground: walkGround, scene, freeAt: (x, z, r) => deckClear(raft?.decks() ?? [], x, z, r) });
   const spawn = walkerSpawn();
   minis.layout(String(tiles.source), { x: spawn.x, z: spawn.z });
   return minis;
@@ -375,16 +377,39 @@ function raftUpdate(dt) {
   if (!raft && tiles.loaded) raft = new TileRaft(tiles, { ground: walkGround, scene, seaEdge: SHORE_EXTENT / 2 });
   raft?.update(dt, walkerHost && walkerHost.mode !== 'off' ? walkerHost.state : null);
 }
-/** K and the touch button: the kite up or let go, on a deck in the eyes. */
+/** K and the touch button: the kite up or let go, on a deck in the eyes; in the air, K lands. */
 function kiteAction() {
+  if (walkerHost?.state.flight) return flyAction() && 'unkite';
   if (!raft?.boarded || walkerHost?.mode !== 'eyes') return null;
   return raft.toggleKite() ? 'kite' : 'unkite';
 }
 /** What the button would do now for the kite: 'kite' (up), 'unkite' (let go) or null. */
 function kiteHint() {
+  if (walkerHost?.state.flight) return null;   // the flight button lands
   if (!raft?.boarded || walkerHost?.mode !== 'eyes') return null;
   return raft.kite.up ? 'unkite' : 'kite';
 }
+// Q4b (STORY-QUEST-SPEC §2 п.6, §4.2 v1.5): on a raft with the kite up, Space (or the touch
+// button «Take off») lifts the walker on the board; in the air Space lands — on a deck under
+// it, or by itself over wadeable ground; over deep water it does not (no swimming before Q5b).
+/** Space and the touch button: take off from the raft, or land. 'fly', 'ground', 'deck' or null. */
+function flyAction() {
+  if (!walkerHost || walkerHost.mode !== 'eyes' || !raft) return null;
+  const w = walkerHost.walker;
+  if (w.state.flight) return w.land();
+  if (!raft.boarded || !raft.kite.up) return null;
+  return w.takeOff(raft.velocity()) ? 'fly' : null;
+}
+/** What the flight button would do now: 'fly', 'land' or null (also over deep water). */
+function flyHint() {
+  if (!walkerHost || walkerHost.mode !== 'eyes' || !raft) return null;
+  if (walkerHost.state.flight) return walkerHost.walker.landing() ? 'land' : null;
+  return raft.boarded && raft.kite.up ? 'fly' : null;
+}
+addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  if (flyAction()) e.preventDefault();
+});
 addEventListener('keydown', (e) => {
   if (e.code !== 'KeyK' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
   if (kiteAction()) e.preventDefault();
@@ -439,6 +464,7 @@ const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').on
 gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk').name('walk · eyes (V)');
 gui.add({ miniAction }, 'miniAction').name('take · put (G)');
 gui.add({ kiteAction }, 'kiteAction').name('kite · let go (K)');
+gui.add({ flyAction }, 'flyAction').name('take off · land (Space)');
 
 fSun = gui.addFolder('Sun & sky');
 // the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
@@ -1028,7 +1054,7 @@ window.app = {
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   get minis() { return minis; }, layoutMinis, miniAction, miniHint,
-  get raft() { return raft; }, kiteAction, kiteHint,
+  get raft() { return raft; }, kiteAction, kiteHint, flyAction, flyHint,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },

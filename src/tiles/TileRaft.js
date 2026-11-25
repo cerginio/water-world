@@ -15,6 +15,11 @@ import { RAFT, inOpenSea, openWater, stepRaft } from './raftMotion.js';
 // Events (EventTarget), detail { frameId, x, z }: 'board', 'leave' (the walker onto / off a
 // deck), 'kite' (+ up), 'sea' (+ inSea: the walker on the raft crossed the edge of the
 // shore map, spec §4.3 / §3.1 «Вийти в море»).
+//
+// Q4b: the kite also flies the walker on the board (walker/flight.js). Off the raft into the
+// air the kite stays up and the raft left behind coasts down to the drift, as one let go;
+// landed on a deck, that deck is the raft under the kite; landed on the ground, the kite is
+// gone. Events 'takeoff' and 'land' (+ on: 'ground' | 'deck').
 
 const UP = new THREE.Vector3(0, 1, 0);
 const RAFT_DECK_Y = 0.15;   // m: a deck's height until the GPU has answered (a tile top over still water)
@@ -51,6 +56,7 @@ export class TileRaft extends EventTarget {
     /** @type {{ up: boolean, course: { x: number, z: number } | null, heading: { x: number, z: number } | null }} */
     this.kite = { up: false, course: null, heading: null };
     this.deckId = null;   // the deck the walker is on, or null
+    this.flying = false;  // the walker on the board in the air (Q4b)
     this.inSea = false;
     this.heights = new Map();   // frame id → last deck height read
     this.rest = null;
@@ -87,9 +93,9 @@ export class TileRaft extends EventTarget {
   /** Is the walker on a deck now. */
   get boarded() { return this.deckId !== null; }
 
-  /** Kite up / let go; only on a deck. @returns {boolean} up */
+  /** Kite up / let go; only on a deck (or in the air, where it holds the board). @returns {boolean} up */
   setKite(up) {
-    const next = !!up && this.boarded;
+    const next = !!up && (this.boarded || this.flying);
     if (next === this.kite.up) return next;
     this.kite.up = next;
     this.kite.course = null;
@@ -99,6 +105,12 @@ export class TileRaft extends EventTarget {
   }
 
   toggleKite() { return this.setKite(!this.kite.up); }
+
+  /** The raft's speed under the walker now (world XZ, m/s): the board takes off with it. */
+  velocity() {
+    const m = this.deckId === null ? null : this.motion.get(this.deckId);
+    return m ? { x: m.vx, z: m.vz } : { x: 0, z: 0 };
+  }
 
   /** The kite's course from the walk input: a unit {x, z}, or null — slack, the raft coasts. */
   course(dir) { this.kite.course = dir; if (dir) this.kite.heading = dir; }
@@ -170,11 +182,23 @@ export class TileRaft extends EventTarget {
     if (!this.field.sim || !this.field.rest) { this.kiteGroup.visible = false; return; }
     this.build();
     const onId = walker?.deck ? walker.deck.id : null;
+    const flying = !!walker?.flight;
+    if (flying && !this.flying) { this.flying = true; this.emitAt('takeoff', { frameId: this.deckId }, walker); }
     if (onId !== this.deckId) {
       const was = this.deckId;
       this.deckId = onId;
-      if (was !== null) { this.field.lockedFrames?.delete(was); this.setKite(false); this.emitAt('leave', { frameId: was }, walker); }
+      if (was !== null) {
+        this.field.lockedFrames?.delete(was);
+        if (!flying) this.setKite(false);
+        // the raft left under the kite coasts on (stepRaft without the pull) from its speed
+        this.emitAt('leave', { frameId: was }, walker);
+      }
       if (onId !== null) { (this.field.lockedFrames ??= new Set()).add(onId); this.emitAt('board', { frameId: onId }, walker); }
+    }
+    if (!flying && this.flying) {
+      this.flying = false;
+      this.emitAt('land', { on: onId !== null ? 'deck' : 'ground' }, walker);
+      if (onId === null) this.setKite(false);
     }
     // the rafts: the one under the kite, and any still coasting
     const drift = this.drift();
@@ -222,7 +246,8 @@ export class TileRaft extends EventTarget {
    */
   pose(dt, walker) {
     const g = this.kiteGroup;
-    g.visible = this.kite.up && !!walker;
+    // landed on the ground this frame: update() lets the kite go only next frame (Q4b)
+    g.visible = this.kite.up && !!walker && (!!walker.deck || !!walker.flight);
     if (!g.visible) return;
     const motion = this.motion.get(this.deckId);
     const along = this.kite.heading ?? (motion && Math.hypot(motion.vx, motion.vz) > 0.1

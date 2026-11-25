@@ -9,6 +9,7 @@
 // Q3: an optional second button for the miniatures — «take» / «put down», shown only while
 // `action.hint()` names one (the host of the miniatures decides, the button only words it).
 // Q4: the same button puts the kite up / lets it go on a raft ('kite' / 'unkite').
+// Q4b: an optional third button, `flight` — «take off» on the board / «land» ('fly' / 'land').
 //
 // The stick: x to the right, y forward (screen up), both -1..1, length ≤ 1. Inside the
 // dead zone it is 0; past it the length starts at 0 again, so there is no jump at the
@@ -33,10 +34,11 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
 /**
  * @param {{ parent?: HTMLElement, host: { mode: string, setStick: (v: {x: number, y: number}) => void },
  *   onToggle: () => void, labels?: { stick: string, leave: string, enter: string, take: string, put: string,
- *     kite: string, unkite: string },
- *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | null, run: () => unknown } }} options
+ *     kite: string, unkite: string, fly: string, land: string },
+ *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | null, run: () => unknown },
+ *   flight?: { hint: () => 'fly' | 'land' | null, run: () => unknown } }} options
  */
-export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action }) {
+export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action, flight }) {
   const root = document.createElement('div');
   root.id = 'walkerControls';
   const zone = document.createElement('div');
@@ -48,7 +50,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   zone.append(knob);
   const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-toggle' });
   const act = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-action', hidden: true });
-  root.append(zone, toggle, act);
+  const fly = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-fly', hidden: true });
+  root.append(zone, toggle, act, fly);
   parent.append(root);
 
   let drag = null;
@@ -79,6 +82,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   toggle.addEventListener('click', click);
   const run = () => action?.run();
   act.addEventListener('click', run);
+  const runFly = () => flight?.run();
+  fly.addEventListener('click', runFly);
   addEventListener('blur', release);
 
   /** The button's words follow the host's mode; the controls show once the walker is placed. */
@@ -93,6 +98,11 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
     const word = hint ? labels[hint] : '';
     if (act.textContent !== word) act.textContent = word;
     act.dataset.action = hint ?? '';
+    const hop = flight?.hint() ?? null;
+    fly.hidden = !hop;
+    const flyWord = hop ? labels[hop] : '';
+    if (fly.textContent !== flyWord) fly.textContent = flyWord;
+    fly.dataset.action = hop ?? '';
   }
   update();
   return {
@@ -103,6 +113,7 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
       removeEventListener('blur', release);
       toggle.removeEventListener('click', click);
       act.removeEventListener('click', run);
+      fly.removeEventListener('click', runFly);
       root.remove();
     },
   };
@@ -110,7 +121,7 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
 
 export const LABELS = Object.freeze({
   en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down',
-    kite: 'Kite', unkite: 'Let go of the kite' },
+    kite: 'Kite', unkite: 'Let go of the kite', fly: 'Take off', land: 'Land' },
   uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти',
-    kite: 'Кайт', unkite: 'Відпустити кайт' },
+    kite: 'Кайт', unkite: 'Відпустити кайт', fly: 'Злетіти', land: 'Сісти' },
 });
