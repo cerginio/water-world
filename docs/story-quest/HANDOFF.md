@@ -1,12 +1,14 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-25. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0, Q1, Q2a, Q2b і Q3 закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0–Q4 закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
-очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді.
+очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді, пліт і
+кайт до відкритого моря.
 QA — [QA.md](QA.md).
 
-> **Далі:** Q4 — пліт і кайт.
+> **Далі:** Q5 — долі кадру; першим кроком — чистий прогін `probe-story-q4` і
+> `probe-story-q3` без чужого навантаження на GPU (п.7).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Tilecraft (`TILECRAFT_ROOT`) лише читається.
@@ -23,8 +25,8 @@ QA — [QA.md](QA.md).
 | ~~Q2a~~ | закрито 2026-11-24 |
 | ~~Q2b~~ | закрито 2026-11-25 (fps на телефоні — за власником, QA-Q2b-7) |
 | ~~Q3~~ | закрито 2026-11-25 (розмір 1/8 на телефоні — за власником, QA-Q3-7) |
-| Q4 | Q3 |
-| Q5 | Q3 (долі кадру; пліт Q4 — для фіналу «в морі») |
+| ~~Q4~~ | закрито 2026-11-25 (телефон — QA-Q4-7, тінь — QA-Q4-8; чистий прогін проби — п.7) |
+| Q5 | Q4 (пліт — для фіналу «в морі») |
 | Q6 | події Q1–Q5; логіку можна почати раніше на фікстурі |
 | Q7 | Q2b, Q4, Q5, Q6 |
 
@@ -102,17 +104,29 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    (за замовчуванням в оболонці — Q7); G / кнопка «Взяти»·«Покласти» лише в
    «очах». Розмір 1/8 на телефоні — QA-Q3-7, не зроблено.
 
-6. **Q4 — пліт і кайт** (спека §2 п.5, §4.2, §4.3). Персонаж стоїть на
+~~6. **Q4 — пліт і кайт** (спека §2 п.5, §4.2, §4.3). Персонаж стоїть на
    кадрі (`TileFrameQuery`); кайт v1 тягне за курсом зі сталою силою;
-   відпущений кайт — дрейф; пліт не обмежений `uTileMotionLimit` поля (свій
-   ліміт або виняток — рішення фази); межа відкритого моря — край карти
-   берега (|x| або |z| > 900 м).
-   - проба: пліт з поля біля берега перетинає край карти берега; подія
-     «у морі» рівно на межі; на телефоні власника — без квадрата «мілини»
-     (TEX-1, `probe-scene-shore.mjs`) і ≥ 30 fps; тінь плоту в морі —
-     огляд власника.
+   відпущений кайт — дрейф; пліт не обмежений `uTileMotionLimit` поля; межа
+   відкритого моря — край карти берега (|x| або |z| > 900 м).~~ — ЗАКРИТО
+   2026-11-25; числа — QA.md Q4, рішення — DECISIONS «Пліт і кайт». На рев'ю
+   виправлено: кадр у прибої двоївся (інваріант SIM-1 — `TileSim` бере воду в
+   точці якоря), строп кайта гуляла (дві стропи, кайт ставиться після кроку).
+   Телефон (QA-Q4-7) і тінь у морі (QA-Q4-8) — за власником.
 
-7. **Q5 — долі кадру** (спека §2 п.6, §4.1 «Долі кадру»; Edge §4.4, W1).
+7. **Перед Q5 — чистий прогін проб Q4.** Після правок рев'ю Q4 `probe-story-q4`
+   і `probe-story-q3` ганялись поруч із чужими сесіями Playwright (30 fps, читання з
+   GPU 1.4–2 с замість 5–16 мс) і падали на кроках, що залежать від частоти читання
+   (QA.md Q4 «Правки рев'ю»). Без навантаження: обидві мають пройти; якщо
+   `probe-story-q4` падає на «ноги на палубі» — це п.8, не шум.
+   - перевірити, що інших headless Chrome немає (`Get-CimInstance Win32_Process`,
+     `headless` у командному рядку), потім проби по одній.
+
+8. **Висота палуби без читання з GPU — рішення в Q5 або Q7.** Зараз висота палуби —
+   `TileFrameQuery` режим 3 (async readback); при читанні 1–2 с ноги осідають
+   сходинками 0.2–0.3 м. Кандидат: висота води під ногами на CPU (та сама формула
+   `waterAt`, що в `TileSim`) + сталий зсув верхівки тайлів. Міряти на телефоні.
+
+9. **Q5 — долі кадру** (спека §2 п.6, §4.1 «Долі кадру»; Edge §4.4, W1).
    Відпустити за обрій / покликати; втопити / підняти (густина); розпастися на
    тайли, що тонуть по одному / зібрати; «Залишити так».
    - focused: юніти станів долі (кожна дія має зворотну; «Залишити так»
@@ -121,7 +135,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      кількість тайлів; втоплення за 1200 м (немає дна, спека §4.3) не ламає
      поле.
 
-8. **Q6 — квести й картки** (спека §3). У `products/story-quest/`: перелік
+10. **Q6 — квести й картки** (спека §3). У `products/story-quest/`: перелік
    задач §3.1 з автоматичними й ручними галочками, картки з прив'язкою,
    IndexedDB (ключ — slug + fingerprint), експорт JSON і Markdown; підказки —
    дані uk + en.
@@ -131,7 +145,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    - проба: картки й прогрес переживають перезавантаження; експорт дає обидва
      файли; у мережу нічого не йде (перехоплення запитів).
 
-9. **Q7 — продукт** (спека §2, §8 Q7). Вибір історії зі списку каталогу, UI
+11. **Q7 — продукт** (спека §2, §8 Q7). Вибір історії зі списку каталогу, UI
    квестів і карток, мобільний layout, uk + en.
    - проба: весь маршрут §2 на телефоні власника — вибір → пошук → вода →
      пліт → фінал → картка; `prefers-reduced-motion`, «Затихнути» / «На берег»
@@ -146,13 +160,13 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 - Перешкоди на суші (каміння, валуни, плаваючі предмети) — персонаж проходить
   крізь них; спека Q2a межею називає лише воду. Чи потрібні — рішення власника.
 - Заміри на телефоні (базовий fps з історією — не зроблено в Q0; ходьба —
-  QA-Q2b-7; розмір мініатюри — QA-Q3-7; Q4, Q7) — лише власник. IP ПК у локальній мережі в правилі CORS немає —
+  QA-Q2b-7; розмір мініатюри — QA-Q3-7; пліт і край моря — QA-Q4-7; Q7) — лише власник. IP ПК у локальній мережі в правилі CORS немає —
   телефон на dev-стенді з `--host` каталог не прочитає, поки власник не
   впише його.
 
 ## Що зроблено і працює
 
-Baseline (Q3, 2026-11-25): guard зелений 1.18 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0); `npm test` 221 passed; `probe-story-q3` PASS 179.6 с, `probe-story-q2b` PASS 64.1 с, `probe-story-q2a` PASS 52.8 с.
+Baseline (Q4, 2026-11-25): guard зелений 1.39 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 236 passed; після правок рев'ю проби під чужим навантаженням не зелені (п.7); до правок — `probe-story-q4` PASS 96.4 с, `probe-story-q3` 176.6 с, `-q2b` 87.8 с, `-q2a` 57.6 с, `probe-scene-shore` PASS.
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
@@ -160,10 +174,11 @@ Baseline (Q3, 2026-11-25): guard зелений 1.18 с (BOUNDARY-1…4, OWNER-1
 | Історія = видимі кадри | `src/tiles/storyFrames.js` (`toStoryFrames`), виклик у `tilecraftLoader.js` → `fetchTileSource` для фікстури, файлу й payload каталогу | HANDOFF Q1; тайли без видимого кадру й `hid`-кадри відкидаються до компіляції | `tests/storyFrames.test.js`, `probe-story-q1` (`contentOffset` < 1 м) |
 | Рамка виділення кадру | `TileFrames.setQuads` (`entry.quad` з `frame.points`), `TileInteraction.updateHighlight`; без `points` — `entry.bounds` | FRAME-DRAG FD4 + рев'ю Q1: рамка = авторський кадр, нерухома | `tests/frameQuad.test.js`, `probe-frame-land.mjs` |
 | Оболонка продукту | `products/story-quest/index.html`, `main.js` (рядок `#storyStatus`, uk/en), `story-quest.css`; спільний CSS сцени `src/ui/scene.css` | спека §4; BOUNDARY-4: `src/**` не імпортує `products/**` | `probe-story-q1` (dev + `PREVIEW_URL`) |
-| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `app.walker`, `app.ground` | спека §4.1; ноги на `TerrainContact`, не на `islandHeight`; тіло ≥ 0.255 м від лінії броду −0.5 м | `tests/walker.test.js`, `probe-story-q2a.mjs` |
+| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `state.deck`, `state.jump`), `deck.js`, `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, опції `decks`, `pull`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `app.walker`, `app.ground` | спека §4.1; ноги на `TerrainContact`, не на `islandHeight`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `tests/raft.test.js`, `probe-story-q2a.mjs` |
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
-| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — кнопка «Взяти»/«Покласти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка) |
+| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — кнопка «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка) |
 | Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take`, `put`, `unfoldCenter`, `syncFrames`, події `take/put/unfold/hydrate`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `app.minis` | DECISIONS «Мініатюри й гідратація»: копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
+| Пліт і кайт | `src/tiles/TileRaft.js` (`TileRaft`: `decks`, `update` до кроку, `pose` після, `setKite`, `course`, `moveTo`, `drift`, події `board/leave/kite/sea`; `KITE`), `raftMotion.js` (`RAFT`, `stepRaft`, `openWater`, `inOpenSea`), `TileFrameQuery` режим 3, `TileField.lockedFrames`, `syncShadow` (кадри в конверті дрейфу); у `main.js` — `raftUpdate()`, `kiteAction()` (K), `app.raft`, `SHORE_EXTENT` | DECISIONS «Пліт і кайт»; пліт = `placed`-кадр через `moveFrame`; INVARIANTS SIM-1 | `tests/raft.test.js`, `probe-story-q4.mjs` |
 | Збірка й деплой продукту | `vite.config.js` (`rollupOptions.input`), `verify-dist.mjs`, `deploy-netlify.mjs --alias`, `static-server.mjs` (index папки, `.css`), dev-фолбек `build/tilecraft-plugin.js` (`LOCAL_CATALOG_PATH`) | спека §5, §5.1 | `npm run deploy:check -- --alias story-quest`, `test:build` |
 
 ## Головні виміряні факти
@@ -171,6 +186,8 @@ Baseline (Q3, 2026-11-25): guard зелений 1.18 с (BOUNDARY-1…4, OWNER-1
 ### Стенд і інструменти
 
 - [CORS R2 `stories`] з 2026-11-24 у правилі `localhost:5199`, `127.0.0.1:5199`, `127.0.0.1:4173`, `edge-of-elements.netlify.app`, `story-quest--edge-of-elements.netlify.app` → `curl` з `Origin` на `cdn.` і `r2.dev` дає заголовок 15/15; новий origin — у правило до деплою, перевірка — `curl -D - -H "Origin: …"`, не вкладка. (Q0)
+- [`npx vitest` з Git Bash (`/d/…`)] усі 16 файлів падають «failed to find the current suite»: регістр диска дає дві копії vitest → юніти з PowerShell (`D:\…`). (Q4)
+- [проби поруч із чужими headless Chrome] 16 чужих процесів: сторінка 30 fps замість 60, `readRenderTargetPixelsAsync` 1.4–2.0 с замість 5–16 мс → проби, що чекають читань з GPU (палуба, footprint), падають; перед пробами перевірити процеси. (Q4)
 - [`probe-story-q0.mjs`] модель тягне Node (без CORS), у сторінку кладе синтетичним `drop` з `DataTransfer` — шлях, як у власника з файлом; `contentOffset` = відстань центру геометрії поля від `tiles.center` → «поле зібралось, але невидиме» без нього не видно. (Q0)
 
 - [`import.meta.env` у `src/`] Vite підставляє лише дослівний текст `import.meta.env.X`; `(import.meta).env` (JSDoc-каст) лишається `undefined`, а `import.meta.env ?? {}` не дає збірці вирізати dev-гілку → писати `import.meta.env.DEV` прямо, тип — `src/types/globals.d.ts`. (Q1)
@@ -210,8 +227,14 @@ Baseline (Q3, 2026-11-25): guard зелений 1.18 с (BOUNDARY-1…4, OWNER-1
 
 ### Пліт і кайт
 
-- [`driftRadius`] за замовчуванням 400 м від rest, відсічення — 400 + 64 м (`tileMotionLimit`); поле стоїть біля берега, `coast()` ≤ 800 м від центру → до межі моря 900 м пліт може не дістати, потрібен свій ліміт (Q4). (код)
-- [`TILE_SHADOW_MARGIN`] тінь на воду — лише rest + 16 м → пліт у морі тіні не кидає. (код)
+- [`uTileMotionLimit`] обмежує лише пружні зсуви тайлів (`state0.zw`), а `offset` кадру — позиція меша → `placed`-кадр уже не обмежений полем; ліміт плоту свій (`RAFT.limit` 1500 м). (Q4)
+- [`TileField.syncShadow`, пліт у морі] з усіма кадрами камера тіні розтягувалась би на ~1 км; кадри поза конвертом дрейфу відкинуто → у морі `syncShadow()` = null, пліт тіні не кидає. (Q4)
+- [пляж `my-day`, кадр 3] від лінії броду на 10–25 м — мілина 1.0–1.14 м, далі знову 0.7 м → поріг плоту «центр глибше 1 м» садив його одразу; `RAFT.depth` 0.6, `rimDepth` 0.1. (Q4)
+- [розгорнутий кадр біля пляжу] обід палуби — за 2.6 м від лінії броду −0.5 м → крок на палубу не дістає; стрибок `DECK_JUMP` 4 м. (Q4)
+- [`TileFrameQuery` режим 3, радіус] при 0.4 м біля ніг часто немає тайла (проміжки смуг полілінії `my-day`) → висота не читалась 0.6–0.8 с; радіус 1.2 м + радіус тайла. (Q4)
+- [висота палуби, хвиля] верхівки тайлів під ногами −0.04…+0.38 м за 3 с, до 0.7 м/с вертикально → `SETTLE` 0.06 с; ноги від палуби ≤ 0.05 м при читанні щокадру. (Q4)
+- [кайт, порядок у кадрі] `pose` до `walkerHost.update` бере ноги минулого кадру → кріплення гуляє 0.354 м у просторі камери на 8 м/с; ставити після кроку. (Q4, рев'ю)
+- [`TileSim`, прибій] вода в зміщеній орбітою точці → ітерація x = x₀ + D(x) розгойдується, де dD/dx < −1: 54 % кроків тайлів розвертаються; у точці якоря — 10 на ~230 тис. (INVARIANTS SIM-1, Q4 рев'ю)
 - [карта берега] `bakeShoreMap(islandHeight, 1800, …)`: за |x| або |z| > 900 м `shoreSample` дає глибину 60 м і відстань 1e4 → це і є межа відкритого моря (спека §4.3). (код)
 - [`ISLAND_SIZE`] 2400 → рельєф і контактна поверхня закінчуються на 1200 м; далі втоплений кадр тоне без дна (Q5). (код)
 - [телефон власника] немає `OES_texture_float_linear` → float-текстура з лінійним фільтром читається як 0 (TEX-1); нові карти лише `HalfFloatType` через `src/engine/halfTexture.js`. (INVARIANTS TEX-1)
