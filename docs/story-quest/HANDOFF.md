@@ -1,15 +1,16 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-25. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0–Q5b закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0–Q5b і QDa закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
 очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді, пліт і
 кайт до відкритого моря, політ на дошці з кайтом і посадка на ноги / на палубу; Q5 —
 долі кадру (відпустити / втопити / розпастися, зворотні, «Залишити так»); Q5a — C-кайт
-на чотирьох стропах із планкою; Q5b — плавання й пірнання до втопленого кадру.
+на чотирьох стропах із планкою; Q5b — плавання й пірнання до втопленого кадру; QDa —
+контракт сцени для продуктів (`&embed`, команди через `postMessage`).
 QA — [QA.md](QA.md).
 
-> **Далі:** QDa — контракт сцени для продуктів (п.13).
+> **Далі:** QDb — стенд `quest-demo-qa` і спільна оболонка (п.14).
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Телефон — лише драфт Netlify
@@ -38,7 +39,7 @@ QA — [QA.md](QA.md).
 | ~~Q5~~ | закрито 2026-11-25 (телефон — QA-Q5-8, QA-Q5-9) |
 | ~~Q5a~~ | закрито 2026-11-25 (телефон — QA-Q5a-6) |
 | ~~Q5b~~ | закрито 2026-11-25 (телефон — QA-Q5b-7) |
-| QDa | Q5b |
+| ~~QDa~~ | закрито 2026-11-25 (телефон — у QDb) |
 | QDb | QDa |
 | Q6 | QDb (зона панелі, факти — події контракту); логіку можна почати раніше на фікстурі |
 | Q7 | QDb, Q6 |
@@ -210,7 +211,7 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
    глибиною, з палуби без кайта), «Пірнути» / «Випливти». Підводний вигляд на телефоні
    (QA-Q5b-7) — за власником, на драфті.
 
-13. **QDa — контракт сцени для продуктів** (спека §4.4;
+~~13. **QDa — контракт сцени для продуктів** (спека §4.4;
    [quest-demo-qa.md](quest-demo-qa.md) «Контракт сцени»). `src/embed/`: `&embed`
    ховає технічні панелі; `postMessage` лише від `parent` того самого origin;
    hello/ready з повтором і RPC `call(cmd, args) → { ok, state } | { ok: false, reason }`
@@ -230,7 +231,10 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      набору якорі розв'язуються.
    - QA (чернетка): `qa:open` `http://localhost:5199/?story=test-2025/my-day-3-moments&walk&minis&embed`,
      `qa:action` нічого, `qa:inspect` екран сцени, `qa:expected` технічних панелей
-     (lil-gui, fps) немає, персонаж і огляд — як без `&embed`.
+     (lil-gui, fps) немає, персонаж і огляд — як без `&embed`.~~ — ЗАКРИТО 2026-11-25;
+     числа — QA.md QDa. 19 команд, якорі `beach`/`shallow`/`open-sea`/`frame:n`/`over:n`/
+     `beside:n` (таблиця — [quest-demo-qa.md](quest-demo-qa.md)); `app.embed` — ті самі
+     команди з консолі для QA; `walker.swimAt`. `&embed` нічого не ховає — рішення QDb.
 
 14. **QDb — стенд `quest-demo-qa` і спільна оболонка** (спека §4, §4.4;
    [quest-demo-qa.md](quest-demo-qa.md)). `products/shared/`: хост iframe, клієнт
@@ -279,13 +283,14 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
 
 ## Що зроблено і працює
 
-Baseline (Q5b, 2026-11-25): guard зелений 0.37 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 284 passed; `probe-story-q5b` PASS 113.8 с, `-q4b` 101.6 с, `-q5` 93.5 с, `-q4` 106.9 с; `probe-tiles` падає й на HEAD (`worldQuery.maxError`).
+Baseline (QDa, 2026-11-25): guard зелений 0.26 с (BOUNDARY-1…4, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 299 passed; `probe-story-embed` PASS 47.1 с, `probe-story-q5b` 113.4 с; `probe-tiles` падає й на HEAD (`worldQuery.maxError`); `npm run lint` падає на HEAD (`probe-story-q5.mjs:118`).
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
 | Каталог історій | `src/catalog/index.js` (`createStoryCatalog`), `catalog.js` (`createCatalog`, `parseStoryId`, `errorCode`), Tilecraft-вхід `tilecraftCatalog.js` (`lib/story-catalog.js`); `app.catalog`, `app.loadStory` у `main.js` | спека §4.1; стани `idle/pending/ready/failed`, подія `change`, помилка `{ code, message }`; папки `public-test`, `test-2025`, у dev `local` | `tests/catalog.test.js`, `scripts/probe-story-q1.mjs` |
 | Історія = видимі кадри | `src/tiles/storyFrames.js` (`toStoryFrames`), виклик у `tilecraftLoader.js` → `fetchTileSource` для фікстури, файлу й payload каталогу | HANDOFF Q1; тайли без видимого кадру й `hid`-кадри відкидаються до компіляції | `tests/storyFrames.test.js`, `probe-story-q1` (`contentOffset` < 1 м) |
 | Рамка виділення кадру | `TileFrames.setQuads` (`entry.quad` з `frame.points`), `TileInteraction.updateHighlight`; без `points` — `entry.bounds` | FRAME-DRAG FD4 + рев'ю Q1: рамка = авторський кадр, нерухома | `tests/frameQuad.test.js`, `probe-frame-land.mjs` |
+| Контракт сцени для продуктів | `src/embed/`: `protocol.js` (`CHANNEL`, `createEmbedServer`, `EmbedError`, `until`), `commands.js` (`createCommands`, `WAIT`), `anchors.js` (`resolveAnchor`, `ANCHOR`), `state.js` (`readState`), `world.js` (`worldFromApp` — фасад над `app`), `index.js` (`startEmbed`); у `main.js` — гілка `&embed`, `app.embed`; `walker.swimAt` | спека §4.4, [quest-demo-qa.md](quest-demo-qa.md) «Контракт сцени»; лише `parent` того самого origin; команди викликають ті самі функції, що клавіші | `tests/embed.test.js`, `scripts/probe-story-embed.mjs` |
 | Оболонка продукту | `products/story-quest/index.html`, `main.js` (рядок `#storyStatus`, uk/en), `story-quest.css`; спільний CSS сцени `src/ui/scene.css` | спека §4; BOUNDARY-4: `src/**` не імпортує `products/**` | `probe-story-q1` (dev + `PREVIEW_URL`) |
 | Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `JUMP_CONE` 45°; дошка: `takeOff`, `fly`, `land`, `landing`, `state.flight`), `flight.js` (`FLIGHT` 24 м/с, 3 ± 0.4 м; `stepFlight`, `landing` → `ground/deck/water`), вода `swim.js` (`SWIM`, `stepSwim`, `eyeLevel`; у `walker.js` — `state.swim`, `jumpIn`, `dive`, `rise`, `under`), `deck.js` (`deckClear`, `nearestOnDeck`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, `decks`, `pull`, меш `board`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `flyAction`/`flyHint` (Пробіл: зліт, посадка, у воду, пірнути / випливти), `walkerWater` (слот 1 `WaterQuery`), `app.walker`, `app.ground` | спека §4.1, §4.2 v1.5; DECISIONS «Плавання й пірнання»; ноги на `TerrainContact`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `raft.test.js`, `flight.test.js`, `swim.test.js`, `probe-story-q2a`, `-q4b`, `-q5b` |
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
@@ -310,6 +315,9 @@ Baseline (Q5b, 2026-11-25): guard зелений 0.37 с (BOUNDARY-1…4, OWNER-
 
 - [`import.meta.env` у `src/`] Vite підставляє лише дослівний текст `import.meta.env.X`; `(import.meta).env` (JSDoc-каст) лишається `undefined`, а `import.meta.env ?? {}` не дає збірці вирізати dev-гілку → писати `import.meta.env.DEV` прямо, тип — `src/types/globals.d.ts`. (Q1)
 - [нова сторінка в `products/`] друга сторінка збірки — `rollupOptions.input` у `vite.config.js` + рядок у `verify-dist.mjs`; `npm run preview` віддає `…/` як `index.html` лише після Q1 (`static-server.mjs`). (Q1)
+
+- [`probe-story-embed`, тестовий хост] сторінка того самого origin: `goto` будь-якого файлу стенду (`src/embed/protocol.js`), потім `page.setContent` з iframe → origin лишається `localhost:5199`, `postMessage` проходить перевірку `e.origin`. (QDa)
+- [`&embed` у звичайній вкладці] `parent === window`: відповіді нікуди не йдуть → руками — `app.embed['<команда>'](args)` з консолі. (QDa)
 
 ### Каталог
 
@@ -349,6 +357,8 @@ Baseline (Q5b, 2026-11-25): guard зелений 0.37 с (BOUNDARY-1…4, OWNER-
 
 ### Пліт і кайт
 
+- [`raft.moveTo` з персонажем на палубі] палуба переїжджає одразу, персонаж — у `ride()` наступного кадру → `state.read` одразу після `moveTo` показував старе місце; команда embed чекає й на персонажа. (QDa)
+- [якорі `beach` / `shallow` на тестовому наборі] у всіх трьох історіях (198.5, −207.3) і (219.6, −229.4): поле стоїть біля того самого берега → картки однакові для всіх історій, різниться лише кількість кадрів (3 / 10 / 8). (QDa)
 - [`uTileMotionLimit`] обмежує лише пружні зсуви тайлів (`state0.zw`), а `offset` кадру — позиція меша → `placed`-кадр уже не обмежений полем; ліміт плоту свій (`RAFT.limit` 1500 м). (Q4)
 - [`TileField.syncShadow`, пліт у морі] з усіма кадрами камера тіні розтягувалась би на ~1 км; кадри поза конвертом дрейфу відкинуто → у морі `syncShadow()` = null, пліт тіні не кидає. (Q4)
 - [пляж `my-day`, кадр 3] від лінії броду на 10–25 м — мілина 1.0–1.14 м, далі знову 0.7 м → поріг плоту «центр глибше 1 м» садив його одразу; `RAFT.depth` 0.6, `rimDepth` 0.1. (Q4)

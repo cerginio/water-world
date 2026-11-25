@@ -44,12 +44,12 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
   "flags": ["walk", "minis"],
   "weather": { "preset": "clear" },
   "steps": [
-    { "cmd": "minis.hydrate", "at": "frame:0", "where": "shallow" },
-    { "cmd": "raft.board", "frame": 0 },
-    { "cmd": "kite.raise" },
-    { "cmd": "raft.moveTo", "at": "open-sea" }
+    { "cmd": "minis.hydrate", "args": { "frame": 0 } },
+    { "cmd": "raft.board", "args": { "frame": 0 } },
+    { "cmd": "kite.set", "args": { "up": true } },
+    { "cmd": "raft.moveTo", "args": { "frame": 0, "at": "open-sea" } }
   ],
-  "expect": { "mode": "raft", "kite": "up", "openSea": true }
+  "expect": { "walker.deck": 0, "kite": true, "openSea": true }
 }
 ```
 
@@ -84,8 +84,34 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
   `unknown-command`, а не виняток. Реалізація викликає ті самі функції, що
   кнопки й клавіші сцени, без обхідних шляхів. Камера йде лише через
   `cameraRig` (OWNER-3).
-- Якорі розв'язує сцена для поточної історії: `beach`, `frame:<n>`,
-  `shallow`, `open-sea`, `deep`, `deep-over-sunk`, `island`.
+- Якорі розв'язує сцена для поточної історії (`src/embed/anchors.js`):
+  `beach` (місце старту персонажа), `shallow` (лінія броду навпроти поля, обличчям
+  у море), `open-sea` (азимут поля, 1300 м від центру), `frame:<n>` і `over:<n>`
+  (де кадр n зараз; мініатюра — там, де мініатюра), `beside:<n>` (6 м від обода
+  палуби n уздовж її осі u). Кадр — індекс у порядку реєстру кадрів, не id.
+
+Команди (QDa, `src/embed/commands.js`; кожна повертає `state.read`):
+
+| команда | аргументи | що робить |
+|---|---|---|
+| `state.read` | — | режим, персонаж (`deck`, `flight`, `landing`, `swim`), кайт, `openSea`, `carried`, підказки кнопок, кадри (`mini`, `deck`, `fate`) |
+| `walker.place` | `at`, `yaw` | ноги на ґрунті в якорі, «очі» |
+| `walker.eyes` | `on` | у тіло / «поза тілом» |
+| `walker.look` | `yaw`, `pitch`, `at` | погляд |
+| `minis.take` | `frame` | мініатюра в руки |
+| `minis.hydrate` | `frame` | узяти, покласти на `shallow`, дочекатися палуби на воді |
+| `raft.board` | `frame`, `u`, `v`, `yaw` | на палубу кадру |
+| `raft.moveTo` | `frame`, `at` | палуба (з персонажем, якщо це пліт) у якір |
+| `kite.set` | `up` | кайт |
+| `fly.takeOff` · `fly.to` · `fly.land` | `at` для `fly.to` | дошка: зліт з плоту, над якорем, посадка |
+| `fate.give` · `fate.undo` · `fate.keep` | `frame`, `kind`, `settle` | доля; `settle` чекає кінця на годиннику ×10 |
+| `swim.in` · `swim.dive` · `swim.rise` | `at`, `depth` | у воду (з якоря, з плоту, з дошки), глибина одразу |
+| `mood.set` | `v`, `a`, `t` | погода |
+
+Відмови: `unknown-command`, `bad-args`, `unknown-anchor`, `unknown-frame`,
+`not-on-water`, `no-miniature`, `not-possible`, `story-failed`, `timeout`.
+Події: `scene.ready` / `scene.failed`, `minis.take|put|unfold|hydrate`,
+`raft.board|leave|kite|sea|takeoff|land`, `fate.change`.
 - `window.app` лишається налагоджувальною поверхнею для проб. Продукт його не
   читає.
 

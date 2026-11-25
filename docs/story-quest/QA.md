@@ -19,6 +19,122 @@
 (рядок «Деплой» вище; рішення власника 2026-11-25). Сценарії для телефона — лише
 дотики: стік, кнопки, провести пальцем по сцені.
 
+## QDa. Контракт сцени для продуктів
+
+**Прийнято власником через `handoff:next` 2026-11-25.** Сцена з `&embed` приймає закритий перелік команд через `postMessage` від
+батьківського вікна того самого origin і відповідає `state.read` або відмовою з причиною
+(спека §4.4, [quest-demo-qa.md](quest-demo-qa.md) «Контракт сцени» — таблиця команд, якорі,
+відмови, події). Модуль `src/embed/`: `protocol.js` (канал `ultra-water/scene`, hello/ready,
+RPC, події), `commands.js` (19 команд), `anchors.js` (`beach`, `shallow`, `open-sea`,
+`frame:n`, `over:n`, `beside:n`), `state.js`, `world.js`, `index.js`; у `walker.js` —
+`swimAt(x, z, depth)`. Стан збирається телепортом: шлях не програється, кожна команда
+чекає своєї події (до 15 с; доля — на годиннику ×10).
+
+Сторінки-хоста ще немає (QDb), тож руками команди даються з консолі тієї самої вкладки:
+`app.embed` — той самий перелік, що йде через `postMessage` (лише з `&embed`; продукт до
+`app` не звертається). Кожна команда — `await app.embed['<назва>']({ … })`.
+
+- **guard** зелений 0.26 с: BOUNDARY-1…4, OWNER-1…5 (OWNER-3 — 0: команди камери не
+  пишуть, вона йде за персонажем через `cameraRig`), TEX-1, BUDGET-1; typecheck 0 помилок.
+- **focused:** `tests/embed.test.js` 15 passed (hello → версія й перелік; чужий канал
+  мовчить; невідома команда — і `toString` — відмова `unknown-command`; відмова несе
+  причину; `until` → `timeout`; якорі на круглому острові: `shallow` — останній крок перед
+  −0.45 м обличчям у море, `open-sea` за 1200 м, `frame` / `over` / `beside` (обидва ободи
+  + 6 м), відмови `unknown-anchor`, `unknown-frame`, `not-on-water`; перелік закритий і
+  заморожений; нестача історії → `timeout`, відмова каталогу → `story-failed`; хибні
+  аргументи — до дотику до сцени). `npm test` — 22 файли, 299 passed.
+- **probe:** `probe-story-embed` PASS 47.1 с (нижче); регрес `probe-story-q5b` PASS 113.4 с.
+  Lint по файлах фази чистий; `npm run lint` падає й на HEAD (`probe-story-q5.mjs:118`).
+
+Що виміряно (`probe-story-embed`, desktop RTX, headless; хост — сторінка того самого origin
+з iframe, лише `postMessage`):
+
+| що | число |
+|---|---|
+| мініатюра 0 → вода → палуба → кайт → відкрите море (`my-day`, `&minis`) | 4.1 с; персонаж (899, −939), подія `raft.sea` |
+| зліт і над глибиною поруч з плотом | `landing` = `water`, кнопка «У воду», ~0 с |
+| кадр 1 поруч, втоплено (`settle`), персонаж на 30 м над ним | 6.3 с; камера на 27 м під водою, кадр видно |
+| найдовші кроки | `minis.hydrate` 3.8 с (перший; узяти, розгорнути, палуба), `walker.place` після завантаження 4.6 с, `fate.give sink` 3.0 с |
+| події маршруту | `scene.ready`, `minis.take/unfold/hydrate`, `raft.board/kite/sea/takeoff/leave/land`, `fate.change` |
+| якорі на тестовому наборі (без `&minis`) | `my-day` 3 кадри, жаба 10, білка (`local/`) 8: `beach` на суші, `shallow` на −0.45 м, кадр 0 у морі за 1250 м — у всіх трьох |
+
+### QA-QDa-1. `&embed` не міняє сцену
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?story=test-2025/my-day-3-moments&walk&minis&embed`
+**qa:action:** нічого.
+**qa:inspect:** екран сцени; у консолі `typeof app.embed`.
+**qa:expected:** як без `&embed`: огляд острова, потім спуск в очі на пляжі; ні lil-gui, ні
+панелі fps; рейка станцій і кнопка погоди внизу — як завжди. `typeof app.embed` =
+`'object'`. Без `&embed` — `'undefined'`. Покрито `probe-story-embed` (крок 0).
+
+### QA-QDa-2. Пліт під кайтом у відкритому морі — командами
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?story=test-2025/my-day-3-moments&walk&minis&embed`, дочекатися очей.
+**qa:action:** у консолі:
+`const e = app.embed; await e['minis.hydrate']({ frame: 0 }); await e['raft.board']({ frame: 0 }); await e['kite.set']({ up: true }); await e['raft.moveTo']({ frame: 0, at: 'open-sea' })`.
+**qa:inspect:** камера; останній результат у консолі (`walker`, `kite`, `openSea`).
+**qa:expected:** за ~5 с персонаж стоїть на кадрі в морі без острова на горизонті, над ним
+C-кайт на чотирьох стропах; у результаті `walker.deck` = 0, `kite` = `true`, `walker.x` ≈ 899,
+`walker.z` ≈ −939; за секунду `(await e['state.read']()).openSea` = `true`. Покрито
+`probe-story-embed` (крок 1); оком — чи не лишилось на палубі сміття від телепорту
+(кадр двоїться, ноги під палубою).
+
+### QA-QDa-3. Після команд — звичайне керування
+
+**qa:mode:** browser
+**qa:open:** стан після QA-QDa-2.
+**qa:action:** тримати W 3 с; A 1 с; Пробіл; W 2 с; Пробіл.
+**qa:inspect:** камера, кайт, хвилі.
+**qa:expected:** кайт тягне пліт (≈ 12 м за 3 с), A повертає курс; Пробіл — зліт на дошці
+2–4 м над водою; другий Пробіл над глибиною — у воду, кайт зникає, очі на поверхні.
+Командний стан нічим не відрізняється від пройденого руками. Не покрито пробою (лише
+скриптом рев'ю: 11.6 м за 3 с, Пробіл → у воді).
+
+### QA-QDa-4. Під водою біля втопленого кадру — командами
+
+**qa:mode:** browser
+**qa:open:** стан після QA-QDa-2 (пліт з кадру 0 у морі).
+**qa:action:** у консолі:
+`await e['minis.hydrate']({ frame: 1 }); await e['raft.moveTo']({ frame: 1, at: 'beside:0' }); await e['fate.give']({ frame: 1, kind: 'sink' }); await e['swim.in']({ at: 'over:1', depth: 30 }); await e['walker.look']({ pitch: -1.2 })`.
+**qa:inspect:** камера; `app.camera.position.y - app.camWater()`; результат (`frames[1].fate`).
+**qa:expected:** персонаж спершу на пляжі (гідратація з берега), потім за ~6 с — у товщі
+води: синя імла, сніг частинок, унизу контури втопленого кадру. Камера на ~31 м під водою;
+`frames[1].fate` = `{ kind: 'sink', t: 1 }`. Пробіл — «Випливти», глибина повільно до 0.
+Покрито `probe-story-embed` (крок 3); оком — що кадр унизу видно, а не лише синь.
+
+### QA-QDa-5. Відмова — причина, не виняток
+
+**qa:mode:** browser
+**qa:open:** `http://localhost:5199/?story=test-2025/my-day-3-moments&walk&minis&embed`, дочекатися очей.
+**qa:action:** у консолі `await app.embed['raft.board']({ frame: 0 }).catch((x) => x.reason)`, потім
+`await app.embed['walker.place']({ at: 'moon' }).catch((x) => x.reason)`.
+**qa:inspect:** вивід консолі; сцена.
+**qa:expected:** `'not-on-water'` (кадр 0 ще мініатюра), потім `'unknown-anchor'`; сцена й
+персонаж не зрушили, помилок у консолі немає. Покрито `probe-story-embed` (крок 0) і
+`tests/embed.test.js`.
+
+### QA-QDa-6. Проба контракту
+
+**qa:mode:** cli
+**qa:open:** термінал PowerShell у `D:\work\_tools\water-3d\Ultra-Water`, стенд `npm run dev` працює.
+**qa:action:** `node scripts/probe-story-embed.mjs`
+**qa:inspect:** останній рядок виводу; знімки в `%TEMP%\story-embed\`.
+**qa:expected:** `PASS probe-story-embed` за ~50 с; `raft-open-sea.png` — кайт над плотом
+у морі, `flight-deep.png` — кайт і відкрите море з дошки, `under-sunk.png` — втоплений кадр
+у товщі води.
+
+### Свідомо не зроблено в QDa
+
+- Сторінки-хоста, карток, зон панелі й телефона немає — це QDb. Тут контракт перевіряє
+  тестовий хост проби й консоль.
+- `&embed` нічого не ховає зі сцени: технічні панелі й так приховані за замовчуванням,
+  а рейку станцій і кнопку погоди оболонка вирішить у QDb.
+- Телепорт не програє шлях: гідратація з `minis.hydrate` ставить персонажа на `shallow` і
+  кладе мініатюру, хоч би де він був; `swim.dive` / `swim.rise` — глибина одразу. Кнопки
+  в сцені й далі йдуть повільно, як було.
+
 ## Q5b. Плавання й пірнання
 
 **Прийнято власником через `handoff:next` 2026-11-25.** Телефон (QA-Q5b-7) не перевірено —
