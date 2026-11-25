@@ -7,13 +7,16 @@ import { TILE_VERTICAL_LIMIT } from './tileBounds.js';
 
 // Reduce current GPU geometry to four bounds or one placement verdict. Only the
 // final 1x1 pixel is read asynchronously; no snapshot of the frame reaches CPU.
+// Modes: 0 screen bounds, 1 placement verdict, 2 world XZ footprint, 3 deck height — the
+// highest tile top of the frame within uRadius of uPoint (story-quest Q4: the walker on a raft).
 const FRAG = /* glsl */`
 precision highp float;
 precision highp int;
 uniform sampler2D uRest0,uRest1,uState0,uState1;
 uniform int uTileCount,uFrame,uMode;
 uniform mat4 uWorld,uViewProjection;
-uniform vec2 uOffset,uDelta;
+uniform vec2 uOffset,uDelta,uPoint;
+uniform float uRadius;
 uniform float uWaterHeight;
 uniform float uTileMotionLimit;
 ${TILE_TILT_GLSL}
@@ -83,6 +86,10 @@ void main(){
   vec4 s=texelFetch(uState0,uv,0),s1=texelFetch(uState1,uv,0);
   s.x=clamp(s.x,-${TILE_VERTICAL_LIMIT.toFixed(1)},${TILE_VERTICAL_LIMIT.toFixed(1)});
   s.zw*=min(1.0,uTileMotionLimit/max(length(s.zw),0.00001));
+  if(uMode==3){
+    vec2 c=(uWorld*vec4(r.x+s.z+uOffset.x,0.0,r.y+s.w+uOffset.y,1.0)).xz;
+    if(distance(c,uPoint)>uRadius+r.w)return;
+  }
   mat3 rotation=tileTilt(s1.xy);
   vec4 metadata=texelFetch(uRest0,uv+ivec2(0,uStateHeight),0);
   footprintCount=int(metadata.x);
@@ -96,6 +103,11 @@ void main(){
     p.xz+=uDelta;
     footprint[i]=p;lo=min(lo,p.xz);hi=max(hi,p.xz);bottom=min(bottom,p.y);
     if(uMode==2)result=max(result,vec4(-p.xz,p.xz));
+    if(uMode==3){
+      vec3 w=p+mat3(uWorld)*rotation*vec3(0.0,r1.y,0.0);
+      w.y+=mix(metadata.y,min(metadata.y,0.001),s1.z);
+      result=max(result,vec4(w.y,1.0,0.0,0.0));
+    }
     if(uMode==0){
       for(int top=0;top<2;top++){
         vec3 w=p+mat3(uWorld)*rotation*vec3(0.0,float(top)*r1.y,0.0);
@@ -138,7 +150,7 @@ export class TileFrameQuery {
     this.uniforms={uTileMotionLimit:{value:1e20},...sim.uniforms,...field.terrainContact.uniforms,
       uFrame:{value:0},uMode:{value:mode},uWorld:{value:new THREE.Matrix4()},
       uViewProjection:{value:new THREE.Matrix4()},uOffset:{value:new THREE.Vector2()},
-      uDelta:{value:new THREE.Vector2()},uWaterHeight:{value:0},uTileCount:{value:field.rest.tiles.count},uStateHeight:{value:sim.height}};
+      uDelta:{value:new THREE.Vector2()},uPoint:{value:new THREE.Vector2()},uRadius:{value:1},uWaterHeight:{value:0},uTileCount:{value:field.rest.tiles.count},uStateHeight:{value:sim.height}};
     this.quad=new FullscreenQuad(rawPass(FRAG,this.uniforms,{defines:{TILE_FOOTPRINT_VERTICES:sim.footprintVertices}}));
     this.reduce=new FullscreenQuad(rawPass(REDUCE,{uInput:{value:null}}));
     // Pay the one-off shader compile during load, before a pointer gesture.
@@ -153,7 +165,8 @@ export class TileFrameQuery {
     }
   }
 
-  async query(frame,delta=new THREE.Vector2(),waterHeight=0){
+  /** point: { x, z, radius } in world, mode 3 only */
+  async query(frame,delta=new THREE.Vector2(),waterHeight=0,point=null){
     if(this.pending||this.disposed)return null;
     this.pending=true;
     const r=this.field.renderer,previous=r.getRenderTarget();
@@ -161,6 +174,7 @@ export class TileFrameQuery {
       const u=this.uniforms;
       u.uFrame.value=frame.index;u.uOffset.value.set(frame.offset.x,frame.offset.z);
       u.uDelta.value.copy(delta);u.uWaterHeight.value=waterHeight;
+      if(point){u.uPoint.value.set(point.x,point.z);u.uRadius.value=point.radius;}
       u.uWorld.value.copy(this.field.group.matrixWorld);
       const camera=this.field.camera;camera.updateWorldMatrix(true,false);
       u.uViewProjection.value.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);

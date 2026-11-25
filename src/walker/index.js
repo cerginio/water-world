@@ -7,6 +7,10 @@
 // the eyes, the figure is hidden (the camera would sit inside its head); 'standing' — out
 // of the body: the figure stands where it was left, the camera is free and goes by the
 // rig's keys and by the stick (rig.steer).
+//
+// Q4: `decks` — the frames on the water the walker can stand on (walker.js); `pull` — the
+// kite: while it flies and the walker is on a deck in the eyes, the walk input (keys, stick)
+// sets the kite's course instead of walking; the head still turns.
 import { createWalker, PACE } from './walker.js';
 import { WALK, isWater, walkOnGround } from './groundWalk.js';
 import { bindWalkerInput, keyIntent } from './keyboard.js';
@@ -19,11 +23,12 @@ const HIDE_NEAR = 1.5;   // m from the eyes: closer, a boarding camera would see
 /**
  * @param {{ scene: any, rig: any, ground: (x: number, z: number) => any,
  *   canvas: HTMLElement, isEditing: (target: EventTarget | null) => boolean,
- *   character?: string }} options
+ *   character?: string, decks?: () => import('./deck.js').Deck[],
+ *   pull?: { active: () => boolean, course: (dir: { x: number, z: number } | null) => void } }} options
  */
-export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, character = 'explorer' }) {
+export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, character = 'explorer', decks, pull }) {
   const { moveOnSheet, createGamifierAvatar } = await loadWalkerModules();
-  const walker = createWalker({ moveOnSheet, ground });
+  const walker = createWalker({ moveOnSheet, ground, decks });
   const avatar = createGamifierAvatar();
   avatar.setCharacter(character);
   avatar.group.name = 'walker';
@@ -84,7 +89,11 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
         const m = Math.hypot(stick.x, stick.y);
         Object.assign(own, { forward: stick.y, strafe: stick.x, run: m > 0.95 });
       }
-      if (mode === 'eyes') walker.step(dt, intent ?? own);
+      walker.ride(dt);
+      const it = intent ?? own;
+      const kite = !!pull?.active() && !!walker.state.deck;
+      if (kite) pull.course(mode === 'eyes' ? walker.direction(it) : null);
+      if (mode === 'eyes') walker.step(dt, kite ? { ...it, forward: 0, strafe: 0 } : it);
       else walker.state.moving = false;
       rig.steer(mode === 'standing' ? stick.y : 0, mode === 'standing' ? stick.x : 0);
       const s = walker.state;

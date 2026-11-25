@@ -131,7 +131,9 @@ export class TileInteraction {
     if (this.cameraTouch || e.button !== 0 || !this.field.sim) return;
     // A second press may become a drag. Decide whether it was a double click
     // only after pointerup; the dblclick listener still hands a true tap to T5.
-    const hit = this.picker.pick(this.camera, e.clientX, e.clientY);
+    let hit = this.picker.pick(this.camera, e.clientX, e.clientY);
+    // the raft under the walker is not grabbed: the drag turns the head (story-quest Q4)
+    if (hit && this.field.lockedFrames?.has(hit.frame.id)) hit = null;
     this.samples.push(this.picker.lastMs); if (this.samples.length > 120) this.samples.shift();
     if (!hit) {
       this.clearSelection();

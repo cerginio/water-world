@@ -8,6 +8,7 @@
 //
 // Q3: an optional second button for the miniatures — «take» / «put down», shown only while
 // `action.hint()` names one (the host of the miniatures decides, the button only words it).
+// Q4: the same button puts the kite up / lets it go on a raft ('kite' / 'unkite').
 //
 // The stick: x to the right, y forward (screen up), both -1..1, length ≤ 1. Inside the
 // dead zone it is 0; past it the length starts at 0 again, so there is no jump at the
@@ -31,8 +32,9 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
 
 /**
  * @param {{ parent?: HTMLElement, host: { mode: string, setStick: (v: {x: number, y: number}) => void },
- *   onToggle: () => void, labels?: { stick: string, leave: string, enter: string, take: string, put: string },
- *   action?: { hint: () => 'take' | 'put' | null, run: () => unknown } }} options
+ *   onToggle: () => void, labels?: { stick: string, leave: string, enter: string, take: string, put: string,
+ *     kite: string, unkite: string },
+ *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | null, run: () => unknown } }} options
  */
 export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action }) {
   const root = document.createElement('div');
@@ -107,6 +109,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
 }
 
 export const LABELS = Object.freeze({
-  en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down' },
-  uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти' },
+  en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down',
+    kite: 'Kite', unkite: 'Let go of the kite' },
+  uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти',
+    kite: 'Кайт', unkite: 'Відпустити кайт' },
 });

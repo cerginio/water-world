@@ -25,6 +25,7 @@ import { FloaterShadow } from './scene/floaterShadow.js';
 import { WaveCaustics } from './water/Caustics.js';
 import { TileField } from './tiles/TileField.js';
 import { TileMiniatures } from './tiles/TileMiniatures.js';
+import { TileRaft } from './tiles/TileRaft.js';
 import { readTileUrl, writeTileUrl } from './tiles/tileUrl.js';
 import { TILE_SOURCES, tilecraftAvailable } from './tiles/tilecraftLoader.js';
 import { createStoryCatalog } from './catalog/index.js';
@@ -78,7 +79,8 @@ rig.bind(renderer.domElement, isEditing);
 const env = createEnvironment(renderer, { cubeSize: 1024 });
 // the surf rock as a dome in the bake: the fronts wrap round it, break on its face and
 // leave a sheltered lee
-const shore = bakeShoreMap(islandHeight, 1800, 512, (x, z) => {
+const SHORE_EXTENT = 1800;   // m: the shore map's square; past its edge the sea is open (STORY-QUEST §4.3)
+const shore = bakeShoreMap(islandHeight, SHORE_EXTENT, 512, (x, z) => {
   const q = ((x - heroRock.x) ** 2 + (z - heroRock.z) ** 2) / (8.5 * 8.5);
   return q < 1 ? 4 * (1 - q) : -Infinity;
 });
@@ -297,7 +299,9 @@ function walkerSpawn() {
   return { x: p.x, z: p.y, yaw: Math.atan2(out.x, out.y) };
 }
 async function walkerReady() {
-  walkerLoading ??= createWalkerHost({ scene, rig, ground: walkGround, canvas: renderer.domElement, isEditing });
+  walkerLoading ??= createWalkerHost({ scene, rig, ground: walkGround, canvas: renderer.domElement, isEditing,
+    decks: () => raft?.decks() ?? [],
+    pull: { active: () => !!raft?.kite.up, course: (dir) => raft?.course(dir) } });
   walkerHost = await walkerLoading;
   if (walkerHost.mode === 'off') {
     const spawn = walkerSpawn();
@@ -307,7 +311,7 @@ async function walkerReady() {
   const stickArg = args.get('stick');
   if (!walkerStick && (args.has('stick') ? stickArg !== '0' : mobile)) {
     walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
-      action: { hint: miniHint, run: miniAction },
+      action: { hint: () => miniHint() ?? kiteHint(), run: () => miniAction() ?? kiteAction() },
       labels: (navigator.language ?? '').toLowerCase().startsWith('uk') ? STICK_LABELS.uk : STICK_LABELS.en });
     document.body.classList.add('walker-controls');
   }
@@ -361,6 +365,30 @@ function miniHint() {
   const s = walkerHost.state;
   return minis.carried ? 'put' : minis.nearest(s.x, s.z) ? 'take' : null;
 }
+// --- raft and kite (story-quest Q4) --------------------------------------------------
+// Every frame drawn on the water is a deck: a step onto it boards it. On a deck K (or the
+// touch button) puts the kite up: the walk input is then its course and it pulls the raft
+// there; K again lets go and the raft drifts (TileRaft.js). Past the edge of the shore map
+// the walker on the raft is in the open sea (the 'sea' event).
+let raft = null;
+function raftUpdate(dt) {
+  if (!raft && tiles.loaded) raft = new TileRaft(tiles, { ground: walkGround, scene, seaEdge: SHORE_EXTENT / 2 });
+  raft?.update(dt, walkerHost && walkerHost.mode !== 'off' ? walkerHost.state : null);
+}
+/** K and the touch button: the kite up or let go, on a deck in the eyes. */
+function kiteAction() {
+  if (!raft?.boarded || walkerHost?.mode !== 'eyes') return null;
+  return raft.toggleKite() ? 'kite' : 'unkite';
+}
+/** What the button would do now for the kite: 'kite' (up), 'unkite' (let go) or null. */
+function kiteHint() {
+  if (!raft?.boarded || walkerHost?.mode !== 'eyes') return null;
+  return raft.kite.up ? 'unkite' : 'kite';
+}
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyK' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  if (kiteAction()) e.preventDefault();
+});
 addEventListener('keydown', (e) => {
   if (e.code !== 'KeyG' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
   if (miniAction()) e.preventDefault();
@@ -410,6 +438,7 @@ const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk').name('walk · eyes (V)');
 gui.add({ miniAction }, 'miniAction').name('take · put (G)');
+gui.add({ kiteAction }, 'kiteAction').name('kite · let go (K)');
 
 fSun = gui.addFolder('Sun & sky');
 // the sliders read env.params and write through env.set() (guard OWNER-4: one sun writer)
@@ -974,7 +1003,9 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const px = new Uint8Array(size.x * size.y * 4);
   for (let i = 0; i < frames; i++) {
+    raftUpdate(dt);
     walkerHost?.update(dt, i * dt * 1000);
+    raft?.pose(dt, walkerHost?.mode === 'off' ? null : walkerHost?.state);
     minis?.update(dt, walkerHost?.mode === 'off' ? null : walkerHost?.state);
     rig.update(dt);
     renderFrame(dt);
@@ -997,6 +1028,7 @@ window.app = {
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   get minis() { return minis; }, layoutMinis, miniAction, miniHint,
+  get raft() { return raft; }, kiteAction, kiteHint,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,
   rig, stations: { go: stations.go, nextFrame: stations.nextFrame, prevFrame: stations.prevFrame,
     get current() { return stations.current; }, get last() { return stations.last; }, get focus() { return stations.focus; } },
@@ -1088,7 +1120,9 @@ function setResolution(r) {
 function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
+  raftUpdate(dt);
   walkerHost?.update(dt, now);
+  raft?.pose(dt, walkerHost && walkerHost.mode !== 'off' ? walkerHost.state : null);
   minis?.update(dt, walkerHost?.mode === 'off' ? null : walkerHost?.state);
   walkerStick?.update();
   rig.update(dt);

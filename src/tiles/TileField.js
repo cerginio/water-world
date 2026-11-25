@@ -43,6 +43,8 @@ export class TileField {
     this.rest = null;
     this.frames = [];
     this.frameRegistry = new TileFrames();
+    /** frame ids a pointer may not grab: the raft under the walker (TileRaft, story-quest Q4) */
+    this.lockedFrames = new Set();
     this.frameMatrix = new THREE.Matrix4();
     this.extent = new THREE.Vector2(85, 30);   // rest bounds in metres; story-sized until a model is loaded
     this.radius = 45;      // circumscribed circle: the open-water test in place()
@@ -199,11 +201,20 @@ export class TileField {
 
   get castsShadow() { return !!this.sim?.profile.fieldShadow; }
 
+  // The shadow camera fits the frames drawn within the drift envelope of the field (rest +
+  // tileMotionLimit); a raft out at sea (story-quest Q4) would stretch it over a kilometre of
+  // 1 m texels, so it casts no float shadow there (STORY-QUEST-SPEC §4.3). None left → null.
   syncShadow() {
     this.shadowGroup.matrixAutoUpdate = false;
     this.shadowGroup.matrix.copy(this.group.matrixWorld);
     this.shadowGroup.matrixWorldNeedsUpdate = true;
-    return fieldShadowBody(this.boundsEntries, this.shadowBody);
+    const reach = tileMotionLimit(this.params.driftRadius) + this.radius;
+    const near = this.boundsEntries.filter((e) => {
+      if (!e.mesh.visible) return false;
+      const frame = this.frameRegistry.entries[e.frameIndex];
+      return !frame || Math.hypot(frame.world.x - this.center.x, frame.world.z - this.center.z) <= reach;
+    });
+    return near.length ? fieldShadowBody(near, this.shadowBody) : null;
   }
 
   // the props' path (spec.md §7.1): atmosphere, underwater fog and the floater shadow
