@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TileFrameQuery } from './TileFrameQuery.js';
 import { RAFT, inOpenSea, openWater, stepRaft } from './raftMotion.js';
+import { createCKite } from './cKite.js';
 
 // The raft and the kite (STORY-QUEST-SPEC §2 п.5, §4.2, §4.3; story-quest Q4). Every frame
 // of the field that is drawn on the water (a hydrated miniature, or any frame without
@@ -21,7 +22,6 @@ import { RAFT, inOpenSea, openWater, stepRaft } from './raftMotion.js';
 // landed on a deck, that deck is the raft under the kite; landed on the ground, the kite is
 // gone. Events 'takeoff' and 'land' (+ on: 'ground' | 'deck').
 
-const UP = new THREE.Vector3(0, 1, 0);
 const RAFT_DECK_Y = 0.15;   // m: a deck's height until the GPU has answered (a tile top over still water)
 // m around the feet the deck height is read in (TileFrameQuery mode 3, + each tile's radius):
 // at 0.4 m the gaps between my-day's polyline strips left the height unread for 0.6–0.8 s
@@ -30,9 +30,8 @@ export const KITE = Object.freeze({
   ahead: 28,     // m ahead of the walker along the course
   height: 9,     // m above the deck: ~18° over the horizon, in view of the eyes (16 m at 24 m was out of it)
   follow: 0.6,   // s: the kite swings round to a new course
-  bar: 0.55,     // m: the control bar the two lines are held by, at the waist…
-  barAhead: 0.45, // …this far in front of the body, towards the kite
-  barHeight: 1.0, // m over the feet
+  barAhead: 0.45, // m: the control bar (cKite.js) this far in front of the body, towards the kite…
+  barHeight: 1.0, // …at the waist, this high over the feet
 });
 
 /**
@@ -70,20 +69,8 @@ export class TileRaft extends EventTarget {
     const group = new THREE.Group();
     group.name = 'kite';
     group.visible = false;
-    // a diamond leaning back into the wind, 3.2 × 2.4 m
-    const sail = new THREE.BufferGeometry();
-    sail.setAttribute('position', new THREE.Float32BufferAttribute([0, 1.6, 0, -1.2, 0, 0.35, 0, -1.6, 0, 1.2, 0, 0.35], 3));
-    sail.setIndex([0, 1, 2, 0, 2, 3]);
-    sail.computeVertexNormals();
-    this.sail = new THREE.Mesh(sail, new THREE.MeshStandardMaterial({ color: 0xe8553a, roughness: 0.6, side: THREE.DoubleSide }));
-    this.sail.layers.enable(1);
-    // two lines from the ends of the bar to the wing tips, and the bar itself (Q4 review: one
-    // line from the chest swung left and right; a kite is flown by two)
-    const line = new THREE.BufferGeometry();
-    line.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(18), 3));
-    this.line = new THREE.LineSegments(line, new THREE.LineBasicMaterial({ color: 0x222222 }));
-    this.line.frustumCulled = false;
-    group.add(this.sail, this.line);
+    // the C-kite: wing, four lines, node and bar (cKite.js, Q5a; was a diamond on two lines)
+    this.model = createCKite(group);
     return group;
   }
 
@@ -241,7 +228,7 @@ export class TileRaft extends EventTarget {
   }
 
   /**
-   * Once a frame AFTER the walker has stepped and ridden (main.js): the kite and its lines
+   * Once a frame AFTER the walker has stepped and ridden (main.js): the kite and its four lines
    * from the walker as the camera has it this frame. Posed before, from last frame's feet,
    * the bar lagged up to 0.13 m behind at 8 m/s and swung on screen (Q4 review).
    * The kite keeps its place relative to the walker (it is carried with the raft) and swings
@@ -260,23 +247,11 @@ export class TileRaft extends EventTarget {
     if (!this.kiteAt) this.kiteAt = target.clone();
     this.kiteAt.lerp(target, 1 - Math.exp(-Math.max(0, dt) / KITE.follow));
     const kite = new THREE.Vector3(walker.x, walker.y, walker.z).add(this.kiteAt);
-    this.sail.position.copy(kite);
     // the bar: in front of the waist towards the kite, across the line of pull
     const h = new THREE.Vector3(this.kiteAt.x, 0, this.kiteAt.z).normalize();
-    const across = new THREE.Vector3(-h.z, 0, h.x).multiplyScalar(KITE.bar / 2);
     const bar = new THREE.Vector3(walker.x, walker.y + KITE.barHeight, walker.z).addScaledVector(h, KITE.barAhead);
-    // the sail faces the bar
-    this.sail.up.copy(UP);
-    this.sail.lookAt(bar);
-    this.sail.updateMatrixWorld();
-    const tipA = new THREE.Vector3(-1.2, 0, 0.35).applyMatrix4(this.sail.matrixWorld);
-    const tipB = new THREE.Vector3(1.2, 0, 0.35).applyMatrix4(this.sail.matrixWorld);
-    const left = bar.clone().sub(across), right = bar.clone().add(across);
-    // each end of the bar to the tip on its own side: the lines never cross
-    const [tl, tr] = tipA.clone().sub(bar).dot(across) < 0 ? [tipA, tipB] : [tipB, tipA];
-    const p = this.line.geometry.getAttribute('position');
-    [left, tl, right, tr, left, right].forEach((v, i) => p.setXYZ(i, v.x, v.y, v.z));
-    p.needsUpdate = true;
+    const wind = this.field.surface?.sim?.params?.windSpeed ?? 0;
+    this.model.pose(dt, { kite, bar, along: h, wind });
     /** for probes: the bar's centre, world */
     this.bar = bar;
   }
@@ -288,7 +263,6 @@ export class TileRaft extends EventTarget {
   dispose() {
     this.query?.dispose();
     this.scene.remove(this.kiteGroup);
-    this.sail.geometry.dispose(); this.sail.material.dispose();
-    this.line.geometry.dispose(); this.line.material.dispose();
+    this.model.dispose();
   }
 }
