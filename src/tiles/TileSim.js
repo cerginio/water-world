@@ -75,7 +75,14 @@ void main() {
   bool drift = frameDrift(pose);
   // The field is a rigid yaw transform. Dynamics and orbital offsets use FIELD axes.
   mat2 worldXZ = mat2(uFieldMatrix[0].xz, uFieldMatrix[2].xz);
-  vec2 q = (uFieldMatrix * vec4(r.x + s0.z + pose.x, 0.0, r.y + s0.w + pose.y, 1.0)).xz;
+  bool polyline = (int(r1.w) & 1) != 0;
+  // Sample the water at the tile's anchor, without last frame's orbit: the water's
+  // displacement is a function of the rest point. Fed back, the orbit makes x = x0 + D(x)
+  // a fixed-point iteration, which where a wave breaks (dD/dx < -1) swings between two
+  // positions every frame — a frame in the surf drawn twice (story-quest Q4, INVARIANTS).
+  vec2 anchor = s0.zw;
+  if (abs(s3.w) > 0.01 && (polyline || s3.z < 0.5)) anchor -= transpose(worldXZ) * s2.zw * s3.y;
+  vec2 q = (uFieldMatrix * vec4(r.x + anchor.x + pose.x, 0.0, r.y + anchor.y + pose.y, 1.0)).xz;
   vec3 disp = waterAt(q, vec3(0.0));
   // state1.xy: horizontal rotation vector; z: support blend; w: 2/5 cm latch.
   float contact = s1.z;
@@ -86,7 +93,6 @@ void main() {
     waterVelocity = clamp((disp - vec3(s2.z, s3.x, s2.w)) / uSampleDt,
       vec3(-3.0, -0.8, -3.0), vec3(3.0, 0.8, 3.0));
   }
-  bool polyline = (int(r1.w) & 1) != 0;
   // Both tile types follow the surface without ballistic launches. A finite
   // sampling footprint also prevents noisy slopes on tiny tiles/tapered ends.
   float radius = max(r.w, 0.15), thickness = max(r1.y, 0.001);
