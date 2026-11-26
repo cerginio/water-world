@@ -1,17 +1,19 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-26. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0–Q5b, QDa, QDb і Q6 закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0–Q5b, QDa, QDb, Q6 і Q7 закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
 очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді, пліт і
 кайт до відкритого моря, політ на дошці з кайтом і посадка на ноги / на палубу; Q5 —
 долі кадру (відпустити / втопити / розпастися, зворотні, «Залишити так»); Q5a — C-кайт
 на чотирьох стропах із планкою; Q5b — плавання й пірнання до втопленого кадру; QDa —
 контракт сцени для продуктів (`&embed`, команди через `postMessage`); QDb — спільна оболонка
-`products/shared/`, стенд станів `products/quest-demo-qa/` (14 карток), `story-quest` на оболонці; Q6 — квести й картки (зони «Квести» й «Картки», IndexedDB, експорт).
+`products/shared/`, стенд станів `products/quest-demo-qa/` (14 карток), `story-quest` на оболонці; Q6 — квести й картки (зони «Квести» й «Картки», IndexedDB, експорт); Q7 — продукт: маршрут
+§2 за замовчуванням, вибір історії з автором, рюкзак, «На берег» / «Затихнути», мова сцени.
 QA — [QA.md](QA.md).
 
-> **Далі:** Q7 — продукт (п.16).
+> **Далі:** усі фази спеки закрито. Відкрито п.8 (висота палуби без читання з GPU) і заміри
+> на телефоні власника (QA-Q2b-7, QA-Q3-7 … QA-Q7-9) — наступну роботу вибирає власник.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Телефон — лише драфт Netlify
@@ -43,7 +45,7 @@ QA — [QA.md](QA.md).
 | ~~QDa~~ | закрито 2026-11-25 (телефон — у QDb) |
 | ~~QDb~~ | закрито 2026-11-25 (телефон — QA-QDb-12, за власником) |
 | ~~Q6~~ | закрито 2026-11-26 (телефон — QA-Q6-13, за власником) |
-| Q7 | — |
+| ~~Q7~~ | закрито 2026-11-26 (телефон — QA-Q7-9, за власником) |
 
 Тестовий набір історій для всіх фаз (рішення власника 2026-11-24), він же
 в `scripts/probe-story-q0.mjs`:
@@ -282,31 +284,33 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      ключ — історія + `fingerprintOf` моделі від сцени (`scene.ready`, `state.read`). Телефон
      (QA-Q6-13) — за власником, на драфті.
 
-16. **Q7 — продукт** (спека §2, §8 Q7). `story-quest` уже на спільній оболонці (QDb);
+~~16. **Q7 — продукт** (спека §2, §8 Q7). `story-quest` уже на спільній оболонці (QDb);
    тут — продуктова `ui-map` (без зон «Стани» й «Тех»), мобільний layout, uk + en;
    рюкзак на кілька мініатюр (спека §4.1 «Персонаж»).
    - проба: весь маршрут §2 на телефоні власника — вибір → пошук → вода →
      пліт → фінал → картка; `prefers-reduced-motion`, «Затихнути» / «На берег»
-     (Edge §7).
+     (Edge §7).~~ — ЗАКРИТО 2026-11-26; числа — QA.md Q7, рішення — DECISIONS «Продукт:
+     маршрут, рюкзак, «На берег» і «Затихнути»». Маршрут на телефоні (QA-Q7-9) — за власником,
+     на драфті.
 
 ## Що зроблено і працює
 
-Baseline (Q6, 2026-11-26): guard зелений 0.34 с (BOUNDARY-1…5, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 339 passed; `probe-story-quests` PASS 38.2 с; `probe-story-states` PASS 177.9 с (14 карток); `test:build` pass; `probe-tiles` падає й на HEAD (`worldQuery.maxError`); `npm run lint` падає на HEAD (`probe-story-q5.mjs:118`).
+Baseline (Q7, 2026-11-26): guard зелений 0.25 с (BOUNDARY-1…5, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 344 passed; `probe-story-product` PASS 29.7 с; `probe-story-states` PASS 170.7 с; `probe-story-q3` PASS 160.1 с; `probe-story-quests` PASS 36 с; `probe-story-embed` PASS 50.8 с; `test:build` pass; `probe-tiles` падає й на HEAD (`worldQuery.maxError`); `npm run lint` падає на HEAD (`probe-story-q5.mjs:118`).
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
 | Каталог історій | `src/catalog/index.js` (`createStoryCatalog`), `catalog.js` (`createCatalog`, `parseStoryId`, `errorCode`, `fingerprintOf` — FNV-1a над JSON моделі, `catalog.fingerprint`), Tilecraft-вхід `tilecraftCatalog.js` (`lib/story-catalog.js`); `app.catalog`, `app.loadStory` у `main.js` | спека §4.1; стани `idle/pending/ready/failed`, подія `change`, помилка `{ code, message }`; папки `public-test`, `test-2025`, у dev `local` | `tests/catalog.test.js`, `scripts/probe-story-q1.mjs` |
 | Історія = видимі кадри | `src/tiles/storyFrames.js` (`toStoryFrames`), виклик у `tilecraftLoader.js` → `fetchTileSource` для фікстури, файлу й payload каталогу | HANDOFF Q1; тайли без видимого кадру й `hid`-кадри відкидаються до компіляції | `tests/storyFrames.test.js`, `probe-story-q1` (`contentOffset` < 1 м) |
 | Рамка виділення кадру | `TileFrames.setQuads` (`entry.quad` з `frame.points`), `TileInteraction.updateHighlight`; без `points` — `entry.bounds` | FRAME-DRAG FD4 + рев'ю Q1: рамка = авторський кадр, нерухома | `tests/frameQuad.test.js`, `probe-frame-land.mjs` |
-| Контракт сцени для продуктів | `src/embed/`: `protocol.js` (`CHANNEL`, `createEmbedServer`, `EmbedError`, `until`), `commands.js` (`createCommands`, `WAIT`, `catalogState`; 22 команди з `catalog.list/read`, `scene.tech`), `anchors.js` (`resolveAnchor`, `ANCHOR`), `state.js` (`readState`, з `fingerprint`), `world.js` (`worldFromApp` — фасад над `app`), `index.js` (`startEmbed`, подія `catalog.change`, `scene.ready` з `story` і `fingerprint`); у `main.js` — гілка `&embed` (`body.embed`), `app.embed`, `app.fps` | спека §4.4, [quest-demo-qa.md](quest-demo-qa.md) «Контракт сцени»; лише `parent` того самого origin; команди викликають ті самі функції, що клавіші | `tests/embed.test.js`, `scripts/probe-story-embed.mjs` |
-| Спільна оболонка продуктів | `products/shared/`: `contract.js` (`createSceneClient`, `sceneUrl`), `sceneHost.js` (`createSceneHost`: один iframe, hello після `load`), `shell.js` (`mountShell`, `yieldToScene`), `zones.js` (`zonesOf`, `renderZones`, `pickLocale`), `storyZones.js` (`storyZone`, `weatherZone`, `WEATHER`), `shell.css` | спека §4.4; INVARIANTS BOUNDARY-5: `products/**` ↛ `src/**`, без `contentWindow.app` | `tests/products.test.js`, `probe-story-states` |
+| Контракт сцени для продуктів | `src/embed/`: `protocol.js` (`CHANNEL`, `createEmbedServer`, `EmbedError`, `until`), `commands.js` (`createCommands`, `WAIT`, `catalogState`; 27 команд з `catalog.list/read` (+`credit`), `scene.tech`, `scene.locale`, `minis.stow/unpack`, `walker.shore`, `mood.quiet`), `anchors.js` (`resolveAnchor`, `ANCHOR`), `state.js` (`readState`, з `fingerprint`, `pack`), `world.js` (`worldFromApp` — фасад над `app`), `index.js` (`startEmbed`, подія `catalog.change`, `scene.ready` з `story` і `fingerprint`); у `main.js` — гілка `&embed` (`body.embed`), `app.embed`, `app.fps` | спека §4.4, [quest-demo-qa.md](quest-demo-qa.md) «Контракт сцени»; лише `parent` того самого origin; команди викликають ті самі функції, що клавіші | `tests/embed.test.js`, `scripts/probe-story-embed.mjs` |
+| Спільна оболонка продуктів | `products/shared/`: `contract.js` (`createSceneClient`, `sceneUrl` з `lang`), `sceneHost.js` (`createSceneHost`: один iframe, hello після `load`), `shell.js` (`mountShell`, `yieldToScene`), `zones.js` (`zonesOf`, `renderZones`, `pickLocale`), `storyZones.js` (`storyZone`, `storyMeta`, `weatherZone` + `mark`, `WEATHER`), `packZone.js` (`packZone`, `packView`), `shell.css` | спека §4.4; INVARIANTS BOUNDARY-5: `products/**` ↛ `src/**`, без `contentWindow.app` | `tests/products.test.js`, `probe-story-states` |
 | Стенд станів | `products/quest-demo-qa/`: `states.json` (14 карток, 6 груп), `cards.js` (`runCard`, `planOf`, `mismatches`, `checkCards`), `main.js` (зони, `?card=`, `window.questDemo` для проби), `ui-map.json` | [quest-demo-qa.md](quest-demo-qa.md) «Картка стану»; чистий старт — перезавантаження iframe; історія стенду перекриває історію картки | `tests/products.test.js`, `scripts/probe-story-states.mjs` |
 | Шар квестів і картки | `products/shared/`: `quests.js` (`applyEvent`, `tick`, `setStatus`, `saveCard`, `tasksView`, `exportJson`/`exportMarkdown`, `logKey`), `quests.json` (задачі, факти, підказки uk + en), `questStore.js` (`openQuestStore` — IndexedDB, `memoryStore`), `questZones.js` (`createQuestLayer`: зони `quests`, `cards`) | спека §3; DECISIONS «Квести й картки»; факти — події `minis.take/hydrate`, `raft.sea`, `fate.change`; ключ — історія + fingerprint | `tests/quests.test.js`, `scripts/probe-story-quests.mjs` |
-| Оболонка продукту | `products/story-quest/main.js` (рядок над сценою, uk/en, `PASS` прапорців з адреси, `window.storyQuest` для проби), `ui-map.json` (Історія, Квести, Картки, Погода); `src/ui/scene.css` — CSS сцени | спека §4; «готово» — `scene.ready`, не готовність каталогу | `probe-story-states` (крок 6), `probe-story-q1`, `probe-story-quests` |
+| Оболонка продукту | `products/story-quest/main.js` (`ROUTE` = `walk`+`minis` з історією, `PASS` технічних прапорців, вибір історії `story-choice`, `#calmBar`: `#toShore`, `#quietDown`; uk/en → `scene.locale`; `window.storyQuest` для проби), `ui-map.json` (Історія, Рюкзак, Квести, Картки, Погода), `story-quest.css`; `src/ui/scene.css` — CSS сцени | спека §2, §4; DECISIONS «Продукт…»; «готово» — `scene.ready`, не готовність каталогу | `scripts/probe-story-product.mjs`, `probe-story-states`, `probe-story-quests` |
 | Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `JUMP_CONE` 45°; дошка: `takeOff`, `fly`, `land`, `landing`, `state.flight`), `flight.js` (`FLIGHT` 24 м/с, 3 ± 0.4 м; `stepFlight`, `landing` → `ground/deck/water`), вода `swim.js` (`SWIM`, `stepSwim`, `eyeLevel`; у `walker.js` — `state.swim`, `jumpIn`, `dive`, `rise`, `under`), `deck.js` (`deckClear`, `nearestOnDeck`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, `decks`, `pull`, меш `board`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `flyAction`/`flyHint` (Пробіл: зліт, посадка, у воду, пірнути / випливти), `walkerWater` (слот 1 `WaterQuery`), `app.walker`, `app.ground` | спека §4.1, §4.2 v1.5; DECISIONS «Плавання й пірнання»; ноги на `TerrainContact`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `raft.test.js`, `flight.test.js`, `swim.test.js`, `probe-story-q2a`, `-q4b`, `-q5b` |
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
-| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`; опція `action { hint, run }` — «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»; `flight` — «Злетіти»/«Сісти»/«У воду»/«Пірнути»/«Випливти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка), `probe-story-q4b` (крок 7) |
-| Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take`, `put`, `unfoldCenter` + `freeAt`, `syncFrames`, події `take/put/unfold/hydrate`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `app.minis` | DECISIONS «Мініатюри й гідратація»: копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
+| Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`, `setLabels` — мова з `scene.locale`; опція `action { hint, run }` — «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»; `flight` — «Злетіти»/«Сісти»/«У воду»/«Пірнути»/«Випливти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка), `probe-story-q4b` (крок 7) |
+| Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take` — повні руки → рюкзак, `stow`, `unpack`, `packed`, `put`, `unfoldCenter` + `freeAt`, `syncFrames`, події `take/put/unfold/hydrate/pack/unpack`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `packAction()` (B), `app.minis` | DECISIONS «Мініатюри й гідратація», «Продукт…» (рюкзак): копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
 | Пліт і кайт | `src/tiles/TileRaft.js` (`TileRaft`: `decks`, `update` до кроку, `pose` після, `setKite`, `course`, `moveTo`, `drift`, `velocity`, `flying`, події `board/leave/kite/sea/takeoff/land`; `KITE`, `bar` для проб), вигляд кайта `cKite.js` (`createCKite`, `C_KITE`, `wingPoint`; `raft.model.anchors()`), `raftMotion.js` (`RAFT`, `stepRaft`, `openWater`, `inOpenSea`), `TileFrameQuery` режим 3, `TileField.lockedFrames`, `syncShadow` (кадри в конверті дрейфу); у `main.js` — `raftUpdate()`, `kiteAction()` (K), `app.raft`, `SHORE_EXTENT` | DECISIONS «Пліт і кайт»; пліт = `placed`-кадр через `moveFrame`; у польоті кайт угорі, покинутий пліт — без `pull`; INVARIANTS SIM-1 | `tests/raft.test.js`, `cKite.test.js`, `probe-story-q4.mjs` |
 | Долі кадру | `src/tiles/frameFate.js` (`FATE`, `begin`/`undo`/`keep`/`stepFate`, `fateLook`, `TILE_FATE_GLSL`, `fatePiece`), `TileFates.js` (`give`, `undo`, `keep`, `open`, `facts`, `rate`, подія `change`), `TileSim.setFate` (`uFates`); `deckAtHand` у `walker/deck.js`; у `main.js` — `fateAction`, `fateHints`, Z/X/C/H/L, `app.fates` | DECISIONS «Долі кадру»; кадр під долею — `TileField.busyFrames`, не палуба | `tests/fates.test.js`, `probe-story-q5.mjs` |
 | «Мить» до мініатюри | `createFrameFocus({ locate })` у `src/scene/frameFocus.js`, `locate` у `main.js` (`Box3` мініатюри, доки стан ≠ `water`) | DECISIONS «Долі кадру» (останній пункт) | `tests/frameFocusLocate.test.js`, `probe-scene-frame` |
@@ -332,7 +336,7 @@ Baseline (Q6, 2026-11-26): guard зелений 0.34 с (BOUNDARY-1…5, OWNER-1
 - [`sceneHost.load`, hello одразу після `iframe.src`] доки новий документ не підвантажився, «ready» відповідає стара сцена, а виклики губляться при вивантаженні → hello лише після `load` iframe. (QDb)
 - [зона панелі, що питає сцену] `renderZones` до `host.load` → `catalog.list` отримував `no-scene`, зона показувала «каталог недоступний» → спершу `host.load`, потім `draw()`. (QDb)
 - [таймер у рендерері зони] на момент виклику рендерера `<details>` ще не в документі (`isConnected` false) → цикл, що перевіряє `isConnected`, стартувати `setTimeout(…, 0)`. (QDb)
-- [зона панелі, перевірка зон у юніті] список id зон ламався на кожній легальній зміні `ui-map` → інваріант «зони продукту = зони стенду без `states`/`tech`», не перелік. (Q6)
+- [зона панелі, перевірка зон у юніті й пробі] список id зон ламався на кожній легальній зміні `ui-map` → інваріант «зони продукту = зони стенду без `states`/`tech`» (юніт) і «зони сторінки = її `ui-map.json`» (`probe-story-states`), не перелік. (Q6, Q7)
 - [`probe-story-quests`, мережа] від першої картки до експорту 0 запитів сторінки й сцени (`page.on('request')` бачить і iframe) → нові дії продукту перевіряти тим самим записом. (Q6)
 - [картка стану, час] чисте перезавантаження з історією 3.0–3.4 с, `minis.hydrate` 5.8–6.1 с (розгортання в реальному часі) з 7–15 с картки → прискорювати `hydrate` (як `fate.give` на годиннику ×10), а не відмовлятися від перезавантаження. (QDb)
 
@@ -359,6 +363,7 @@ Baseline (Q6, 2026-11-26): guard зелений 0.34 с (BOUNDARY-1…5, OWNER-1
 - [вартість кроку] `walkOnGround` 0.022 мс на лінії броду, 0.007 мс углибині (desktop); `new TerrainContact` для персонажа — ~11 мс, тому лінивий у `main.js`. (Q2a)
 - [старт `?walk`, перші секунди після перельоту над островом] кадри провисають до 0.85 с (headless desktop), через 5 с — рівні 16.7 мс → проби, що міряють ходьбу за часом, чекають 5 с після прибуття в очі. (Q2b)
 - [трасування в пробі через rAF] перший запис іде лише на наступному кадрі, а `page.evaluate` повертається раніше → дія проби (V) потрапляє до першого рядка; писати перший рядок синхронно. (Q2b)
+- [старт продукту, `my-day`] від `scene.ready` до «очей» 11.4 с з оглядом острова, 0.08 с з `prefers-reduced-motion: reduce` → проби маршруту чекають «очей» за подією, не за часом. (Q7)
 - [спуск у очі з огляду] 1163 м за 4 с: найбільший крок 9.13 м за кадр = 1.03 від межі кривої (1.875 × середня швидкість × dt) → допуск проби ≤ 1.05, тісний; довший спуск — довша `approach`, не ширший допуск. (Q2b)
 - [`floaters.collectPoints`, точки до тіл] слот 0 — камера (`camWater`), слот 1 — персонаж (`walkerWater` = `query.result[4]`), `ingest(query, 2)` → нова точка — після них і зсунути offset `ingest`. (Q5b)
 - [пляж `my-day`, заплив до берега] шельф ~1 м тягнеться десятками метрів: від −4 м до мілини > 90 м (> 30 с на 3 м/с) → старт проби — від суші назовні до −2 м. (Q5b)
