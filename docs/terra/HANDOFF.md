@@ -2,12 +2,11 @@
 
 Стан на 2026-11-27. Фази з [ISLAND-MAPS-SPEC.md](../story-quest/ISLAND-MAPS-SPEC.md)
 редакції 0.2 (далі — «спека»), доповнення до [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md).
-Код теми ще не писали; спека, ця тема й референс
-[island-maps-reference.webp](../story-quest/assets/island-maps-reference.webp) не закомічені.
+T1 закрита й закомічена: профілі карт (`src/scene/maps.js`) і `map` у контракті; бухти ще немає.
 QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її факти в
 [docs/story-quest/HANDOFF.md](../story-quest/HANDOFF.md) діють і тут.
 
-> **Далі:** T1 — профіль карти й `map` у контракті (п.1).
+> **Далі:** T2 — рельєф бухти (п.2).
 
 Локальний стенд: `http://localhost:5199/`; правило — `AGENTS.md` → «Локальний стенд».
 Телефон — лише драфт Netlify `https://story-quest--edge-of-elements.netlify.app/`
@@ -15,7 +14,7 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
 
 ## НЕЗАКРИТЕ — почни звідси
 
-1. **T1. Профіль карти й `map` у контракті; `island` без змін.** Спека §2, §4.1,
+~~1. **T1. Профіль карти й `map` у контракті; `island` без змін.** Спека §2, §4.1,
    §4.3, §4.5, §5 п.1 (частина про сцену й URL).
    - Модуль профілів (`MAPS`, `pickMap(id)` → `island` для відсутнього/невідомого).
      Через профіль `island` іде все з §4.1: `islandHeight`, `storyAnchor`/`coast()`,
@@ -33,10 +32,13 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
    - **Чернетка QA.** `qa:open:` `http://localhost:5199/products/story-quest/?story=test-2025/my-day-3-moments&map=foo` ·
      `qa:action:` дочекатися спуску до персонажа, пройти до першої мініатюри ·
      `qa:inspect:` URL сторінки, сцена · `qa:expected:` нинішній острів, той самий берег
-     старту, що й без `map`; у URL лишається `map=foo`.
+     старту, що й без `map`; у URL лишається `map=foo`.~~ — ЗАКРИТО
 
 2. **T2. Рельєф бухти.** Спека §2 (таблиця), §3 (пороги, прохід у море), §4.1, §4.2,
    §5 п.3 (без закритих зон).
+   - Профіль `lagoon` у `MAPS` (`src/scene/maps.js`) з тими самими полями, що `island`
+     (`heightAt`, `storyBearing`, `heroRock`, `openSea`); правило каміння зараз одне —
+     `placeRocks(heightAt, …)` у `terrain.js`, зони без каменів для `lagoon` додати в профіль.
    - Профіль `lagoon`: `heightAt` з двома мисами й підковою пляжу, берег історії
      в бухті, скеля прибою, зони каміння (поза каналом), радіус огляду, явна
      точка `open-sea`, якщо промінь до поля перетинає мис.
@@ -89,28 +91,34 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
 5. **Числа, вибрані в ревʼю без власника** (спека 0.2): суша `lagoon` ≤ 600 м, запас
    каналу +10 м за діаметром палуби, бюджет декорацій 120 тис. трикутників і 8 draw
    calls. Підтвердити власником до закриття T2 і T3; зміна — правкою спеки.
-6. **Де живе модуль профілів** — `src/scene/` поряд з `islandHeight.js` чи власна тека.
-   Вирішує T1; рядок реєстру `AGENTS.md` і мапа нижче оновлюються тим самим комітом.
+~~6. **Де живе модуль профілів** — `src/scene/` поряд з `islandHeight.js` чи власна тека.
+   Вирішує T1; рядок реєстру `AGENTS.md` і мапа нижче оновлюються тим самим комітом.~~ — ЗАКРИТО:
+   `src/scene/maps.js` (T1).
 7. **`?map` на сторінці сцени без продукту** (GUI, стенд `quest-demo-qa`): спека §4.5
    лишає стенд на `island`, але сцена читає `?map` і сама. Чи потрібен вибір карти в
    GUI сцени для налаштування рельєфу в T2 — вирішує T2.
 
 ## Що зроблено і працює
 
-Baseline: не виміряно. T1 міряє guard, focused і проби з п.1 до змін і записує тут.
+Baseline (T1, 2026-11-27): guard зелений; `npm test` 382/382; `test-terrain-contact` pass; `probe-terra-t1`, `probe-story-embed`, `probe-story-states`, `probe-story-product`, `probe-scene-shore` — PASS.
 
 | Підсистема | Де (файли, символи) | Контракт | Перевірка |
 | --- | --- | --- | --- |
-| Рельєф і контакт | `src/scene/islandHeight.js` (`islandHeight`, `ISLAND_SIZE` 2400), `terrainGeometry.js` (`buildTerrain`), `TerrainContact.js` | спека §4.1 | `scripts/test-terrain-contact.mjs`, `tests/shoreTextures.test.js` |
-| Каміння й скеля прибою | `src/scene/terrain.js` (`heroRock` пеленг −15°, `placeRocks` від r=150, `rockMaps`) | спека §4.1 | `probe-scene-shore` |
-| Берег історії й старт | `src/main.js` (`coast`, `storyAnchor` = `SET_BEARING + 1.2`, `walkerSpawn`, `stationPoses`), `src/scene/stationPoses.js` (`islandRadius`) | STORY-QUEST §2 п.2 | `tests/cameraFlight.test.js`, `probe-story-q2b` |
+| Профіль карти | `src/scene/maps.js` (`MAPS`, `pickMap` → `island` для відсутнього/невідомого, `rayTo`); `main.js` `map = pickMap(args.get('map'))` до побудови сцени, `heightAt`, `heroRock`; `window.app.map`/`openSea` | спека §4.1 | `tests/maps.test.js`, `probe-terra-t1` |
+| Рельєф і контакт | `src/scene/islandHeight.js` (`islandHeight`, `ISLAND_SIZE` 2400; читає лише профіль `island`), `terrainGeometry.js` (`buildTerrain(heightAt, …)`), `TerrainContact.js` | спека §4.1 | `scripts/test-terrain-contact.mjs`, `tests/shoreTextures.test.js` |
+| Каміння й скеля прибою | `src/scene/terrain.js` (`createTerrain({ map })`, `placeRocks(heightAt, …)` від r=150, `rockMaps`); скеля — `map.heroRock()` (на `island` пеленг −15°, дно −2,5 м) | спека §4.1 | `probe-scene-shore` |
+| Берег історії й старт | `src/main.js` (`coast`, `storyAnchor` = `map.storyBearing(SET_BEARING)`, на `island` +1,2; `walkerSpawn`, `stationPoses`), `src/scene/stationPoses.js` (`islandRadius`) | STORY-QUEST §2 п.2 | `tests/cameraFlight.test.js`, `probe-story-q2b` |
 | Карта берега | `src/water/shoreMap.js` (`bakeShoreMap`), `main.js` `SHORE_EXTENT` 1800 | STORY-QUEST §4.3 | `tests/shoreTextures.test.js` |
-| Якорі | `src/embed/anchors.js` (`resolveAnchor`, `shallowPoint`, `ANCHOR.openSea` 1300) | STORY-QUEST §4.4, спека §4.2 | `probe-story-embed`, `probe-story-states` |
+| Якорі | `src/embed/anchors.js` (`resolveAnchor`: `open-sea` — `world.openSea()` профілю, інакше промінь `ANCHOR.openSea` 1300; `shallowPoint`) | STORY-QUEST §4.4, спека §4.2 | `probe-story-embed`, `probe-story-states` |
 | Пліт і відкрите море | `src/tiles/raftMotion.js` (`RAFT.depth` 0,6, `rimDepth` 0,1, `seaEdge` 900, `openWater`, `stepRaft`), `TileRaft.js` | STORY-QUEST §4.3 | `probe-story-q4`, `probe-story-q5` |
 | Розкладка мініатюр | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `isDryLand`, `LAYOUT.radius` 70) | спека §2, §3 | `probe-story-q3` |
-| Контракт продукту | `products/shared/contract.js` (`sceneUrl`), `sceneHost.js` (`load`), `src/embed/index.js` (`scene.ready`), `src/embed/state.js` (`readState`) | STORY-QUEST §4.4, спека §4.3 | `tests/products.test.js`, `probe-story-product` |
+| Контракт продукту | `products/shared/contract.js` (`SCENE_MAPS`, `knownMap`, `sceneUrl({ map })`: `island` без параметра, невідома — помилка), `sceneHost.js` (`load`), `products/story-quest/main.js` (`map()` з URL продукту), `src/embed/index.js` (`scene.ready` + `map`), `state.js` (`readState` + `map`), `world.js` (`map`, `openSea`) | STORY-QUEST §4.4, спека §4.3 | `tests/products.test.js`, `probe-story-product` |
 
 ## Головні виміряні факти
+
+### Стенд і інструменти
+
+- [vitest на Windows, `cd /d/...` у Git Bash] диск малою літерою → усі файли падають з `Cannot read properties of undefined (reading 'config')`, 0 тестів → запускати з `cd D:/work/...`. (T1)
 
 ### Рельєф і контакт
 
@@ -124,5 +132,6 @@ Baseline: не виміряно. T1 міряє guard, focused і проби з �
 
 ### Контракт продукту
 
-- [`sceneUrl`] приймає лише `story`, `lang` і прапорці без значень (`^[a-z][a-z0-9-]*$`) → `map=lagoon` потребує окремого параметра, прапорцем не пройде. (ревʼю спеки)
+- [iframe сцени, `writeTileUrl`] сцена переписує свою адресу (`?story=…%2F…&walk=&…&tilesMode=…`), але чужі параметри, зокрема `map`, зберігає → перевіряти `map` в iframe за наявністю параметра, не за точним рядком. (T1)
+
 - [`scene.ready`] зараз несе `{ story, fingerprint }`, ключ квестів — історія + fingerprint → карта до ключа не входить, картки переходять між картами без змін у `quests.js`. (ревʼю спеки)
