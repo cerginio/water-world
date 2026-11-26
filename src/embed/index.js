@@ -6,7 +6,7 @@ import { catalogState, createCommands, WAIT } from './commands.js';
 import { worldFromApp } from './world.js';
 
 const RAFT_EVENTS = ['board', 'leave', 'kite', 'sea', 'takeoff', 'land'];
-const MINI_EVENTS = ['take', 'put', 'unfold', 'hydrate'];
+const MINI_EVENTS = ['take', 'put', 'unfold', 'hydrate', 'pack', 'unpack'];
 
 /** Ids in event details as strings: a product keys its facts by them. */
 const plain = (detail) => {

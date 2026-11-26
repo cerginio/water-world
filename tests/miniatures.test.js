@@ -111,14 +111,13 @@ describe('miniatures', () => {
     expect(minis.counts()).toEqual({ total: 2, found: 0, water: 0 });
   });
 
-  test('take within reach, one at a time; put on the land lies again', () => {
+  test('take within reach; put on the land lies again', () => {
     const { minis } = setup();
     const a = minis.items[0], p = a.root.position;
     const holder = { x: p.x + 1, y: island(p.x + 1, p.z).height, z: p.z, yaw: 0, pitch: 0 };
     expect(minis.nearest(holder.x, holder.z)?.frameId).toBe('a');
     expect(minis.nearest(p.x + MINI.reach + 0.1, p.z)).toBe(null);
     minis.take('a', holder);
-    expect(minis.take('b', holder)).toBe(null);   // the hands are full
     minis.update(1 / 60, holder);
     expect(a.root.position.y).toBeGreaterThan(holder.y + 1);   // in front of the eyes
     expect(minis.put(holder)).toBe('ground');
@@ -150,6 +149,27 @@ describe('miniatures', () => {
     expect(field.boundsEntries.map((e) => e.mesh.visible)).toEqual([false, true]);
     expect(events).toEqual([['take', 'b'], ['unfold', 'b'], ['hydrate', 'b']]);
     expect(minis.counts()).toEqual({ total: 2, found: 1, water: 1 });
+  });
+
+  test('the backpack (Q7): a take with full hands stows the one held; unpack swaps; only the hands put down', () => {
+    const { minis } = setup();
+    const events = [];
+    for (const type of ['take', 'pack', 'unpack']) minis.addEventListener(type, (e) => events.push([type, e.detail.frameId]));
+    const holder = { x: 0, y: 10, z: 0, yaw: 0, pitch: 0 };
+    expect(minis.stow()).toBe(null);   // empty hands
+    minis.take('a', holder);
+    minis.take('b', holder);
+    expect(minis.carried.frameId).toBe('b');
+    expect(minis.packed.map((i) => i.frameId)).toEqual(['a']);
+    expect(minis.get('a').root.visible).toBe(false);
+    minis.update(1 / 60, { ...holder, x: 5 });
+    expect(minis.get('a').root.position.x).toBe(5);   // goes where the walker goes
+    expect(minis.unpack('b')).toBe(null);   // not in the backpack
+    minis.unpack('a');
+    expect([minis.carried.frameId, minis.packed.map((i) => i.frameId)]).toEqual(['a', ['b']]);
+    expect(minis.get('a').root.visible).toBe(true);
+    expect(minis.counts()).toEqual({ total: 2, found: 2, water: 0 });
+    expect(events).toEqual([['take', 'a'], ['pack', 'a'], ['take', 'b'], ['pack', 'b'], ['unpack', 'a']]);
   });
 
   test('clear gives every frame back to the field', () => {

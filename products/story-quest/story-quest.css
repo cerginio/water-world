@@ -1,1 +1,35 @@
-/* Story Quest's own chrome over the shared shell (products/shared/shell.css); Q7 brings the rest */
+/* Story Quest's own chrome over the shared shell (products/shared/shell.css): the choice of a story
+   over the scene, and «На берег» / «Затихнути» always in sight (Edge §7). */
+#sceneStatus { max-height: calc(100% - 140px); overflow-y: auto; }
+#sceneStatus ul.story-choice { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+#sceneStatus .story-choice-pick {
+  display: grid; gap: 2px; width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid #ffffff40; background: rgba(255, 255, 255, .08); color: #f2f8ff; text-decoration: none;
+}
+#sceneStatus .story-choice-title { font-weight: 600; color: #8fdcff; }
+#sceneStatus .story-choice-meta { font-size: 12px; color: #c4d3df; }
+
+#calmBar {
+  position: fixed; z-index: 25; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
+  display: flex; gap: 6px;
+}
+#calmBar button {
+  min-height: 44px; padding: 6px 12px; border-radius: 12px; border: 1px solid #ffffff60;
+  font: 600 14px/1.2 system-ui, sans-serif; color: #f6f8fa; background: rgba(24, 35, 45, .78);
+}
+#calmBar button:active { background: rgba(3, 105, 161, .9); }
+
+.pack-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+@media (max-width: 760px) {
+  /* the status line clears ☰ on the left and the calm bar on the right */
+  #sceneStatus { top: calc(max(10px, env(safe-area-inset-top)) + 56px); max-width: calc(100% - 24px); }
+  #calmBar button { padding: 6px 10px; font-size: 13px; }
+  /* the panel open lies over most of the screen: the calm bar goes to its foot, still in sight */
+  body[data-panel-open="true"] #calmBar {
+    top: auto; right: auto; left: 0; bottom: 0; width: var(--panel-width); box-sizing: border-box;
+    justify-content: center; padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+    background: rgba(240, 236, 229, .95); border-top: 1px solid #68758055;
+  }
+  body[data-panel-open="true"] .product-panel-scroll { padding-bottom: 72px; }
+}

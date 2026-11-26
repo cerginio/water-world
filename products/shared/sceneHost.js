@@ -22,7 +22,7 @@ export function createSceneHost({ iframe, base = new URL('../../', location.href
     get client() { return client; },
     get url() { return address; },
     /**
-     * @param {{ story?: string | null, flags?: string[] }} params
+     * @param {{ story?: string | null, flags?: string[], lang?: string | null }} params
      * @returns {Promise<{ version: number, commands: string[] }>} once the scene's contract answers
      */
     load(params) {

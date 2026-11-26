@@ -13,8 +13,10 @@ import { layoutMiniatures } from './miniatureLayout.js';
 // its tiles go on floating where they were. No scale enters TileSim: unfolding is the
 // miniature growing to scale 1 over the spot the frame is moved to, then the swap.
 //
-// States of an item: 'ground' → 'carried' → 'ground' | 'unfolding' → 'water'.
-// Events (EventTarget): 'take', 'put', 'unfold', 'hydrate' — detail { frameId, x, z }.
+// States of an item: 'ground' → 'carried' → 'ground' | 'unfolding' → 'water'; 'carried' ⇄
+// 'packed' (Q7, spec §4.1 «Персонаж»: one in the hands, the rest in the backpack — taking
+// another with full hands stows the one held; only the one in the hands is put down).
+// Events (EventTarget): 'take', 'put', 'unfold', 'hydrate', 'pack', 'unpack' — detail { frameId, x, z }.
 
 export const MINI = Object.freeze({
   scale: 1 / 8,      // of the rest size; the starting value, tuned on the owner's phone
@@ -53,6 +55,7 @@ export class TileMiniatures extends EventTarget {
     this.items = [];
     this.storyId = null;
     this.rest = null;   // the field rest the meshes were built from
+    this.packSeq = 0;
   }
 
   get active() { return this.items.length > 0; }
@@ -70,7 +73,7 @@ export class TileMiniatures extends EventTarget {
     frames.forEach((frame, i) => {
       const p = points[i];
       if (!p) return;
-      const item = { frameId: frame.id, state: 'ground', found: false, home: p, yaw: p.yaw, relYaw: 0,
+      const item = { frameId: frame.id, state: 'ground', found: false, home: p, yaw: p.yaw, relYaw: 0, packedAt: 0,
         root: new THREE.Group(), body: new THREE.Group(), radius: 0, fullRadius: 0, half: new THREE.Vector2(),
         unfold: null, contactGap: 0 };
       item.root.name = `miniature-f${String(frame.id)}`;
@@ -90,6 +93,9 @@ export class TileMiniatures extends EventTarget {
   get(frameId) { return this.byId.get(frameKey(frameId)) ?? null; }
 
   get carried() { return this.items.find((i) => i.state === 'carried') ?? null; }
+
+  /** The backpack, in the order the miniatures went in. */
+  get packed() { return this.items.filter((i) => i.state === 'packed').sort((a, b) => a.packedAt - b.packedAt); }
 
   /** found: ever taken; water: unfolded on the sea (spec §3.1). */
   counts() {
@@ -111,14 +117,40 @@ export class TileMiniatures extends EventTarget {
     return best;
   }
 
-  /** Into the hands (one at a time). `holder` — the walker's state, for the relative yaw. */
+  /**
+   * Into the hands; one held already goes into the backpack first. `holder` — the walker's
+   * state, for the relative yaw.
+   */
   take(frameId, holder) {
     const item = this.get(frameId);
-    if (!item || item.state !== 'ground' || this.carried) return null;
+    if (!item || item.state !== 'ground') return null;
+    this.stow();
     item.state = 'carried';
     item.found = true;
     item.relYaw = item.yaw - (holder?.yaw ?? 0);
     this.emit('take', item);
+    return item;
+  }
+
+  /** The one in the hands into the backpack; the item, or null with empty hands. */
+  stow() {
+    const item = this.carried;
+    if (!item) return null;
+    item.state = 'packed';
+    item.packedAt = ++this.packSeq;
+    item.root.visible = false;
+    this.emit('pack', item);
+    return item;
+  }
+
+  /** A miniature out of the backpack into the hands (the one held goes in instead). */
+  unpack(frameId) {
+    const item = this.get(frameId);
+    if (!item || item.state !== 'packed') return null;
+    this.stow();
+    item.state = 'carried';
+    item.root.visible = true;
+    this.emit('unpack', item);
     return item;
   }
 
@@ -260,7 +292,7 @@ export class TileMiniatures extends EventTarget {
       item.body.position.set(-frame.pivot.x, -bottom, -frame.pivot.z);
       item.fullRadius = Math.max(item.half.length() + Math.hypot(cx - frame.pivot.x, cz - frame.pivot.z), 0.5);
       item.radius = item.fullRadius * this.scale;
-      item.root.visible = item.state !== 'water';
+      item.root.visible = item.state !== 'water' && item.state !== 'packed';
     }
   }
 
@@ -285,6 +317,8 @@ export class TileMiniatures extends EventTarget {
     this.ensureMeshes();
     for (const item of this.items) {
       if (item.state === 'carried' && holder) this.hold(item, holder);
+      // in the backpack it goes where the walker goes (the contract reads where a frame is)
+      if (item.state === 'packed' && holder) item.root.position.set(holder.x, holder.y, holder.z);
       if (item.state !== 'unfolding') continue;
       const u = item.unfold;
       u.t = Math.min(1, u.t + dt / MINI.unfold);

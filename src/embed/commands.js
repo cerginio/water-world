@@ -104,8 +104,9 @@ export function createCommands(world, { wait = {} } = {}) {
       await ready();
       const host = await eyes(), f = frame(args), item = miniOf(f), minis = world.minis;
       if (item.state === 'carried') return readState(world);
+      if (item.state === 'packed') return commands['minis.unpack'](args);
       if (item.state !== 'ground') throw new EmbedError('not-possible', `miniature ${f.index} is ${item.state}`);
-      if (minis.carried) throw new EmbedError('not-possible', 'the hands are full');
+      // full hands: the one held goes into the backpack (Q7)
       const m = item.root.position;
       host.place(m.x - 1.5, m.z, Math.PI / 2);
       if (!minis.take(item.frameId, host.state)) throw new EmbedError('not-possible', `miniature ${f.index} not taken`);
@@ -116,7 +117,7 @@ export function createCommands(world, { wait = {} } = {}) {
       await ready();
       const host = await eyes(), f = frame(args), item = miniOf(f), minis = world.minis;
       if (item.state === 'water') return readState(world);
-      if (item.state === 'ground') await commands['minis.take'](args);
+      if (item.state === 'ground' || item.state === 'packed') await commands['minis.take'](args);
       else if (item.state !== 'carried') throw new EmbedError('not-possible', `miniature ${f.index} is ${item.state}`);
       const p = resolveAnchor('shallow', world);
       host.place(p.x, p.z, p.yaw);
@@ -124,6 +125,33 @@ export function createCommands(world, { wait = {} } = {}) {
       // on the water, then a deck: TileRaft rebuilds its decks in its own step
       await until(() => item.state === 'water' && world.decks().some((d) => d.id === f.id), W.step, 'the frame a deck on the water');
       return readState(world);
+    },
+
+    /** The miniature in the hands into the backpack (B); empty hands — refused. */
+    'minis.stow': async () => {
+      await ready();
+      if (!world.minis?.active) throw new EmbedError('no-miniature', 'no miniatures in this scene (&minis)');
+      if (!world.minis.stow()) throw new EmbedError('not-possible', 'nothing in the hands');
+      return readState(world);
+    },
+    /** Frame n's miniature out of the backpack into the hands; the one held goes in instead. */
+    'minis.unpack': async (args) => {
+      await ready();
+      const f = frame(args), item = miniOf(f);
+      if (item.state === 'carried') return readState(world);
+      if (!world.minis.unpack(item.frameId)) throw new EmbedError('not-possible', `miniature ${f.index} is not in the backpack`);
+      return readState(world);
+    },
+
+    /**
+     * «На берег» (Edge §7, always in sight): the kite let go, the walker on the beach in the
+     * eyes — off a raft, out of the air or the water. The frames keep their fates; the hands
+     * and the backpack keep what they hold.
+     */
+    'walker.shore': async () => {
+      await ready();
+      world.raft.setKite(false);
+      return commands['walker.place']({ at: 'beach' });
     },
 
     /** Onto frame n's deck at (u, v), facing out to sea; it is a raft from then on. */
@@ -257,7 +285,7 @@ export function createCommands(world, { wait = {} } = {}) {
       try {
         const { stories, errors, fallback } = await world.catalog.list({ local: !!local });
         return { stories: stories.map((s) => ({ id: s.id, folder: s.folder, slug: s.slug, title: s.title ?? s.slug,
-          frameCount: s.frameCount ?? null })), errors: errors.map(({ folder, code }) => ({ folder, code })), fallback };
+          credit: s.credit ?? null, frameCount: s.frameCount ?? null })), errors: errors.map(({ folder, code }) => ({ folder, code })), fallback };
       } catch (e) {
         throw new EmbedError('catalog-failed', `${e.code ?? 'unknown'}: ${String(e.message ?? e)}`);
       }
@@ -274,6 +302,14 @@ export function createCommands(world, { wait = {} } = {}) {
       if (typeof fps === 'boolean' && fps !== panels.fps) panels.toggle('fps');
       const rate = world.fps();
       return { controls: panels.controls, fps: panels.fps, rate: rate === null ? null : Math.round(rate) };
+    },
+
+    /** «Затихнути» (Edge §7, always in sight): the weather slowly to the calm, the day stays. */
+    'mood.quiet': async () => world.mood.quiet(),
+    /** The walker's buttons in the product's language: 'uk' or 'en'. */
+    'scene.locale': async ({ locale }) => {
+      if (!['uk', 'en'].includes(locale)) throw new EmbedError('bad-args', 'locale is uk or en');
+      return { locale: world.setLocale(locale) };
     },
 
     /** The weather: valence, arousal and the time of day, at once (app.mood.set). */

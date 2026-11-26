@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNEL, createSceneClient, sceneUrl } from '../products/shared/contract.js';
 import { pickLocale, t, zonesOf } from '../products/shared/zones.js';
-import { byFolder, WEATHER } from '../products/shared/storyZones.js';
+import { byFolder, storyMeta, WEATHER } from '../products/shared/storyZones.js';
+import { packView } from '../products/shared/packZone.js';
 import { checkCards, mismatches, planOf, readPath, runCard } from '../products/quest-demo-qa/cards.js';
 import { CHANNEL as SCENE_CHANNEL } from '../src/embed/protocol.js';
 import { createCommands } from '../src/embed/commands.js';
@@ -91,6 +92,8 @@ describe('contract client', () => {
     expect(sceneUrl('http://localhost:5199/', { story: 'test-2025/my-day-3-moments', flags: ['walk', 'minis', 'embed'] }))
       .toBe('http://localhost:5199/?story=test-2025/my-day-3-moments&walk&minis&embed');
     expect(sceneUrl('http://localhost:5199/')).toBe('http://localhost:5199/?embed');
+    expect(sceneUrl('http://localhost:5199/', { story: 'a/b', flags: ['walk'], lang: 'uk' })).toBe('http://localhost:5199/?story=a/b&lang=uk&walk&embed');
+    expect(() => sceneUrl('http://localhost:5199/', { lang: 'uk&x' })).toThrow();
     expect(() => sceneUrl('http://localhost:5199/', { flags: ['a&b'] })).toThrow();
   });
 });
@@ -122,6 +125,19 @@ describe('panel zones', () => {
   it('stories by folder, in the catalog\'s order', () => {
     const groups = byFolder([{ id: 'a/1', folder: 'a' }, { id: 'b/1', folder: 'b' }, { id: 'a/2', folder: 'a' }]);
     expect(groups.map((g) => [g.folder, g.stories.map((s) => s.id)])).toEqual([['a', ['a/1', 'a/2']], ['b', ['b/1']]]);
+  });
+
+  it('a story\'s line: the author and the frames, whichever the catalog has', () => {
+    expect(storyMeta({ credit: 'Ann', frameCount: 8 }, 'uk')).toBe('автор: Ann · 8 кадр.');
+    expect(storyMeta({ frameCount: 3 }, 'en')).toBe('3 frames');
+    expect(storyMeta({}, 'en')).toBe('');
+  });
+
+  it('the backpack zone: the hands and the backpack from state.read; no miniatures — none', () => {
+    const frames = [{ mini: 'carried' }, { mini: 'packed' }, { mini: 'ground' }];
+    expect(packView({ carried: 0, pack: [1], frames })).toEqual({ minis: true, hands: 0, pack: [1] });
+    expect(packView({ carried: null, pack: [], frames: [{ mini: null }] })).toEqual({ minis: false, hands: null, pack: [] });
+    expect(packView(null)).toEqual({ minis: false, hands: null, pack: [] });
   });
 
   it('the weather buttons are the mood map\'s nine anchors at their (v, a)', () => {

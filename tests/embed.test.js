@@ -106,8 +106,9 @@ describe('embed commands', () => {
     expect(Object.keys(createCommands(world())).sort()).toEqual([
       'catalog.list', 'catalog.read',
       'fate.give', 'fate.keep', 'fate.undo', 'fly.land', 'fly.takeOff', 'fly.to', 'kite.set',
-      'minis.hydrate', 'minis.take', 'mood.set', 'raft.board', 'raft.moveTo', 'scene.tech', 'state.read',
-      'swim.dive', 'swim.in', 'swim.rise', 'walker.eyes', 'walker.look', 'walker.place']);
+      'minis.hydrate', 'minis.stow', 'minis.take', 'minis.unpack', 'mood.quiet', 'mood.set', 'raft.board', 'raft.moveTo',
+      'scene.locale', 'scene.tech', 'state.read',
+      'swim.dive', 'swim.in', 'swim.rise', 'walker.eyes', 'walker.look', 'walker.place', 'walker.shore']);
     expect(Object.isFrozen(createCommands(world()))).toBe(true);
   });
 
@@ -130,10 +131,10 @@ describe('embed commands', () => {
   it('catalog.list: plain stories by folder; a catalog down is a catalog-failed refusal', async () => {
     const seen = [];
     const catalog = { list: async (o) => { seen.push(o); return { fallback: false, errors: [{ folder: 'b', code: 'network', message: 'x' }],
-      stories: [{ id: 'a/s', folder: 'a', slug: 's', title: 'S', frameCount: 3, sizeBytes: 9 }] }; } };
+      stories: [{ id: 'a/s', folder: 'a', slug: 's', title: 'S', credit: 'Ann', frameCount: 3, sizeBytes: 9 }] }; } };
     const c = createCommands(world({ catalog, ready: () => false }));
     await expect(c['catalog.list']({ local: true })).resolves.toEqual({ fallback: false, errors: [{ folder: 'b', code: 'network' }],
-      stories: [{ id: 'a/s', folder: 'a', slug: 's', title: 'S', frameCount: 3 }] });
+      stories: [{ id: 'a/s', folder: 'a', slug: 's', title: 'S', credit: 'Ann', frameCount: 3 }] });
     expect(seen).toEqual([{ local: true }]);
     const down = createCommands(world({ catalog: { list: async () => { throw Object.assign(new Error('down'), { code: 'network' }); } } }));
     await expect(down['catalog.list']({})).rejects.toMatchObject({ reason: 'catalog-failed' });
@@ -150,6 +151,23 @@ describe('embed commands', () => {
     const c = createCommands(world({ tech, fps: () => 59.6 }));
     await expect(c['scene.tech']({ controls: true, fps: true })).resolves.toEqual({ controls: true, fps: true, rate: 60 });
     await expect(c['scene.tech']({})).resolves.toEqual({ controls: true, fps: true, rate: 60 });
+  });
+
+  it('scene.locale: uk or en to the scene, anything else refused untouched', async () => {
+    const seen = [];
+    const c = createCommands(world({ setLocale: (l) => { seen.push(l); return l; } }));
+    await expect(c['scene.locale']({ locale: 'en' })).resolves.toEqual({ locale: 'en' });
+    await expect(c['scene.locale']({ locale: 'de' })).rejects.toMatchObject({ reason: 'bad-args' });
+    expect(seen).toEqual(['en']);
+  });
+
+  it('the backpack: stow with empty hands and unpack of one not packed are refused', async () => {
+    const item = { frameId: 'a', state: 'ground' };
+    const minis = { active: true, get: () => item, stow: () => null, unpack: () => null, packed: [] };
+    const c = createCommands(world({ minis }));
+    await expect(c['minis.stow']({})).rejects.toMatchObject({ reason: 'not-possible' });
+    await expect(c['minis.unpack']({ frame: 0 })).rejects.toMatchObject({ reason: 'not-possible' });
+    await expect(createCommands(world())['minis.stow']({})).rejects.toMatchObject({ reason: 'no-miniature' });
   });
 
   it('a frame that is not a deck cannot be boarded', async () => {

@@ -7,6 +7,7 @@ import { mountShell } from '../shared/shell.js';
 import { createSceneHost } from '../shared/sceneHost.js';
 import { renderZones, t } from '../shared/zones.js';
 import { storyZone, weatherZone } from '../shared/storyZones.js';
+import { packZone } from '../shared/packZone.js';
 import { createQuestLayer } from '../shared/questZones.js';
 import { openQuestStore } from '../shared/questStore.js';
 import questData from '../shared/quests.json';
@@ -146,6 +147,7 @@ function techZone(body, locale) {
 const zoneRender = {
   story: storyZone({ host, current: () => story ?? active?.card.story ?? null, pick: openStory, local: true }),
   states: (body) => { statesBody = body; drawCards(); },
+  pack: packZone({ host }),
   weather: weatherZone({ host }),
   quests: quests.quests,
   cards: quests.cards,

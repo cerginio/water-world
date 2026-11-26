@@ -19,6 +19,8 @@ const out = process.env.PROBE_OUT ?? join(tmpdir(), 'story-states');
 mkdirSync(out, { recursive: true });
 const STORY = 'test-2025/my-day-3-moments';
 const data = JSON.parse(readFileSync(new URL('../products/quest-demo-qa/states.json', import.meta.url), 'utf8'));
+// the zones on the page are the ui-map's, in its order — an invariant, not an inventory (Q7)
+const mapZones = (page) => JSON.parse(readFileSync(new URL(`../products/${page}/ui-map.json`, import.meta.url), 'utf8')).zones.map((z) => z.id);
 const only = process.env.CARDS?.split(',');
 const cards = data.cards.filter((c) => !only || only.includes(c.id));
 const report = { base, cards: {}, reload: {} };
@@ -49,7 +51,7 @@ try {
   watch(page);
   await page.goto(`${base}products/quest-demo-qa/?story=${STORY}`);
   const zones = await page.$$eval('details.zone', (d) => d.map((x) => x.dataset.zone));
-  assert.deepEqual(zones, ['story', 'states', 'weather', 'quests', 'cards', 'tech']);
+  assert.deepEqual(zones, mapZones('quest-demo-qa'));
   await page.click('details[data-zone="story"] > summary');
   await page.waitForSelector('.story-pick', { timeout: 90000 });
   const stories = await page.$$eval('.story-pick', (b) => b.map((x) => x.dataset.story));
@@ -144,7 +146,7 @@ try {
   const field = await scene(sq).evaluate(() => ({ loaded: app.tiles.loaded, frames: app.tiles.frames.length, story: app.catalog.story?.id }));
   report.storyQuest = { field, zones: await sq.$$eval('details.zone', (d) => d.map((x) => x.dataset.zone)) };
   assert.ok(field.loaded && field.story === STORY, JSON.stringify(field));
-  assert.deepEqual(report.storyQuest.zones, ['story', 'quests', 'cards', 'weather']);
+  assert.deepEqual(report.storyQuest.zones, mapZones('story-quest'));
   await sq.screenshot({ path: join(out, 'story-quest.png') });
   await sq.goto(`${base}products/story-quest/`);
   await sq.waitForSelector('#sceneStatus button[data-story]', { timeout: 90000 });

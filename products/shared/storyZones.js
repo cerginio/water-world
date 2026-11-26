@@ -5,9 +5,9 @@ import { t } from './zones.js';
 
 const TEXT = {
   uk: { loading: 'Читаємо каталог…', failed: 'Каталог недоступний', fallback: 'Каталог R2 недоступний — локальні історії для розробки:',
-    frames: (n) => `${n} кадр.`, day: 'Час доби', folderDown: (f, c) => `${f}/: ${c}` },
+    frames: (n) => `${n} кадр.`, by: (c) => `автор: ${c}`, day: 'Час доби', folderDown: (f, c) => `${f}/: ${c}` },
   en: { loading: 'Reading the catalog…', failed: 'The catalog is unreachable', fallback: 'The R2 catalog is unreachable — local stories for development:',
-    frames: (n) => `${n} frames`, day: 'Time of day', folderDown: (f, c) => `${f}/: ${c}` },
+    frames: (n) => `${n} frames`, by: (c) => `by ${c}`, day: 'Time of day', folderDown: (f, c) => `${f}/: ${c}` },
 };
 
 /** The mood map's anchors (MOOD-WEATHER, src/environment/mood.js MOOD_MAP_V1): valence, arousal. */
@@ -23,6 +23,12 @@ export const WEATHER = Object.freeze([
   { id: 'storm', v: -1, a: 1, title: { uk: 'Шторм', en: 'Storm' } },
 ]);
 export const weatherOf = (id) => WEATHER.find((w) => w.id === id) ?? null;
+
+/** A story's line under its title: the author and the frames, as there are. */
+export function storyMeta(story, locale) {
+  const w = TEXT[locale] ?? TEXT.en;
+  return [story.credit ? w.by(story.credit) : '', story.frameCount ? w.frames(story.frameCount) : ''].filter(Boolean).join(' · ');
+}
 
 /** Stories grouped by folder, in the order the catalog gave them. DOM-free. */
 export function byFolder(stories) {
@@ -62,7 +68,8 @@ export function storyZone({ host, current, pick, local = false }) {
             b.dataset.story = s.id;
             if (s.id === now) b.setAttribute('aria-current', 'true');
             b.addEventListener('click', () => pick(s.id));
-            return el('li', {}, b, s.frameCount ? el('span', { className: 'zone-meta', textContent: ` ${w.frames(s.frameCount)}` }) : '');
+            const meta = storyMeta(s, locale);
+            return el('li', {}, b, meta ? el('span', { className: 'zone-meta', textContent: ` ${meta}` }) : '');
           })))));
     };
     if (listed?.ok) { draw(listed); return; }
@@ -73,16 +80,18 @@ export function storyZone({ host, current, pick, local = false }) {
 
 /**
  * @param {{ host: { call: Function } }} options
- * @returns {(body: HTMLElement, locale: string) => void}
+ * @returns {((body: HTMLElement, locale: string) => void) & { mark: (id: string) => void }}
+ *   mark — the weather was set elsewhere («Затихнути»): its button pressed, no call
  */
 export function weatherZone({ host }) {
   const state = { id: null, t: 0.45 };
+  let grid = null;
   const apply = () => {
     const w = weatherOf(state.id) ?? weatherOf('sun-through-clouds');
     return host.call('mood.set', { v: w.v, a: w.a, t: state.t });
   };
-  return (body, locale) => {
-    const grid = el('div', { className: 'weather-grid' }, ...WEATHER.map((w) => {
+  const render = (body, locale) => {
+    grid = el('div', { className: 'weather-grid' }, ...WEATHER.map((w) => {
       const b = el('button', { type: 'button', textContent: t(w.title, locale) });
       b.dataset.weather = w.id;
       b.setAttribute('aria-pressed', String(state.id === w.id));
@@ -97,4 +106,10 @@ export function weatherZone({ host }) {
     day.addEventListener('change', () => { state.t = Number(day.value); apply(); });
     body.replaceChildren(grid, el('label', { className: 'weather-day' }, TEXT[locale].day, ' ', day));
   };
+  return Object.assign(render, {
+    mark(id) {
+      state.id = id;
+      for (const x of grid?.children ?? []) x.setAttribute('aria-pressed', String(x.dataset.weather === id));
+    },
+  });
 }

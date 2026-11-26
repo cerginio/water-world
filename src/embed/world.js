@@ -18,6 +18,7 @@
  *   catalog: any,
  *   tech: { controls: boolean, fps: boolean, toggle: (name: string) => void },
  *   fps: () => number | null,
+ *   setLocale: (locale: string) => string,
  * }} EmbedWorld
  */
 
@@ -53,5 +54,6 @@ export function worldFromApp({ app, spawn }) {
     catalog: app.catalog,
     tech: app.techPanels,
     fps: () => app.fps(),
+    setLocale: (locale) => app.setLocale(locale),
   };
 }

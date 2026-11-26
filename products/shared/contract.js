@@ -100,13 +100,18 @@ export function createSceneClient({ post, helloEvery = 150, callTimeout = 120000
 
 /**
  * The scene page's address for a product's iframe: the story and the flags are static (spec §4.4),
- * `embed` always. Bare flags (`&walk`), the story's `/` kept readable.
+ * `embed` always. Bare flags (`&walk`), the story's `/` kept readable; `lang` — the words of the
+ * scene's own buttons (Q7: the product's language).
  * @param {string} base the scene page, e.g. new URL('../../', location.href).href
- * @param {{ story?: string | null, flags?: string[] }} [options]
+ * @param {{ story?: string | null, flags?: string[], lang?: string | null }} [options]
  */
-export function sceneUrl(base, { story = null, flags = [] } = {}) {
+export function sceneUrl(base, { story = null, flags = [], lang = null } = {}) {
   const parts = [];
   if (story) parts.push(`story=${encodeURIComponent(story).replace(/%2F/gi, '/')}`);
+  if (lang) {
+    if (!/^[a-z]{2}$/.test(lang)) throw new Error(`bad scene lang: ${lang}`);
+    parts.push(`lang=${lang}`);
+  }
   for (const f of [...new Set([...flags, 'embed'])]) {
     if (!/^[a-z][a-z0-9-]*$/.test(f)) throw new Error(`bad scene flag: ${f}`);
     parts.push(f);

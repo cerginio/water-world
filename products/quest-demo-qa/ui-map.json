@@ -2,6 +2,7 @@
   "zones": [
     { "id": "story", "title": { "uk": "Історія", "en": "Story" }, "open": false },
     { "id": "states", "title": { "uk": "Стани", "en": "States" } },
+    { "id": "pack", "title": { "uk": "Рюкзак", "en": "Backpack" }, "open": false },
     { "id": "weather", "title": { "uk": "Погода", "en": "Weather" }, "open": false },
     { "id": "quests", "title": { "uk": "Квести", "en": "Quests" }, "open": false },
     { "id": "cards", "title": { "uk": "Картки", "en": "Cards" }, "open": false },

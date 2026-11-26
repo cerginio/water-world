@@ -30,6 +30,7 @@ export function readState(world) {
     kite: !!raft?.kite.up,
     openSea: !!raft?.inSea,
     carried: carried ? frames.find((f) => f.id === String(carried.frameId))?.index ?? null : null,
+    pack: minis?.active ? minis.packed.map((m) => frames.find((f) => f.id === String(m.frameId))?.index ?? null) : [],
     hints: world.hints(),
     frames,
   };

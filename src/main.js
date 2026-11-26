@@ -293,6 +293,16 @@ function placeTiles() {
 let groundContact = null;
 const walkGround = (x, z) => (groundContact ??= new TerrainContact(terrain.geometry, terrain.geometry.parameters.width)).at(x, z);
 let walkerHost = null, walkerLoading = null, walkerStick = null;
+// the words of the walker's buttons: ?lang=uk|en (a product passes its own), else the browser's
+let sceneLocale = ['uk', 'en'].includes(args.get('lang') ?? '') ? args.get('lang')
+  : (navigator.language ?? '').toLowerCase().startsWith('uk') ? 'uk' : 'en';
+/** The product's language changed (contract scene.locale): the buttons say it at once. */
+function setLocale(locale) {
+  if (!STICK_LABELS[locale]) return sceneLocale;
+  sceneLocale = locale;
+  walkerStick?.setLabels(STICK_LABELS[locale]);
+  return sceneLocale;
+}
 const OVERVIEW_HOLD = 1200;   // ms on the island overview before the descent
 function walkerSpawn() {
   const { coast: c } = storyAnchor(), out = storyAnchor().out;
@@ -317,7 +327,7 @@ async function walkerReady() {
       action: { hint: () => miniHint() ?? kiteHint(), run: () => miniAction() ?? kiteAction() },
       flight: { hint: flyHint, run: flyAction },
       fates: { hints: fateHints, run: runFate },
-      labels: (navigator.language ?? '').toLowerCase().startsWith('uk') ? STICK_LABELS.uk : STICK_LABELS.en });
+      labels: STICK_LABELS[sceneLocale] });
     document.body.classList.add('walker-controls');
   }
   return walkerHost;
@@ -335,12 +345,14 @@ async function walk() {
  */
 async function startWalk({ overview = true } = {}) {
   const host = await walkerReady();
+  // prefers-reduced-motion (Edge §7): no flight over the island, straight into the eyes
+  if (reducedMotion.matches) overview = false;
   if (host.mode === 'eyes' || host.mode === 'boarding') return host;
   if (overview) {
     if (await rig.flyTo(stationPoses.island())) await new Promise((r) => setTimeout(r, OVERVIEW_HOLD));
     if (host.mode === 'eyes' || host.mode === 'boarding') return host;
   }
-  host.enterEyes({ approach: overview ? 4 : true });
+  host.enterEyes({ approach: overview ? 4 : !reducedMotion.matches });
   return host;
 }
 // --- miniatures (story-quest Q3) -------------------------------------------------------
@@ -356,19 +368,29 @@ function layoutMinis() {
   minis.layout(String(tiles.source), { x: spawn.x, z: spawn.z });
   return minis;
 }
-/** G and the touch button: take the nearest miniature or put the carried one down. */
+/**
+ * G and the touch button: take the nearest miniature (Q7: the one held goes into the backpack),
+ * or — none within reach — put the carried one down.
+ */
 function miniAction() {
   if (!minis?.active || walkerHost?.mode !== 'eyes') return null;
   const s = walkerHost.state;
-  if (minis.carried) return minis.put(s);
   const near = minis.nearest(s.x, s.z);
-  return near ? (minis.take(near.frameId, s) && 'carried') : null;
+  if (near) return minis.take(near.frameId, s) && 'carried';
+  return minis.carried ? minis.put(s) : null;
 }
 /** What the button would do now: 'take', 'put' or null. */
 function miniHint() {
   if (!minis?.active || walkerHost?.mode !== 'eyes') return null;
   const s = walkerHost.state;
-  return minis.carried ? 'put' : minis.nearest(s.x, s.z) ? 'take' : null;
+  return minis.nearest(s.x, s.z) ? 'take' : minis.carried ? 'put' : null;
+}
+/** B: the next miniature out of the backpack into the hands, or the one held into it. */
+function packAction() {
+  if (!minis?.active || walkerHost?.mode === 'off') return null;
+  const next = minis.packed[0];
+  if (next) return minis.unpack(next.frameId) && 'unpack';
+  return minis.stow() && 'pack';
 }
 // --- raft and kite (story-quest Q4) --------------------------------------------------
 // Every frame drawn on the water is a deck: a step onto it boards it. On a deck K (or the
@@ -490,6 +512,10 @@ addEventListener('keydown', (e) => {
   if (miniAction()) e.preventDefault();
 });
 addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyB' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  if (packAction()) e.preventDefault();
+});
+addEventListener('keydown', (e) => {
   if (e.code !== 'KeyV' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
   walk().catch((err) => console.error('[walker]', err));
 });
@@ -539,6 +565,7 @@ const ui = { view: 'Lagoon', exposure: 1 };
 const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').onChange((v) => views[v]());
 gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk').name('walk · eyes (V)');
 gui.add({ miniAction }, 'miniAction').name('take · put (G)');
+gui.add({ packAction }, 'packAction').name('backpack (B)');
 gui.add({ kiteAction }, 'kiteAction').name('kite · let go (K)');
 gui.add({ flyAction }, 'flyAction').name('take off · land (Space)');
 gui.add({ release: () => fateAction('release') }, 'release').name('let it go (Z)');
@@ -1137,7 +1164,8 @@ window.app = {
   still,
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
-  get minis() { return minis; }, layoutMinis, miniAction, miniHint,
+  get minis() { return minis; }, layoutMinis, miniAction, miniHint, packAction,
+  get locale() { return sceneLocale; }, setLocale,
   get raft() { return raft; }, kiteAction, kiteHint, flyAction, flyHint,
   get fates() { return fates; }, fateAction, fateTarget, fateHints, undoFate, keepFate,
   camWater: () => camWater, markSun: () => env.set({}), mood: moodApi, techPanels, measureEnvironment: measureSky,

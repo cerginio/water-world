@@ -1,11 +1,13 @@
-// Story Quest — the product (STORY-QUEST-SPEC §4, §4.4). Since QDb a host page: the platform scene
-// in an <iframe ?story=…&embed>, the shared panel with the Story and Weather zones; the catalog's
-// state is words over the scene. The product talks to the scene only through the contract —
-// nothing of src/** is imported, the iframe's window.app is not read (guard BOUNDARY-5).
+// Story Quest — the product (STORY-QUEST-SPEC §2, §4, §4.4). A host page: the platform scene in an
+// <iframe ?story=…&walk&minis&embed> — the whole route by default (Q7) — and the shared panel with
+// the product's zones; the catalog's state and the choice of a story are words over the scene;
+// «На берег» and «Затихнути» are always in sight (Edge §7). The product talks to the scene only
+// through the contract — nothing of src/** is imported, window.app is not read (guard BOUNDARY-5).
 import { mountShell } from '../shared/shell.js';
 import { createSceneHost } from '../shared/sceneHost.js';
 import { renderZones } from '../shared/zones.js';
-import { storyZone, weatherZone } from '../shared/storyZones.js';
+import { storyMeta, storyZone, weatherZone } from '../shared/storyZones.js';
+import { packZone } from '../shared/packZone.js';
 import { createQuestLayer } from '../shared/questZones.js';
 import { openQuestStore } from '../shared/questStore.js';
 import questData from '../shared/quests.json';
@@ -25,6 +27,7 @@ const TEXT = {
     },
     fallback: 'Каталог недоступний — ось локальні історії для розробки:',
     others: 'Інші історії:',
+    shore: 'На берег', quiet: 'Затихнути', calm: 'Спокій',
   },
   en: {
     none: 'No story chosen. Pick one:',
@@ -39,17 +42,25 @@ const TEXT = {
     },
     fallback: 'The catalog is unreachable — local stories for development:',
     others: 'Other stories:',
+    shore: 'To the shore', quiet: 'Quiet down', calm: 'Calm',
   },
 };
-// the scene's own switches a product link may carry through (walk, minis until Q7 makes them default)
-const PASS = ['walk', 'minis', 'stick', 'mobile', 'desktop', 'fps', 'controls', 'debug'];
+// the route of §2 is the product: the walker and the miniatures always (Q7)
+const ROUTE = ['walk', 'minis'];
+// the scene's own switches a product link may carry through
+const PASS = ['stick', 'mobile', 'desktop', 'fps', 'controls', 'debug'];
 
 const params = new URLSearchParams(location.search);
 let story = params.get('story');
-const flags = PASS.filter((f) => params.has(f));
+const passed = PASS.filter((f) => params.has(f));
+// without a story the scene is only the island behind the choice: no walker, no stick yet
+const flags = () => [...(story ? ROUTE : []), ...passed];
 let catalogState = story ? { state: 'pending', story, error: null } : { state: 'idle', story: null, error: null };
 
-const shell = mountShell({ key: 'story-quest', title: 'Story Quest', onLocale: () => { draw(); words(); } });
+const shell = mountShell({ key: 'story-quest', title: 'Story Quest', onLocale: (locale) => {
+  draw(); words(); calmWords();
+  host.call('scene.locale', { locale }, { timeout: 5000 });
+} });
 const host = createSceneHost({ iframe: shell.iframe });
 // the quest layer (spec §3): facts from the scene's events, the log and the cards on this device
 const quests = createQuestLayer({ host, store: openQuestStore('story-quest'), data: questData, locale: () => shell.locale });
@@ -60,7 +71,7 @@ function open(id) {
   q.set('story', id);
   history.replaceState(null, '', `${location.pathname}?${q.toString().replace(/%2F/gi, '/')}`);
   catalogState = { state: 'pending', story: id, error: null };
-  host.load({ story, flags });
+  host.load({ story, flags: flags(), lang: shell.locale });
   shell.yieldToScene();
   draw();
   words();
@@ -85,8 +96,12 @@ async function words() {
   if (!list || catalogState.state === 'pending' || catalogState.state === 'ready') return;
   const head = list.fallback ? w.fallback : state === 'failed' ? w.others : null;
   const ul = document.createElement('ul');
-  for (const s of list.stories.slice(0, 8)) {
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: `${s.title} (${s.id})` });
+  ul.className = 'story-choice';
+  for (const s of list.stories) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'story-choice-pick' });
+    b.append(Object.assign(document.createElement('span'), { className: 'story-choice-title', textContent: s.title }));
+    const meta = storyMeta(s, shell.locale);
+    if (meta) b.append(Object.assign(document.createElement('span'), { className: 'story-choice-meta', textContent: meta }));
     b.dataset.story = s.id;
     b.addEventListener('click', () => open(s.id));
     const li = document.createElement('li');
@@ -106,18 +121,39 @@ host.on((name, detail) => {
   words();
 });
 
+const weather = weatherZone({ host });
 const zoneRender = {
   story: storyZone({ host, current: () => story, pick: open }),
-  weather: weatherZone({ host }),
+  pack: packZone({ host }),
+  weather,
   quests: quests.quests,
   cards: quests.cards,
 };
+
+// «На берег» (a calm state: the walker on the beach) and «Затихнути» (the calm weather), always in
+// sight over the scene (Edge §7); nothing is undone by them — the frames keep their fates
+const calm = document.createElement('nav');
+calm.id = 'calmBar';
+const shore = Object.assign(document.createElement('button'), { type: 'button', id: 'toShore' });
+const quiet = Object.assign(document.createElement('button'), { type: 'button', id: 'quietDown' });
+shore.addEventListener('click', () => { if (story) host.call('walker.shore', {}, { timeout: 20000 }); shell.yieldToScene(); });
+quiet.addEventListener('click', () => { host.call('mood.quiet', {}, { timeout: 5000 }); weather.mark('calm'); });
+calm.append(shore, quiet);
+document.body.append(calm);
+function calmWords() {
+  const w = TEXT[shell.locale];
+  calm.setAttribute('aria-label', w.calm);
+  shore.textContent = w.shore;
+  quiet.textContent = w.quiet;
+}
+calmWords();
 function draw() { renderZones(shell.zones, uiMap, { locale: shell.locale, render: zoneRender }); }
 
 // a handle for probe-story-quests (the page's own state; the scene's is read through the contract)
 Object.assign(window, { storyQuest: { host, quests } });
 
 document.body.dataset.storyState = catalogState.state;
-host.load({ story, flags });
+document.body.dataset.product = 'story-quest';
+host.load({ story, flags: flags(), lang: shell.locale });
 draw();
 words();

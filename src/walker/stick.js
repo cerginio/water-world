@@ -42,7 +42,8 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
  *   flight?: { hint: () => 'fly' | 'land' | 'water' | 'dive' | 'rise' | null, run: () => unknown },
  *   fates?: { hints: () => string[], run: (name: string) => unknown } }} options
  */
-export function createWalkerStick({ parent = document.body, host, onToggle, labels = LABELS.en, action, flight, fates }) {
+export function createWalkerStick({ parent = document.body, host, onToggle, labels: words = LABELS.en, action, flight, fates }) {
+  let labels = words;
   const root = document.createElement('div');
   root.id = 'walkerControls';
   const zone = document.createElement('div');
@@ -139,6 +140,15 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   return {
     element: root,
     update,
+    /** Another language (Q7: the product's switch): every button says it from the next update. */
+    setLabels(next) {
+      labels = next;
+      zone.setAttribute('aria-label', labels.stick);
+      for (const [name, b] of fateButtons) b.textContent = labels[name] ?? name;
+      note.textContent = labels.keepNote;
+      toggle.textContent = act.textContent = fly.textContent = '';
+      update();
+    },
     dispose() {
       release();
       removeEventListener('blur', release);
