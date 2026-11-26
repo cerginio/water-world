@@ -21,7 +21,11 @@
 // land() over deep water, `jumpIn()` off a deck, or the deck under the feet gone (ride()).
 // step() strokes instead of walking; out onto wadeable ground or onto a deck at the surface.
 // `dive()` / `rise()` set the depth to go to. `world.water(x, z)` — the water's height there.
-import { WALK, clearOfWater, walkOnGround } from './groundWalk.js';
+//
+// Q8 (the owner's phone): a step from the shore into the sea past the wading line goes into
+// the water — the walker swims from there (WADE_IN); `takeOff()` also from the water at the
+// surface: the kite lifts the walker onto the board straight out of the sea.
+import { WALK, clearOfWater, isWater, walkOnGround } from './groundWalk.js';
 import { clampToDeck, deckAt, fromDeck, nearestOnDeck, onDeck, toDeck } from './deck.js';
 import { landing, stepFlight } from './flight.js';
 import { SWIM, eyeLevel, stepSwim } from './swim.js';
@@ -30,6 +34,8 @@ const SETTLE = 0.06;   // s: the feet follow a deck's height (it bobs, and is re
 export const DECK_JUMP = 4;   // m: the farthest jump onto a deck from the water, or off it onto the shallows
 const GLIDE = 0.15;   // s: the eyes' offset after a jump dies away with this time constant
 const JUMP_CONE = Math.cos(Math.PI / 4);   // off a rim, another deck's nearest point within 45° of the step
+/** m past the body's radius a step looks ahead: deep water there — the walker goes in (Q8) */
+export const WADE_IN = 0.3;
 
 export const PACE = Object.freeze({
   walk: 4.2,     // m/s; 1.4 (a real pace) felt too slow on the island — ×3, owner 2026-11-24 (Q2b)
@@ -224,10 +230,16 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
     },
     /**
      * Off the deck into the air on the board (the kite lifts it, Q4b); `velocity` — the
-     * raft's speed to start with. Only from a deck. @returns {boolean} took off
+     * raft's speed to start with. From a deck, or from the water at the surface (Q8: the board
+     * from the surface, the feet at the water's height). @returns {boolean} took off
      */
     takeOff(velocity = { x: 0, z: 0 }) {
-      if (!state.deck || state.flight) return false;
+      if (state.flight) return false;
+      if (state.swim) {
+        if (state.swim.depth > SWIM.under || state.swim.target > SWIM.under) return false;
+        state.swim = null;
+        jumpTo(state.x, water(state.x, state.z), state.z);
+      } else if (!state.deck) return false;
       state.deck = null;
       state.flight = { vx: velocity.x, vz: velocity.z, t: 0 };
       state.normal = UP;
@@ -364,6 +376,15 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       if (!here || here.height < 0) {
         const jumped = jumpOntoDeck(offset);
         if (jumped) return jumped;
+      }
+      // into the sea past the wading line (Q8): deep water a body's length ahead — swim there
+      const l = Math.hypot(offset.x, offset.z), reach = radius + WADE_IN;
+      const ax = state.x + offset.x / l * reach, az = state.z + offset.z / l * reach;
+      if (isWater(world.ground, ax, az, wade) && !deckAt(decks(), ax, az)) {
+        enterWater(ax, az);
+        state.moving = true;
+        state.walked += reach;
+        return reach;
       }
       const next = walkOnGround(state, offset, move);
       const moved = Math.hypot(next.x - state.x, next.z - state.z);

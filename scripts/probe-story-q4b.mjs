@@ -2,7 +2,7 @@
 // п.9): the board under the kite through the real frame loop and real keys. A miniature
 // unfolds by the beach and becomes the raft (as probe-story-q4); K, then Space: the walker
 // takes off on the board, the kite stays up, the raft left behind coasts to the drift; the
-// board flies 24 m/s at 2–4 m over the mean water, the camera in the eyes (CameraRig.ride);
+// board flies 56 m/s (Q8) at 2–4 m over the mean water, the camera in the eyes (CameraRig.ride);
 // over deep water nothing lands by itself (Space there is the water, Q5b); on a course to the island it lands by itself on the
 // shallows, on the feet. A second miniature, carried onto the raft and put down, unfolds
 // beside it, clear of it, and the walker jumps across; from there a flight back over the
@@ -101,14 +101,14 @@ try {
   const up = await state(page);
   assert.ok(up.flying && up.deck === null && up.kite, `in the air on the board, the kite up (${JSON.stringify(up)})`);
 
-  // 3. out to sea: 24 m/s, 2–4 m over the mean water, the camera in the eyes; Space does not land
+  // 3. out to sea: 56 m/s (Q8; 24 before), 2–4 m over the mean water, the camera in the eyes; Space does not land
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(3000);
   const band = [];
   for (let i = 0; i < 20; i++) { band.push(await state(page)); await page.waitForTimeout(150); }
   const ys = band.map((s) => s.y), speeds = band.map((s) => s.speed);
   assert.ok(Math.min(...ys) >= 2 && Math.max(...ys) <= 4, `board 2–4 m over the mean water (${Math.min(...ys).toFixed(2)}..${Math.max(...ys).toFixed(2)})`);
-  assert.ok(Math.min(...speeds.slice(-10)) > 0.9 * 24, `board speed (${speeds.slice(-5).map((v) => v.toFixed(1))} m/s)`);
+  assert.ok(Math.min(...speeds.slice(-10)) > 0.9 * 56, `board speed (${speeds.slice(-5).map((v) => v.toFixed(1))} m/s)`);
   assert.ok(band.every((s) => s.camToEyes < 0.05), `camera in the eyes (${Math.max(...band.map((s) => s.camToEyes)).toFixed(3)} m)`);
   assert.ok(band.every((s) => s.board && s.mode === 'eyes'));
   await page.evaluate(() => { app.walker.state.pitch = -0.7; });

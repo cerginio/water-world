@@ -182,11 +182,19 @@ export function createCommands(world, { wait = {} } = {}) {
       return readState(world);
     },
 
-    /** Off the raft on the board (Space with the kite up); the kite goes up first if it is down. */
+    /**
+     * Off the raft on the board (Space with the kite up); the kite goes up first if it is down.
+     * From the water at the surface the same (K, Q8): out of the sea onto the board.
+     */
     'fly.takeOff': async () => {
       await ready();
       const host = await eyes(), raft = world.raft;
       if (host.state.flight) return readState(world);
+      if (host.state.swim) {
+        if (!host.walker.takeOff()) throw new EmbedError('not-possible', 'take-off is from the surface');
+        raft.setKite(true, true);
+        return readState(world);
+      }
       if (!raft.boarded) throw new EmbedError('not-possible', 'take-off is from a raft');
       raft.setKite(true);
       if (!host.walker.takeOff(raft.velocity())) throw new EmbedError('not-possible', 'did not take off');

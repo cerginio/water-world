@@ -13,33 +13,25 @@
 // sets the kite's course instead of walking; the head still turns.
 //
 // Q4b: in the air (walker.state.flight) the same input is the board's course (flight.js),
-// and the kite's; the board is a mesh of its own under the feet, shown only in the air.
+// and the kite's; the board is a mesh of its own under the feet, shown only in the air (Q8: a
+// twin-tip kiteboard, kiteboard.js).
 //
 // Q5b: in the water (walker.state.swim, swim.js) the same input strokes; `water(x, z)` — the
 // water's height there (main.js: the one read at the camera). The camera stays the eyes, so
 // it goes under the water with them; nothing here writes it (OWNER-3).
-import * as THREE from 'three';
 import { createWalker, PACE } from './walker.js';
 import { WALK, isWater, walkOnGround } from './groundWalk.js';
 import { bindWalkerInput, keyIntent } from './keyboard.js';
 import { loadWalkerModules } from './tilecraftWalker.js';
+import { KITEBOARD, createKiteboard, disposeKiteboard } from './kiteboard.js';
 
 export { WALK, PACE, isWater, walkOnGround, keyIntent };
 export { FLIGHT, stepFlight, landing } from './flight.js';
 export { SWIM, stepSwim, eyeLevel } from './swim.js';
 
-const HIDE_NEAR = 1.5;
-/** The board under the feet in the air: m, its long side along the flight. */
-export const BOARD = Object.freeze({ length: 1.5, width: 0.45, thick: 0.06 });
-
-function buildBoard() {
-  const board = new THREE.Mesh(new THREE.BoxGeometry(BOARD.width, BOARD.thick, BOARD.length),
-    new THREE.MeshStandardMaterial({ color: 0x2f7fd1, roughness: 0.45 }));
-  board.name = 'walker-board';
-  board.visible = false;
-  board.layers.enable(1);   // in the planar reflection, as the kite's sail
-  return board;
-}   // m from the eyes: closer, a boarding camera would see the inside of the head
+const HIDE_NEAR = 1.5;   // m from the eyes: closer, a boarding camera would see the inside of the head
+/** The board under the feet in the air: m, its long side along the flight (kiteboard.js). */
+export const BOARD = KITEBOARD;
 
 /**
  * @param {{ scene: any, rig: any, ground: (x: number, z: number) => any,
@@ -56,7 +48,7 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
   avatar.group.name = 'walker';
   avatar.group.visible = false;
   scene.add(avatar.group);
-  const board = buildBoard();
+  const board = createKiteboard();
   scene.add(board);
   const input = bindWalkerInput(canvas, isEditing, () => mode === 'eyes');
   /** @type {'off' | 'boarding' | 'eyes' | 'standing'} */
@@ -128,7 +120,7 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
       board.visible = !!s.flight;
       if (s.flight) {
         const v = Math.hypot(s.flight.vx, s.flight.vz);
-        board.position.set(s.x, s.y - BOARD.thick / 2, s.z);
+        board.position.set(s.x, s.y, s.z);   // the feet on the middle of the deck
         board.rotation.y = v > 0.5 ? Math.atan2(s.flight.vx, s.flight.vz) : s.yaw;
       }
       avatar.update({ pose: mode === 'off' ? null : { x: s.x, y: s.y, z: s.z }, unit: walker.bodyScale,
@@ -144,8 +136,7 @@ export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, 
       input.dispose();
       avatar.dispose();
       scene.remove(board);
-      board.geometry.dispose();
-      board.material.dispose();
+      disposeKiteboard(board);
       mode = 'off';
     },
   };

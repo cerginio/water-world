@@ -3,7 +3,8 @@ import { pathToFileURL } from 'node:url';
 import * as THREE from 'three';
 import { resolveTilecraft } from '../build/tilecraft-config.js';
 import { WALK, clearOfWater, isWater, nearestWater, walkOnGround } from '../src/walker/groundWalk.js';
-import { createWalker, PACE } from '../src/walker/walker.js';
+import { createWalker, PACE, WADE_IN } from '../src/walker/walker.js';
+import { SWIM } from '../src/walker/swim.js';
 import { axis, keyIntent } from '../src/walker/keyboard.js';
 import { CameraRig } from '../src/scene/cameraRig.js';
 import { stickVector, STICK } from '../src/walker/stick.js';
@@ -57,23 +58,54 @@ describe('walkOnGround', () => {
     expect(end.x).toBeGreaterThan(0.3 * 40 * 0.95);      // and kept going along it
   });
 
-  test('slides along a shore oblique to any grid, at every course that has a component along it', () => {
+  test('slides along a shore oblique to any grid at the courses that lead along it; into the sea it swims (Q8)', () => {
     // deep water for x + 0.6·z ≥ 10 (oblique, gently sloping bed): the cell grid of Q2a
     // made a staircase here and the body stuck in its inner corners at 15..30° (probe)
     const ground = groundOf((x, z) => 1 - 0.2 * (x + 0.6 * z - 10) - 0.5);
-    const seaward = Math.atan2(1, 0.6);
-    for (const deg of [-75, -60, -45, -30, -15, 15, 30, 45, 60, 75]) {
+    const seaward = Math.atan2(1, 0.6), n = Math.hypot(1, 0.6);
+    // the wading line is x + 0.6·z = 15; a body at the line, its radius and a bit off it
+    const edge = { x: 15 - (radius + 0.01) * n, z: 0 };
+    // a step aims into the sea when a body's length ahead crosses the line: past ~27° off it
+    const along = Math.asin(radius / (radius + WADE_IN)) * 180 / Math.PI;
+    for (const deg of [-85, -75, -65, 65, 75, 85]) {
       const w = createWalker({ moveOnSheet, ground });
-      w.place(0, 0, seaward);
-      for (let i = 0; i < 600; i++) w.step(1 / 60, { forward: 1 });   // to the edge
-      const edge = { x: w.state.x, z: w.state.z };
-      w.state.yaw = seaward + deg * Math.PI / 180;
+      w.place(edge.x, edge.z, seaward + deg * Math.PI / 180);
       for (let i = 0; i < 60; i++) w.step(1 / 60, { forward: 1 });
-      const along = Math.hypot(w.state.x - edge.x, w.state.z - edge.z);
+      const moved = Math.hypot(w.state.x - edge.x, w.state.z - edge.z);
+      expect(90 - Math.abs(deg), `course ${deg}°`).toBeLessThan(along);
+      expect(w.state.swim, `course ${deg}°`).toBe(null);
       // the share of the step along the shore is |sin(deg)|; allow 15 % off it
-      expect(along, `course ${deg}°`).toBeGreaterThan(PACE.walk * Math.abs(Math.sin(deg * Math.PI / 180)) * 0.85);
+      expect(moved, `course ${deg}°`).toBeGreaterThan(PACE.walk * Math.abs(Math.sin(deg * Math.PI / 180)) * 0.85);
       expect(w.state.y, `course ${deg}°`).toBeGreaterThanOrEqual(-WALK.wade - 1e-3);
     }
+    for (const deg of [-45, -30, 0, 30, 45]) {
+      const w = createWalker({ moveOnSheet, ground });
+      w.place(edge.x, edge.z, seaward + deg * Math.PI / 180);
+      w.step(1 / 60, { forward: 1 });
+      expect(w.state.swim, `course ${deg}°`).not.toBe(null);
+      expect(isWater(ground, w.state.x, w.state.z), `course ${deg}°`).toBe(true);
+      // in just past the line, not thrown out to sea
+      expect((w.state.x + 0.6 * w.state.z - 15) / n, `course ${deg}°`).toBeLessThan(WADE_IN + 0.01);
+    }
+  });
+
+  test('from the island straight into the sea: walks to the line, goes in, swims on (Q8)', () => {
+    const ground = groundOf((x) => 2 - 0.1 * x);   // −0.5 m at x = 25
+    const w = createWalker({ moveOnSheet, ground });
+    w.place(0, 0, Math.PI / 2);
+    let t = 0;
+    while (!w.state.swim && t < 20) { w.step(1 / 60, { forward: 1 }); t += 1 / 60; }
+    expect(w.state.swim).not.toBe(null);
+    expect(w.state.x).toBeGreaterThan(25);
+    expect(w.state.x).toBeLessThan(25 + PACE.walk / 60 + 0.01);   // just past the line
+    expect(t).toBeLessThan(25 / PACE.walk + 0.2);
+    for (let i = 0; i < 120; i++) w.step(1 / 60, { forward: 1 });
+    expect(w.state.x).toBeGreaterThan(25 + 1.5 * SWIM.pace);   // strokes, not steps
+    // back to the shore: up on the feet
+    w.state.yaw = -Math.PI / 2;
+    for (let i = 0; i < 300 && w.state.swim; i++) w.step(1 / 60, { forward: 1 });
+    expect(w.state.swim).toBe(null);
+    expect(w.state.y).toBeGreaterThanOrEqual(-WALK.wade);
   });
 
   test('wades into the shallows, no deeper than WALK.wade', () => {
@@ -116,20 +148,20 @@ describe('nearestWater / clearOfWater', () => {
     expect(clearOfWater(ground, 1.5, 0, radius)).toBeNull();
   });
 
-  test('a corner of the shore (165°, as on the island): slides past it at the courses that lead along', () => {
+  test('a corner of the shore (165°, as on the island): slides past it along the shore', () => {
     // x along the shore, z seawards; water where max(z, z + x·tan15°) > 0 — the line turns
-    // 15° into the land at x = 0 (map of the probe's shore at (−399.8, −212.6))
+    // 15° into the land at x = 0 (map of the probe's shore at (−399.8, −212.6)). Q8: a course
+    // into the sea goes into the water, so the corner is passed along the shore, both ways.
     const T = Math.tan(15 * Math.PI / 180);
     const corner = groundOf((x, z) => -0.5 - 0.2 * Math.max(z, z + x * T));
-    for (const [deg, least] of [[30, 0.15], [45, 0.4], [60, 0.6], [-30, 0.4]]) {
+    for (const [from, yaw] of [[{ x: -3, z: -(radius + 0.02) }, Math.PI / 2],
+      [{ x: 3, z: -3 * T - (radius + 0.03) / Math.cos(15 * Math.PI / 180) }, -Math.PI / 2 - 15 * Math.PI / 180]]) {
       const w = createWalker({ moveOnSheet, ground: corner });
-      w.place(-0.3, -2, 0);
-      for (let i = 0; i < 120; i++) w.step(1 / 60, { forward: 1 });
-      const edge = { x: w.state.x, z: w.state.z };
-      w.state.yaw = deg * Math.PI / 180;
-      for (let i = 0; i < 60; i++) w.step(1 / 60, { forward: 1 });
-      expect(Math.hypot(w.state.x - edge.x, w.state.z - edge.z), `course ${deg}°`).toBeGreaterThan(least);
-      expect(w.state.y, `course ${deg}°`).toBeGreaterThanOrEqual(-WALK.wade - 1e-5);
+      w.place(from.x, from.z, yaw);
+      for (let i = 0; i < 90; i++) w.step(1 / 60, { forward: 1 });
+      expect(w.state.swim, `from x ${from.x}`).toBe(null);
+      expect(Math.sign(w.state.x), `from x ${from.x}: past the corner`).toBe(-Math.sign(from.x));
+      expect(w.state.y, `from x ${from.x}`).toBeGreaterThanOrEqual(-WALK.wade - 1e-5);
     }
   });
 });

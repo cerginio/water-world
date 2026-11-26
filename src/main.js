@@ -324,7 +324,9 @@ async function walkerReady() {
   const stickArg = args.get('stick');
   if (!walkerStick && (args.has('stick') ? stickArg !== '0' : mobile)) {
     walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
-      action: { hint: () => miniHint() ?? kiteHint(), run: () => miniAction() ?? kiteAction() },
+      // in the water the kite comes first: «Take off» out of the sea (Q8), G still puts a miniature down
+      action: { hint: () => (walkerHost?.state.swim ? kiteHint() ?? miniHint() : miniHint() ?? kiteHint()),
+        run: () => (walkerHost?.state.swim ? kiteAction() ?? miniAction() : miniAction() ?? kiteAction()) },
       flight: { hint: flyHint, run: flyAction },
       fates: { hints: fateHints, run: runFate },
       labels: STICK_LABELS[sceneLocale] });
@@ -405,14 +407,26 @@ function raftUpdate(dt) {
 /** K and the touch button: the kite up or let go, on a deck in the eyes; in the air, K lands. */
 function kiteAction() {
   if (walkerHost?.state.flight) return flyAction() && 'unkite';
+  if (walkerHost?.state.swim) return kiteFromWater();
   if (!raft?.boarded || walkerHost?.mode !== 'eyes') return null;
   return raft.toggleKite() ? 'kite' : 'unkite';
 }
 /** What the button would do now for the kite: 'kite' (up), 'unkite' (let go) or null. */
 function kiteHint() {
   if (walkerHost?.state.flight) return null;   // the flight button lands
+  if (walkerHost?.state.swim) return raft && walkerHost.mode === 'eyes' && !walkerHost.walker.under ? 'fly' : null;
   if (!raft?.boarded || walkerHost?.mode !== 'eyes') return null;
   return raft.kite.up ? 'unkite' : 'kite';
+}
+/**
+ * Q8 (the owner's phone): in the water at the surface K (the touch button «Take off») lifts the
+ * walker out of the sea onto the board, the kite up at once. 'fly' or null.
+ */
+function kiteFromWater() {
+  if (!raft || walkerHost?.mode !== 'eyes') return null;
+  if (!walkerHost.walker.takeOff()) return null;
+  raft.setKite(true, true);
+  return 'fly';
 }
 // Q4b (STORY-QUEST-SPEC §2 п.6, §4.2 v1.5): on a raft with the kite up, Space (or the touch
 // button «Take off») lifts the walker on the board; in the air Space lands — on a deck under

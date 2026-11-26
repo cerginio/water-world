@@ -82,8 +82,9 @@ export class TileRaft extends EventTarget {
   get boarded() { return this.deckId !== null; }
 
   /** Kite up / let go; only on a deck (or in the air, where it holds the board). @returns {boolean} up */
-  setKite(up) {
-    const next = !!up && (this.boarded || this.flying);
+  setKite(up, airborne = false) {
+    // airborne: the walker has just taken off out of the water (Q8), update() has not seen it yet
+    const next = !!up && (this.boarded || this.flying || airborne);
     if (next === this.kite.up) return next;
     this.kite.up = next;
     this.kite.course = null;

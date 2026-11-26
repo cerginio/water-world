@@ -79,6 +79,25 @@ describe('stepSwim', () => {
 describe('the walker in the water', () => {
   const setup = (list = [], ground = beach) => createWalker({ moveOnSheet, ground, decks: () => list, water: () => 0 });
 
+  test('out of the water onto the board (Q8): from the surface only, the board starts at the water', () => {
+    const w = createWalker({ moveOnSheet, ground: beach });
+    w.swimAt(100, 0, 0);
+    w.dive();
+    for (let i = 0; i < 120; i++) w.step(dt, {});
+    expect(w.under).toBe(true);
+    expect(w.takeOff()).toBe(false);   // under the water: no
+    w.rise();
+    for (let i = 0; i < 600 && w.state.swim.depth > 0; i++) w.step(dt, {});
+    expect(w.takeOff({ x: 0, z: 0 })).toBe(true);
+    expect(w.state.swim).toBe(null);
+    expect(w.state.flight).not.toBe(null);
+    expect(w.state.y).toBeCloseTo(0, 6);   // the feet at the (still) water
+    expect(w.landing()).toBe('water');
+    for (let i = 0; i < 180; i++) w.fly(dt, { x: 1, z: 0 });
+    expect(w.state.y).toBeGreaterThan(2);   // up in the band
+    expect(w.state.flight).not.toBe(null);
+  });
+
   test('from the board over deep water: into the water at the surface, the kite gone with it', () => {
     const list = [deckOf('raft', 300, 0)];
     const w = setup(list);

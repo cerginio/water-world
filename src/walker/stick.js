@@ -38,7 +38,7 @@ export function stickVector(dx, dy, radius = STICK.radius, dead = STICK.dead) {
 /**
  * @param {{ parent?: HTMLElement, host: { mode: string, setStick: (v: {x: number, y: number}) => void },
  *   onToggle: () => void, labels?: Record<string, string>,
- *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | null, run: () => unknown },
+ *   action?: { hint: () => 'take' | 'put' | 'kite' | 'unkite' | 'fly' | null, run: () => unknown },
  *   flight?: { hint: () => 'fly' | 'land' | 'water' | 'dive' | 'rise' | null, run: () => unknown },
  *   fates?: { hints: () => string[], run: (name: string) => unknown } }} options
  */

@@ -1,8 +1,8 @@
 // The walker on the board under the kite (STORY-QUEST-SPEC §2 п.6 «Вихід з плоту», §4.2
 // v1.5; story-quest Q4b). Off a raft with the kite up, the kite lifts the walker on the board
 // it always has with it, and the board flies over the waves: 2–4 m over the mean water level
-// (y = 0), not on the wave's profile (an exact height on the CPU is HANDOFF п.8), three times
-// the raft's speed, along the course of the walk input; no input — the kite slackens and the
+// (y = 0), not on the wave's profile (an exact height on the CPU is HANDOFF п.8), seven times
+// the raft's speed (three until Q8: too slow on the owner's phone), along the course of the walk input; no input — the kite slackens and the
 // board slows to a hover. Pure: no three.js, no DOM.
 //
 // Landing: over ground the walker can wade on (≥ −wade) — at once, on the feet; over a deck —
@@ -11,7 +11,7 @@
 
 /** @type {Readonly<{ speed: number, drag: number, height: number, bob: number, period: number, rise: number, limit: number }>} */
 export const FLIGHT = Object.freeze({
-  speed: 24,     // m/s: three times the raft (RAFT.speed 8)
+  speed: 56,     // m/s: seven times the raft (RAFT.speed 8); 24 (×3) felt slow — owner, Q8
   drag: 0.8,     // 1/s: how fast the board takes on the kite's speed, or slows without it
   height: 3,     // m over the mean water level the board flies at…
   bob: 0.4,      // …± this, slowly (the band 2–4 m holds with a margin)

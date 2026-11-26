@@ -1,8 +1,9 @@
 // story-quest Q2a (STORY-QUEST-SPEC §2 п.2, §4.1 «Персонаж»; HANDOFF Q2a): the walker on
 // the island through real keys and the real frame loop. Every rendered frame the feet are
 // on the drawn terrain (TerrainContact) and the camera is the eyes; walking up a slope gains
-// height; walking into the sea stops at the wading depth and slides along the shore; V
-// toggles eyes / standing with the figure shown; the product shell walks too.
+// height; walking into the sea goes into the water past the wading line (Q8: it swims), a
+// course along the shore slides along it on the feet; V
+// toggles eyes / standing with the figure shown; the product walks too (in its iframe).
 // Run against npm run dev (http://localhost:5199/).
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
@@ -34,7 +35,7 @@ const record = (page) => page.evaluate(() => {
   const sample = () => {
     if (window.__trace !== rows) return;
     const s = w.state, g = app.ground(s.x, s.z), c = app.camera.position;
-    rows.push({ x: s.x, y: s.y, z: s.z, ground: g?.height ?? null, cam: [c.x, c.y, c.z], mode: w.mode });
+    rows.push({ x: s.x, y: s.y, z: s.z, ground: g?.height ?? null, cam: [c.x, c.y, c.z], mode: w.mode, swim: !!s.swim });
     requestAnimationFrame(sample);
   };
   requestAnimationFrame(sample);
@@ -108,48 +109,29 @@ try {
   assert.ok(walked > 0.71 * pace && walked < 1.1 * pace, `slope: walked ${walked} m in 1 s at ${pace} m/s`);
   await page.screenshot({ path: join(out, 'eyes-slope.png') });
 
-  // 2. into the sea from the spawn: stops at the wading depth
+  // 2. into the sea from the spawn: on the feet to the wading line, then in the water (Q8)
   await place(page, start.x, start.z, start.yaw);
   await record(page);
   await hold(page, ['ShiftLeft', 'KeyW'], 5000);
   const seaRows = await stop(page);
-  const seaEnd = seaRows.at(-1);
-  report.sea = { ...checkFrames(seaRows, 'sea'), end: { ground: +seaEnd.ground.toFixed(3) },
-    walked: +Math.hypot(seaEnd.x - start.x, seaEnd.z - start.z).toFixed(2),
-    // the course is not square to the shore, so at the edge the body slides along it
-    lastSecondGround: [Math.min(...seaRows.slice(-60).map((r) => r.ground)), Math.max(...seaRows.slice(-60).map((r) => r.ground))].map((v) => +v.toFixed(3)) };
-  assert.ok(report.sea.minGround >= -WADE - 0.1, `sea: stood on ${report.sea.minGround} m`);
-  assert.ok(seaEnd.ground < 0, `sea: stopped at ${seaEnd.ground} m — never reached the water`);
-  assert.ok(report.sea.lastSecondGround[1] < -0.2, `sea: the last second left the wading line, ${report.sea.lastSecondGround}`);
-  await page.screenshot({ path: join(out, 'eyes-water-edge.png') });
+  const dry = seaRows.slice(0, Math.max(1, seaRows.findIndex((r) => r.swim)));
+  const wentIn = seaRows.find((r) => r.swim);
+  report.sea = { ...checkFrames(dry, 'sea'), wentIn: wentIn ? { ground: wentIn.ground === null ? null : +wentIn.ground.toFixed(3),
+    after: +(dry.length / 60).toFixed(2) } : null, swimming: !!seaRows.at(-1).swim };
+  assert.ok(report.sea.minGround >= -WADE - 0.1, `sea: stood on ${report.sea.minGround} m before the water`);
+  assert.ok(wentIn && report.sea.swimming, `sea: never went into the water (${JSON.stringify(report.sea)})`);
+  assert.ok(wentIn.ground === null || wentIn.ground < -WADE, `sea: in the water over ${wentIn.ground} m`);
+  await page.screenshot({ path: join(out, 'eyes-into-the-sea.png') });
 
-  // 3. at the edge, 50° off the seaward line: slides along the shore, stays out of deep water
-  report.slideCourse = await page.evaluate(() => {
-    // seaward = downhill of the drawn ground here, averaged over 3 m (one triangle is noise)
-    const s = app.walker.state;
-    let sx = 0, sz = 0;
-    for (let dx = -3; dx <= 3; dx += 1.5) for (let dz = -3; dz <= 3; dz += 1.5) {
-      const g = app.ground(s.x + dx, s.z + dz);
-      if (g) { sx += g.normal.x; sz += g.normal.z; }
-    }
-    const seaward = Math.atan2(sx, sz);
-    s.yaw = seaward + 50 * Math.PI / 180;
-    return { seawardDeg: +(seaward * 180 / Math.PI).toFixed(1), yawDeg: +(s.yaw * 180 / Math.PI).toFixed(1) };
-  });
-  await record(page);
-  await hold(page, ['KeyW'], 3000);
-  const slideRows = await stop(page);
-  const slid = Math.hypot(slideRows.at(-1).x - slideRows[0].x, slideRows.at(-1).z - slideRows[0].z);
-  report.slide = { ...checkFrames(slideRows, 'slide'), slid: +slid.toFixed(2) };
-  assert.ok(report.slide.minGround >= -WADE - 0.1, `slide: stood on ${report.slide.minGround} m`);
-  assert.ok(slid > 1.0, `slide: moved ${slid} m along the shore in 3 s`);
-
-  // 3b. every course off the shore normal, on straight pieces of shore (the cell grid of
-  // the first Q2a build stuck at 0–0.2 m in 1 s at 15–30°). A straight piece: the wading
-  // line's normal every metre to ±3 m along it within 5° of the middle one (the beach is rough: 10–70° is usual). 1 s of walking per course,
-  // stepped in the page at 60 Hz; along the shore ≥ 85 % of pace·|sin(course)|.
+  // 3. every course off the shore normal, on straight pieces of shore, from the edge (a body's
+  // radius off the wading line). Along the shore (≥ 75° off seaward; 65° is the edge on a rough beach) the walker slides on the
+  // feet — the cell grid of the first Q2a build stuck at 0–0.2 m in 1 s; into the sea (≤ 45°)
+  // it goes into the water within a step (Q8). A straight piece: the wading line's normal
+  // every metre to ±3 m along it within 5° of the middle one (the beach is rough: 10–70° is
+  // usual). 1 s of walking per course, stepped in the page at 60 Hz.
   report.sweep = await page.evaluate(() => {
     const w = app.walker.walker, wet = (x, z) => !app.ground(x, z) || app.ground(x, z).height < -0.5;
+    const radius = 0.15 * w.bodyScale;
     // the wading line from (x, z) along (dx, dz), to 1 mm, and the ground's downhill there
     const line = (x, z, dx, dz) => {
       let a = 0, b = 0;
@@ -172,23 +154,30 @@ try {
     const swept = [];
     for (const mid of pieces) {
       const seaward = Math.atan2(mid.nx, mid.nz);
-      for (let deg = -75; deg <= 75; deg += 15) {
-        if (!deg) continue;
-        w.place(mid.x - mid.nx * 2, mid.z - mid.nz * 2, seaward);
-        for (let i = 0; i < 180; i++) w.step(1 / 60, { forward: 1 });
-        const edge = { x: w.state.x, z: w.state.z };
-        let deepest = Infinity;
-        w.state.yaw = seaward + deg * Math.PI / 180;
-        for (let i = 0; i < 60; i++) { w.step(1 / 60, { forward: 1 }); deepest = Math.min(deepest, w.state.y); }
-        swept.push({ at: [+mid.x.toFixed(1), +mid.z.toFixed(1)], deg, along: +Math.hypot(w.state.x - edge.x, w.state.z - edge.z).toFixed(2), deepest: +deepest.toFixed(3) });
+      for (const deg of [-80, -75, -45, -30, -15, 0, 15, 30, 45, 75, 80]) {
+        const ex = mid.x - mid.nx * (radius + 0.03), ez = mid.z - mid.nz * (radius + 0.03);
+        w.place(ex, ez, seaward + deg * Math.PI / 180);
+        w.state.pitch = 0;
+        let deepest = Infinity, swam = false;
+        for (let i = 0; i < 60; i++) {
+          w.step(1 / 60, { forward: 1 });
+          if (w.state.swim) { swam = true; break; }
+          deepest = Math.min(deepest, w.state.y);
+        }
+        swept.push({ at: [+mid.x.toFixed(1), +mid.z.toFixed(1)], deg, swam,
+          along: +Math.hypot(w.state.x - ex, w.state.z - ez).toFixed(2), deepest: +deepest.toFixed(3) });
       }
     }
+    w.place(pieces[0].x - pieces[0].nx * 3, pieces[0].z - pieces[0].nz * 3);
     return swept;
   });
-  assert.ok(report.sweep.length >= 20, `sweep: ${report.sweep.length / 10} straight piece(s) of shore found`);
-  for (const { at, deg, along, deepest } of report.sweep) {
-    assert.ok(deepest >= -WADE - 1e-3, `sweep ${at} ${deg}°: stood on ${deepest} m`);
-    assert.ok(along >= 0.85 * pace * Math.abs(Math.sin(deg * Math.PI / 180)), `sweep ${at} ${deg}°: ${along} m along the shore in 1 s`);
+  assert.ok(report.sweep.length >= 22, `sweep: ${report.sweep.length / 11} straight piece(s) of shore found`);
+  for (const { at, deg, swam, along, deepest } of report.sweep) {
+    if (Math.abs(deg) >= 75) {
+      assert.ok(!swam, `sweep ${at} ${deg}°: along the shore, yet went into the water`);
+      assert.ok(deepest >= -WADE - 1e-3, `sweep ${at} ${deg}°: stood on ${deepest} m`);
+      assert.ok(along >= 0.85 * pace * Math.abs(Math.sin(deg * Math.PI / 180)), `sweep ${at} ${deg}°: ${along} m along the shore in 1 s`);
+    } else assert.ok(swam, `sweep ${at} ${deg}°: into the sea, yet not in the water`);
   }
   await place(page, start.x, start.z, start.yaw);
   await page.waitForTimeout(300);   // a frame moves the eyes there
@@ -232,14 +221,19 @@ try {
   report.stationEndsRide = await page.evaluate(() => ({ mode: app.walker.mode, reasons: app.rig.reasons }));
   assert.equal(report.stationEndsRide.mode, 'standing');
 
-  // 6. the product shell walks the same way
+  // 6. the product walks the same way: since QDb the scene is the product's iframe (BOUNDARY-5:
+  // the product page has no window.app), since Q7 the walker is there with a story by default
   const shell = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   watch(shell, 'shell');
-  await shell.goto(`${base}products/story-quest/?walk`);
-  await shell.waitForFunction(() => window.app?.walker?.mode === 'eyes', {}, { timeout: 60000 });
-  const z0 = await shell.evaluate(() => ({ ...app.walker.state }));
-  await hold(shell, ['KeyW'], 1000);
-  const z1 = await shell.evaluate(() => ({ ...app.walker.state }));
+  await shell.goto(`${base}products/story-quest/?story=test-2025/my-day-3-moments`);
+  await shell.waitForFunction(() => document.querySelector('iframe')?.contentWindow?.app?.walker?.mode === 'eyes', {}, { timeout: 90000 });
+  const scene = shell.frames().find((f) => f !== shell.mainFrame());
+  await shell.waitForTimeout(5000);   // the frames settle after the flight over the island
+  const z0 = await scene.evaluate(() => ({ ...app.walker.state }));
+  await scene.evaluate(() => app.walker.setStick({ x: 0, y: 0.8 }));
+  await shell.waitForTimeout(1000);
+  await scene.evaluate(() => app.walker.setStick({ x: 0, y: 0 }));
+  const z1 = await scene.evaluate(() => ({ ...app.walker.state }));
   report.shell = { walked: +Math.hypot(z1.x - z0.x, z1.z - z0.z).toFixed(2) };
   assert.ok(report.shell.walked > 0.8, `shell: walked ${report.shell.walked} m in 1 s`);
   await shell.close();

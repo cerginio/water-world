@@ -19,8 +19,8 @@ const deckOf = (id, x, z, hu = 5, hv = 3) => ({ id, x, z, ux: 1, uz: 0, vx: 0, v
 const dt = 1 / 60;
 
 describe('stepFlight', () => {
-  test('takes on 24 m/s along the course, three times the raft', () => {
-    expect(FLIGHT.speed).toBe(3 * RAFT.speed);
+  test('takes on 56 m/s along the course, seven times the raft (Q8)', () => {
+    expect(FLIGHT.speed).toBe(7 * RAFT.speed);
     let s = { x: 0, y: 0.2, z: 0, vx: 0, vz: 0, t: 0 };
     for (let i = 0; i < 8 * 60; i++) s = stepFlight(s, dt, { x: 0, z: 1 });
     expect(Math.hypot(s.vx, s.vz)).toBeGreaterThan(0.99 * FLIGHT.speed);
