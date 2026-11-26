@@ -1,7 +1,7 @@
 # Handoff: story-quest — перший продукт на платформі Ultra-Water
 
 Стан на 2026-11-26. Фази з [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md)
-(далі — «спека»). Q0–Q5b, QDa, QDb, Q6 і Q7 закрито й закомічено: каталог R2, `?story=`,
+(далі — «спека»). Q0–Q5b, QDa, QDb, Q6, Q7 і Q8 закрито й закомічено: каталог R2, `?story=`,
 оболонка `products/story-quest/`, персонаж ходить островом «очима», старт «огляд →
 очі», «поза тілом», стік, мініатюри на суші (`&minis`) і гідратація у воді, пліт і
 кайт до відкритого моря, політ на дошці з кайтом і посадка на ноги / на палубу; Q5 —
@@ -9,11 +9,11 @@
 на чотирьох стропах із планкою; Q5b — плавання й пірнання до втопленого кадру; QDa —
 контракт сцени для продуктів (`&embed`, команди через `postMessage`); QDb — спільна оболонка
 `products/shared/`, стенд станів `products/quest-demo-qa/` (14 карток), `story-quest` на оболонці; Q6 — квести й картки (зони «Квести» й «Картки», IndexedDB, експорт); Q7 — продукт: маршрут
-§2 за замовчуванням, вибір історії з автором, рюкзак, «На берег» / «Затихнути», мова сцени.
+§2 за замовчуванням, вибір історії з автором, рюкзак, «На берег» / «Затихнути», мова сцени;
+Q8 — правки з телефона: з берега у воду, з води на кайт, кайтборд, дошка 56 м/с.
 QA — [QA.md](QA.md).
 
-> **Далі:** усі фази спеки закрито. Відкрито п.8 (висота палуби без читання з GPU) і заміри
-> на телефоні власника (QA-Q2b-7, QA-Q3-7 … QA-Q7-9) — наступну роботу вибирає власник.
+> **Далі:** Q8 — правки з телефона власника (п.17), на рев'ю.
 
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Телефон — лише драфт Netlify
@@ -46,6 +46,7 @@ QA — [QA.md](QA.md).
 | ~~QDb~~ | закрито 2026-11-25 (телефон — QA-QDb-12, за власником) |
 | ~~Q6~~ | закрито 2026-11-26 (телефон — QA-Q6-13, за власником) |
 | ~~Q7~~ | закрито 2026-11-26 (телефон — QA-Q7-9, за власником) |
+| ~~Q8~~ | закрито 2026-11-26 (телефон — QA-Q8-7, власник на драфті) |
 
 Тестовий набір історій для всіх фаз (рішення власника 2026-11-24), він же
 в `scripts/probe-story-q0.mjs`:
@@ -293,9 +294,18 @@ guard → focused → probe ([TESTING.md](../../TESTING.md#рівні-прого
      маршрут, рюкзак, «На берег» і «Затихнути»». Маршрут на телефоні (QA-Q7-9) — за власником,
      на драфті.
 
+~~17. **Q8 — правки з телефона власника** (2026-11-26, після Q7; спека §2 п.6, §4.1, §4.2 v1.5).
+   (1) з берега у воду: крок у море повз лінію броду — у воду, пливе; (2) з води на поверхні
+   «Злетіти» (K) — на дошку з кайтом; (3) дошка — кайтборд за аркушем власника
+   (`src/walker/kiteboard.js`); (4) швидкість на кайті ×7 плоту — 56 м/с.
+   - guard; focused: `walker`, `swim`, `flight`, `kiteboard`; проби `probe-story-q8` (нова),
+     `-q2a` (перебір курсів під нове правило), `-q4b`, `-q5b`, `-q3`, `-embed`, `-product`,
+     `-states`.~~ — ЗАКРИТО 2026-11-26; числа — QA.md Q8, рішення — DECISIONS «Вода й дошка з
+     телефона».
+
 ## Що зроблено і працює
 
-Baseline (Q7, 2026-11-26): guard зелений 0.25 с (BOUNDARY-1…5, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 344 passed; `probe-story-product` PASS 29.7 с; `probe-story-states` PASS 170.7 с; `probe-story-q3` PASS 160.1 с; `probe-story-quests` PASS 36 с; `probe-story-embed` PASS 50.8 с; `test:build` pass; `probe-tiles` падає й на HEAD (`worldQuery.maxError`); `npm run lint` падає на HEAD (`probe-story-q5.mjs:118`).
+Baseline (Q8, 2026-11-26): guard зелений 0.26 с (BOUNDARY-1…5, OWNER-1…5, TEX-1, BUDGET-1, TYPES-1 0; SIM-1 — проба); `npm test` 349 passed; `probe-story-q8` PASS 53.2 с; `probe-story-q2a` PASS 74 с; `probe-story-q4b` PASS 106.1 с; `probe-story-q5b` PASS 139.2 с; `probe-story-q3` PASS 234.9 с; `probe-story-embed` PASS 102.1 с; `probe-story-product` PASS 45.6 с; `probe-story-states` PASS 259.6 с; `test:build` pass; `probe-tiles` падає й на HEAD (`worldQuery.maxError`); `npm run lint` падає на HEAD (`probe-story-q5.mjs:118`).
 
 | підсистема | де (файли, символи) | контракт | перевірка |
 | --- | --- | --- | --- |
@@ -307,7 +317,7 @@ Baseline (Q7, 2026-11-26): guard зелений 0.25 с (BOUNDARY-1…5, OWNER-1
 | Стенд станів | `products/quest-demo-qa/`: `states.json` (14 карток, 6 груп), `cards.js` (`runCard`, `planOf`, `mismatches`, `checkCards`), `main.js` (зони, `?card=`, `window.questDemo` для проби), `ui-map.json` | [quest-demo-qa.md](quest-demo-qa.md) «Картка стану»; чистий старт — перезавантаження iframe; історія стенду перекриває історію картки | `tests/products.test.js`, `scripts/probe-story-states.mjs` |
 | Шар квестів і картки | `products/shared/`: `quests.js` (`applyEvent`, `tick`, `setStatus`, `saveCard`, `tasksView`, `exportJson`/`exportMarkdown`, `logKey`), `quests.json` (задачі, факти, підказки uk + en), `questStore.js` (`openQuestStore` — IndexedDB, `memoryStore`), `questZones.js` (`createQuestLayer`: зони `quests`, `cards`) | спека §3; DECISIONS «Квести й картки»; факти — події `minis.take/hydrate`, `raft.sea`, `fate.change`; ключ — історія + fingerprint | `tests/quests.test.js`, `scripts/probe-story-quests.mjs` |
 | Оболонка продукту | `products/story-quest/main.js` (`ROUTE` = `walk`+`minis` з історією, `PASS` технічних прапорців, вибір історії `story-choice`, `#calmBar`: `#toShore`, `#quietDown`; uk/en → `scene.locale`; `window.storyQuest` для проби), `ui-map.json` (Історія, Рюкзак, Квести, Картки, Погода), `story-quest.css`; `src/ui/scene.css` — CSS сцени | спека §2, §4; DECISIONS «Продукт…»; «готово» — `scene.ready`, не готовність каталогу | `scripts/probe-story-product.mjs`, `probe-story-states`, `probe-story-quests` |
-| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `JUMP_CONE` 45°; дошка: `takeOff`, `fly`, `land`, `landing`, `state.flight`), `flight.js` (`FLIGHT` 24 м/с, 3 ± 0.4 м; `stepFlight`, `landing` → `ground/deck/water`), вода `swim.js` (`SWIM`, `stepSwim`, `eyeLevel`; у `walker.js` — `state.swim`, `jumpIn`, `dive`, `rise`, `under`), `deck.js` (`deckClear`, `nearestOnDeck`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, `decks`, `pull`, меш `board`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `flyAction`/`flyHint` (Пробіл: зліт, посадка, у воду, пірнути / випливти), `walkerWater` (слот 1 `WaterQuery`), `app.walker`, `app.ground` | спека §4.1, §4.2 v1.5; DECISIONS «Плавання й пірнання»; ноги на `TerrainContact`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `raft.test.js`, `flight.test.js`, `swim.test.js`, `probe-story-q2a`, `-q4b`, `-q5b` |
+| Персонаж | `src/walker/`: `groundWalk.js` (`walkOnGround`, `clearOfWater`, `WALK`), `walker.js` (`createWalker`, `PACE` 4.2 / 12 м/с; з берега у воду — `WADE_IN`; палуби: `ride`, `board`, `direction`, `DECK_JUMP` 4 м, `JUMP_CONE` 45°; дошка: `takeOff` — з палуби або з поверхні води, `fly`, `land`, `landing`, `state.flight`), `flight.js` (`FLIGHT` 56 м/с = 7 × пліт, 3 ± 0.4 м; `stepFlight`, `landing` → `ground/deck/water`), вода `swim.js` (`SWIM`, `stepSwim`, `eyeLevel`; у `walker.js` — `state.swim`, `jumpIn`, `dive`, `rise`, `under`), `deck.js` (`deckClear`, `nearestOnDeck`), `keyboard.js`, вхід Tilecraft `tilecraftWalker.js`, хост `index.js` (`createWalkerHost`, режими `off/boarding/eyes/standing`, `setStick`, `decks`, `pull`, `board` — кайтборд `kiteboard.js`: `createKiteboard`, `KITEBOARD`); у `main.js` — `walk()` (V), `startWalk()` (`?walk`), `flyAction`/`flyHint` (Пробіл: зліт, посадка, у воду, пірнути / випливти), `kiteFromWater` (K у воді), `walkerWater` (слот 1 `WaterQuery`), `app.walker`, `app.ground` | спека §4.1, §4.2 v1.5; DECISIONS «Плавання й пірнання»; ноги на `TerrainContact`; тіло ≥ 0.255 м від лінії броду −0.5 м; на палубі — у її (u, v) | `tests/walker.test.js`, `raft.test.js`, `flight.test.js`, `swim.test.js`, `kiteboard.test.js`, `probe-story-q2a`, `-q4b`, `-q5b`, `-q8` |
 | Камера «очима» й «поза тілом» | `CameraRig.ride(eye, { approach, onArrive, onEnd })`, `boarding`, `dismount()`, lock `eyes`; `steer(forward, strafe)` — стік поза тілом; старт `startWalk`: `flyTo(island)` → 1.2 с → спуск 4 с | OWNER-3; DECISIONS «Персонаж: камери й телефон»; спуск — smootherstep + slerp, підлога до останніх 30 % | `tests/walker.test.js`, `probe-story-q2b.mjs` |
 | Стік і кнопки телефона | `src/walker/stick.js` (`createWalkerStick`, `stickVector`, `STICK`, `LABELS`, `setLabels` — мова з `scene.locale`; опція `action { hint, run }` — «Взяти»/«Покласти»/«Кайт»/«Відпустити кайт»; `flight` — «Злетіти»/«Сісти»/«У воду»/«Пірнути»/«Випливти»), CSS `#walkerControls` у `src/ui/scene.css`; монтує `walkerReady()` у `main.js` на `mobile` / `?stick` | UI-вхід, як `moodPad`; хост DOM не знає | `tests/walker.test.js` («stickVector»), `probe-story-q2b` (крок 3), `probe-story-q3` (кнопка), `probe-story-q4b` (крок 7) |
 | Мініатюри й гідратація | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `LAYOUT`, seed = id історії), `TileMiniatures.js` (`MINI`, `layout`, `take` — повні руки → рюкзак, `stow`, `unpack`, `packed`, `put`, `unfoldCenter` + `freeAt`, `syncFrames`, події `take/put/unfold/hydrate/pack/unpack`); у `main.js` — `layoutMinis()` (`?minis`), `miniAction()` (G), `packAction()` (B), `app.minis` | DECISIONS «Мініатюри й гідратація», «Продукт…» (рюкзак): копія мешів, кадр поля прихований до `water`, тоді `moveFrame` | `tests/miniatures.test.js`, `probe-story-q3.mjs` |
@@ -337,6 +347,7 @@ Baseline (Q7, 2026-11-26): guard зелений 0.25 с (BOUNDARY-1…5, OWNER-1
 - [зона панелі, що питає сцену] `renderZones` до `host.load` → `catalog.list` отримував `no-scene`, зона показувала «каталог недоступний» → спершу `host.load`, потім `draw()`. (QDb)
 - [таймер у рендерері зони] на момент виклику рендерера `<details>` ще не в документі (`isConnected` false) → цикл, що перевіряє `isConnected`, стартувати `setTimeout(…, 0)`. (QDb)
 - [зона панелі, перевірка зон у юніті й пробі] список id зон ламався на кожній легальній зміні `ui-map` → інваріант «зони продукту = зони стенду без `states`/`tech`» (юніт) і «зони сторінки = її `ui-map.json`» (`probe-story-states`), не перелік. (Q6, Q7)
+- [перевірка «продукт ходить» у пробі] з QDb сцена — iframe продукту, на сторінці продукту `window.app` немає → `shell.frames()` і `app.walker.setStick` у кадрі (`probe-story-q2a` крок 6). (Q8)
 - [`probe-story-quests`, мережа] від першої картки до експорту 0 запитів сторінки й сцени (`page.on('request')` бачить і iframe) → нові дії продукту перевіряти тим самим записом. (Q6)
 - [картка стану, час] чисте перезавантаження з історією 3.0–3.4 с, `minis.hydrate` 5.8–6.1 с (розгортання в реальному часі) з 7–15 с картки → прискорювати `hydrate` (як `fate.give` на годиннику ×10), а не відмовлятися від перезавантаження. (QDb)
 
@@ -359,6 +370,7 @@ Baseline (Q7, 2026-11-26): guard зелений 0.25 с (BOUNDARY-1…5, OWNER-1
 - [`moveOnSheet(pose, offset, sheet, bodyScale, candidates)`] `sheet = { bounds: {min,max}, y }` — прямокутник і стала висота; радіус тіла `0.15 × bodyScale`, крок ≤ радіус/4; `candidates(center, radius)` — перешкоди з `center/footprint/top` → обгортка Q2a сама відсікає воду й підставляє висоту `TerrainContact`. (Q0)
 - [перешкоди `moveOnSheet`] тіло, що стартує всередині перешкоди хоч на 1 мм, не рухається (бісекція дає 0); `landingObstruction` міряє footprint опорною функцією в напрямку центру — для квадрата це «ямка» навпроти грані → лінію води не подавати перешкодами (сітка клітинок: сходинки, 0–0.2 м/с при 15–30° до косого берега; дотичні диски з нормалей трикутників: розбіжність ~1°) — виштовхувати тіло від найближчої точки лінії (`clearOfWater`). (Q2a)
 - [`islandHeight` проти сітки рельєфу] на хребтах аналітична висота до 2.49 м вища за намальовану сітку (34.05 проти 36.54 м у (127.5, −34.2)) → все, що стоїть на рельєфі, міряти `TerrainContact.at`; клемп `CameraRig._clamp` (`islandHeight + 0.8`) піднімав очі на 0.33 м — у `ride` вимкнений. (Q2a)
+- [курс до лінії броду, вхід у воду] на прямому березі поріг «уздовж / у воду» ~62° від моря, на нерівному пляжі 65° дає і те, і те → «уздовж» перевіряти на ±75°, «у воду» — на ≤ 45°. (Q8)
 - [берег острова на лінії −0.5 м] нормаль лінії на ±3 м зазвичай повертає на 10–70°, прямих відрізків (≤ 5° щометра) мало → проба шукає їх (`probe-story-q2a` 3b), а курси рахує від локальної нормалі, не від усередненої. (Q2a)
 - [вартість кроку] `walkOnGround` 0.022 мс на лінії броду, 0.007 мс углибині (desktop); `new TerrainContact` для персонажа — ~11 мс, тому лінивий у `main.js`. (Q2a)
 - [старт `?walk`, перші секунди після перельоту над островом] кадри провисають до 0.85 с (headless desktop), через 5 с — рівні 16.7 мс → проби, що міряють ходьбу за часом, чекають 5 с після прибуття в очі. (Q2b)
