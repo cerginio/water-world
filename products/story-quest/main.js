@@ -5,6 +5,7 @@
 // through the contract — nothing of src/** is imported, window.app is not read (guard BOUNDARY-5).
 import { mountShell } from '../shared/shell.js';
 import { createSceneHost } from '../shared/sceneHost.js';
+import { knownMap } from '../shared/contract.js';
 import { renderZones } from '../shared/zones.js';
 import { storyMeta, storyZone, weatherZone } from '../shared/storyZones.js';
 import { packZone } from '../shared/packZone.js';
@@ -54,6 +55,9 @@ const PASS = ['stick', 'mobile', 'desktop', 'fps', 'controls', 'debug'];
 
 const params = new URLSearchParams(location.search);
 let story = params.get('story');
+// the map (ISLAND-MAPS-SPEC §2): stays in the product's URL as given; only a known id reaches the
+// iframe, an unknown one opens the default island there
+const map = () => knownMap(new URLSearchParams(location.search).get('map'));
 const passed = PASS.filter((f) => params.has(f));
 // without a story the scene is only the island behind the choice: no walker, no stick yet
 const flags = () => [...(story ? ROUTE : []), ...passed];
@@ -73,7 +77,7 @@ function open(id) {
   q.set('story', id);
   history.replaceState(null, '', `${location.pathname}?${q.toString().replace(/%2F/gi, '/')}`);
   catalogState = { state: 'pending', story: id, error: null };
-  host.load({ story, flags: flags(), lang: shell.locale });
+  host.load({ story, flags: flags(), lang: shell.locale, map: map() });
   shell.yieldToScene();
   draw();
   words();
@@ -156,7 +160,7 @@ Object.assign(window, { storyQuest: { host, quests } });
 
 document.body.dataset.storyState = catalogState.state;
 document.body.dataset.product = 'story-quest';
-host.load({ story, flags: flags(), lang: shell.locale });
+host.load({ story, flags: flags(), lang: shell.locale, map: map() });
 draw();
 words();
 if (params.has('embed')) mountProductEmbed({ host, iframe: shell.iframe, quests, shell, devOrigin: import.meta.env.DEV ? 'http://127.0.0.1:8184' : null });

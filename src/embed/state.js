@@ -21,6 +21,7 @@ export function readState(world) {
   return {
     story: world.story(),
     fingerprint: world.fingerprint?.() ?? null,
+    map: world.map?.() ?? 'island',
     ready: world.ready(),
     mode: host?.mode ?? 'off',
     walker: s && { x: cm(s.x), y: cm(s.y), z: cm(s.z), yaw: cm(s.yaw), pitch: cm(s.pitch),

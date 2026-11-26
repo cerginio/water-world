@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { buildTerrain } from '../src/scene/terrainGeometry.js';
+import { pickMap } from '../src/scene/maps.js';
 import { TerrainContact } from '../src/scene/TerrainContact.js';
 import { tileTiltMatrix } from '../src/tiles/tileTilt.js';
 
-const { geometry, heightMap } = buildTerrain();
+const { geometry, heightMap } = buildTerrain(pickMap('island').heightAt);
 const contact = new TerrainContact(geometry,2400);
 const mesh = new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
 mesh.updateMatrixWorld();

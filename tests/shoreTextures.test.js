@@ -14,7 +14,7 @@ const textures = {
   'shore (bed, sdf, ∇sdf)': [shore.texture, shore.data],
   'travel (tau, dir, shoal)': [shore.travel, shore.travelData],
   surf: [shore.surf, null],
-  'terrain heightMap': [buildTerrain(8, 32).heightMap, null],
+  'terrain heightMap': [buildTerrain(islandHeight, 8, 32).heightMap, null],
 };
 
 describe('shore textures are half float, linearly filtered', () => {

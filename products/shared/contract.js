@@ -104,19 +104,32 @@ export function createSceneClient({ post, helloEvery = 150, callTimeout = 120000
   };
 }
 
+// The scene's maps (ISLAND-MAPS-SPEC §2): the only values a product passes as ?map=. 'island' is
+// the scene's default and goes without the parameter; the scene reports the map it built in
+// scene.ready and state.read.
+export const SCENE_MAPS = Object.freeze(['island', 'lagoon']);
+export const DEFAULT_SCENE_MAP = 'island';
+
+/** A map id from a product's own URL: a known one, else null (the product keeps the raw value). */
+export const knownMap = (id) => (SCENE_MAPS.includes(id) ? id : null);
+
 /**
  * The scene page's address for a product's iframe: the story and the flags are static (spec §4.4),
  * `embed` always. Bare flags (`&walk`), the story's `/` kept readable; `lang` — the words of the
- * scene's own buttons (Q7: the product's language).
+ * scene's own buttons (Q7: the product's language); `map` — one of SCENE_MAPS, the default left out.
  * @param {string} base the scene page, e.g. new URL('../../', location.href).href
- * @param {{ story?: string | null, flags?: string[], lang?: string | null }} [options]
+ * @param {{ story?: string | null, flags?: string[], lang?: string | null, map?: string | null }} [options]
  */
-export function sceneUrl(base, { story = null, flags = [], lang = null } = {}) {
+export function sceneUrl(base, { story = null, flags = [], lang = null, map = null } = {}) {
   const parts = [];
   if (story) parts.push(`story=${encodeURIComponent(story).replace(/%2F/gi, '/')}`);
   if (lang) {
     if (!/^[a-z]{2}$/.test(lang)) throw new Error(`bad scene lang: ${lang}`);
     parts.push(`lang=${lang}`);
+  }
+  if (map && map !== DEFAULT_SCENE_MAP) {
+    if (!knownMap(map)) throw new Error(`unknown scene map: ${map}`);
+    parts.push(`map=${map}`);
   }
   for (const f of [...new Set([...flags, 'embed'])]) {
     if (!/^[a-z][a-z0-9-]*$/.test(f)) throw new Error(`bad scene flag: ${f}`);

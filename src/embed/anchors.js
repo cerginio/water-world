@@ -16,7 +16,7 @@ export const ANCHOR = Object.freeze({
  * @typedef {{ index: number, id: any, x: number, z: number }} FramePlace
  * @typedef {{ id: any, x: number, z: number, ux: number, uz: number, hu: number, hv: number }} DeckLike
  * @typedef {{ ground: (x: number, z: number) => ({ height: number } | null),
- *   spawn: () => Place, center: () => ({ x: number, z: number }),
+ *   spawn: () => Place, center: () => ({ x: number, z: number }), openSea?: () => (Place | null),
  *   frames: () => FramePlace[], decks: () => DeckLike[] }} AnchorWorld
  */
 
@@ -60,6 +60,9 @@ export function resolveAnchor(name, world, { deck } = {}) {
   if (name === 'beach') return world.spawn();
   if (name === 'shallow') return shallowPoint(world);
   if (name === 'open-sea') {
+    // a map whose field looks out past a cape names the point itself (ISLAND-MAPS-SPEC §4.2)
+    const own = world.openSea?.();
+    if (own) return { ...own };
     const c = world.center(), l = Math.hypot(c.x, c.z) || 1;
     return { x: c.x / l * ANCHOR.openSea, z: c.z / l * ANCHOR.openSea, yaw: Math.atan2(c.x, c.z) };
   }

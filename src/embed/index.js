@@ -46,7 +46,7 @@ export function startEmbed({ app, spawn, target = window }) {
     for (const type of RAFT_EVENTS) world.raft.addEventListener(type, (e) => server.emit(`raft.${type}`, plain(e.detail)), options);
     for (const type of MINI_EVENTS) world.minis?.addEventListener(type, (e) => server.emit(`minis.${type}`, plain(e.detail)), options);
     world.fates.addEventListener('change', (e) => server.emit('fate.change', plain(e.detail)), options);
-    server.emit('scene.ready', { story: world.story(), fingerprint: world.fingerprint() });
+    server.emit('scene.ready', { story: world.story(), fingerprint: world.fingerprint(), map: world.map?.() ?? 'island' });
   }).catch((err) => server.emit('scene.failed', { reason: err.reason ?? 'failed', message: String(err.message) }));
   return { server, commands };
 }

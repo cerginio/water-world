@@ -6,6 +6,8 @@
  * @typedef {{
  *   host: any, raft: any, fates: any, minis: any,
  *   ready: () => boolean, failed: () => string | null, story: () => string | null, fingerprint: () => string | null,
+ *   map?: () => string,
+ *   openSea?: () => ({ x: number, z: number, yaw: number } | null),
  *   ensureHost: () => Promise<any>,
  *   ground: (x: number, z: number) => ({ height: number } | null),
  *   spawn: () => { x: number, z: number, yaw: number },
@@ -36,6 +38,10 @@ export function worldFromApp({ app, spawn }) {
     failed: () => (app.catalog.state === 'failed' ? app.catalog.error?.code ?? 'unknown' : null),
     story: () => app.catalog.story?.id ?? null,
     fingerprint: () => app.catalog.fingerprint ?? null,
+    // the map the scene was built on (ISLAND-MAPS-SPEC §4.3): its profile's id, never the raw ?map
+    map: () => app.map ?? 'island',
+    // the profile's own open-sea point where a ray from the centre would cross land (spec §4.2)
+    openSea: () => app.openSea ?? null,
     // the walker host without the overview flight: startWalk() resolves once it is there
     ensureHost: async () => app.walker ?? app.startWalk({ overview: false }),
     ground: app.ground,

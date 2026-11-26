@@ -9,8 +9,8 @@ import { createEnvironment, flowDay, measureEnvironment, MOOD_MAP_V1, moodTau, Q
 import { bindSunLight } from './environment-bindings/hostBinding.js';
 import { bindSea, WATER_PRESETS } from './environment-bindings/seaBinding.js';
 import { bindPanelCopy } from './ui/perfCopy.js';
-import { createTerrain, heroRock } from './scene/terrain.js';
-import { islandHeight } from './scene/islandHeight.js';
+import { createTerrain } from './scene/terrain.js';
+import { pickMap } from './scene/maps.js';
 import { PlanarReflection } from './engine/PlanarReflection.js';
 import { PostFX } from './engine/PostFX.js';
 import { GpuTimer } from './engine/gpuTimer.js';
@@ -60,6 +60,9 @@ document.body.appendChild(renderer.domElement);
 // measured on an Adreno 732 to hold 60 fps; ?mobile / ?desktop force either
 const args = new URLSearchParams(location.search);
 const mobile = args.has('mobile') || (!args.has('desktop') && matchMedia('(pointer: coarse)').matches);
+// the map is picked before anything is built (ISLAND-MAPS-SPEC §4.1): missing or unknown ?map → island
+const map = pickMap(args.get('map'));
+const heightAt = map.heightAt, heroRock = map.heroRock();
 const quality = mobile
   ? { resolution: 0.6, msaa: 2, reflections: true, reflectionScale: 0.35, autoResolution: true }
   : { resolution: 1, msaa: 4, reflections: true, reflectionScale: 0.5 };
@@ -73,7 +76,7 @@ controls.maxDistance = 6000;
 // clamp, station flights and the frame drag all go through it.
 const rig = new CameraRig({
   camera, controls,
-  ground: (x, z) => islandHeight(x, z) + 0.8,
+  ground: (x, z) => heightAt(x, z) + 0.8,
   water: () => camWater,
 });
 rig.bind(renderer.domElement, isEditing);
@@ -83,7 +86,7 @@ const env = createEnvironment(renderer, { cubeSize: 1024 });
 // the surf rock as a dome in the bake: the fronts wrap round it, break on its face and
 // leave a sheltered lee
 const SHORE_EXTENT = 1800;   // m: the shore map's square; past its edge the sea is open (STORY-QUEST §4.3)
-const shore = bakeShoreMap(islandHeight, SHORE_EXTENT, 512, (x, z) => {
+const shore = bakeShoreMap(heightAt, SHORE_EXTENT, 512, (x, z) => {
   const q = ((x - heroRock.x) ** 2 + (z - heroRock.z) ** 2) / (8.5 * 8.5);
   return q < 1 ? 4 * (1 - q) : -Infinity;
 });
@@ -99,7 +102,7 @@ const scene = new THREE.Scene();
 scene.environment = env.envMap;
 scene.add(env.background);
 const terrain = createTerrain({
-  env, caustics: caustics.uniforms, floatShadow: floatShadow.uniforms, water: surface.uniforms,
+  map, env, caustics: caustics.uniforms, floatShadow: floatShadow.uniforms, water: surface.uniforms,
   absorption: surface.uniforms.uAbsorption.value, reflectionLayer: REFLECT_LAYER,
 });
 scene.add(terrain.group);
@@ -117,9 +120,9 @@ surface.uniforms.uShadowBias.value = 0.05 / (sunLight.shadow.camera.far - sunLig
 
 // buoyancy: slot 0 of every water query is the camera (underwater test), then floaters
 const query = new WaterQuery(renderer, surface, 512);
-const floaters = new Floaters({ scene, heightAt: islandHeight, patchMaterial: terrain.patchProp });
+const floaters = new Floaters({ scene, heightAt, patchMaterial: terrain.patchProp });
 const underwater = new UnderwaterPass(surface, camera, caustics.uniforms);
-const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt: islandHeight, terrainGeometry: terrain.geometry, mobile, floaters, camera, rig });
+const tiles = new TileField({ scene, renderer, surface, patchMaterial: terrain.patchProp, heightAt, terrainGeometry: terrain.geometry, mobile, floaters, camera, rig });
 let camWater = 0, walkerWater = 0, wasSubmerged = false, uwComp = 1;
 const look = { underwater: 0.55 };   // exposure compensation under water (auto exposure lifts it to milk otherwise)
 
@@ -187,7 +190,7 @@ function applySun() {
 function coast(bearingDeg) {
   const a = THREE.MathUtils.degToRad(bearingDeg);
   let r = 100;
-  while (r < 800 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 2;
+  while (r < 800 && heightAt(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 2;
   return new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r);
 }
 // The shots and the story field face the sunset azimuth (SUN_PATH_V1.setAzimuth, 205°), not
@@ -241,7 +244,7 @@ const views = {
   },
   'Flotsam': () => {
     setSun(40, 205);
-    const b = SET_BEARING + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
+    const b = map.storyBearing(SET_BEARING), c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b)), side = new THREE.Vector2(-out.y, out.x);
     setShot(c.x + out.x * 75 + side.x * 10, 9, c.y + out.y * 75 + side.y * 10,
       c.x + out.x * 53.5 - side.x * 8, 0, c.y + out.y * 53.5 - side.y * 8);
@@ -259,7 +262,7 @@ const views = {
     // on the lee of the island, looking back up the reef slope into the sun (shafts)
     const a = SET_BEARING + Math.PI + 0.3;
     let r = 200;
-    while (r < 1000 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > -9) r += 2;
+    while (r < 1000 && heightAt(Math.cos(a) * r, Math.sin(a) * r) > -9) r += 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     setShot(x, -3.2, z, x - Math.cos(a) * 25, -1.8, z - Math.sin(a) * 25);
     floaters.spawn(camera.position, controls.target.clone().sub(camera.position));
@@ -272,7 +275,7 @@ const views = {
 let tilesAnchor = null;
 function storyAnchor() {
   if (!tilesAnchor) {
-    const b = SET_BEARING + 1.2, c = coast(THREE.MathUtils.radToDeg(b));
+    const b = map.storyBearing(SET_BEARING), c = coast(THREE.MathUtils.radToDeg(b));
     const out = new THREE.Vector2(Math.cos(b), Math.sin(b));
     tilesAnchor = { coast: c, start: c.clone().addScaledVector(out, 45), out };
   }
@@ -587,7 +590,7 @@ addEventListener('keydown', (e) => {
 
 // --- station rail (SCENE-UI-SPEC §4) -------------------------------------------------
 // Stations never call setSun: the sun and the weather are not the camera's business.
-const radius = islandRadius(islandHeight);
+const radius = islandRadius(heightAt);
 function storyField() {
   // the field as placed on load; tiles.place() itself would cancel a drag
   if (!tiles.loaded) return null;
@@ -599,7 +602,7 @@ const stationPoses = {
     const anchor = storyAnchor(), field = storyField();
     // without a story the beach still faces where the field would float
     const facing = field?.center ?? new THREE.Vector3(anchor.start.x, 0, anchor.start.y).addScaledVector(new THREE.Vector3(anchor.out.x, 0, anchor.out.y), 40);
-    return shorePose({ heightAt: islandHeight, coast: anchor.coast, out: anchor.out, look: facing });
+    return shorePose({ heightAt, coast: anchor.coast, out: anchor.out, look: facing });
   },
   story: () => {
     const field = storyField();
@@ -1227,7 +1230,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
   return { width: size.x, height: size.y, rgba: btoa(bin), shot: ui.view };
 }
 window.app = {
-  still,
+  still, map: map.id, openSea: map.openSea,
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   get minis() { return minis; }, layoutMinis, miniAction, miniHint, packAction,

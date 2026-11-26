@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildTerrain } from './terrainGeometry.js';
-import { islandHeight } from './islandHeight.js';
 import { fbm } from './noise.js';
 import { CAUSTICS_GLSL } from '../water/Caustics.js';
 import { FLOAT_SHADOW_GLSL } from './floaterShadow.js';
@@ -266,26 +265,17 @@ function rockGeometry() {
   return g;
 }
 
-// one big rock out in the surf on the swell-exposed coast (the default swell comes from
-// bearing -15 deg), in ~2.5 m of water so the swash wraps round it; the 'Surf rock'
-// camera looks at it
-export const heroRock = (() => {
-  const a = THREE.MathUtils.degToRad(-15);
-  let r = 100;
-  while (r < 900 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > -2.5) r += 1;
-  return { x: Math.cos(a) * r, z: Math.sin(a) * r };
-})();
-
-function placeRocks(count, rand) {
+// coastal rocks round the map's relief: a ray from the centre to the coast, then jitter round it
+function placeRocks(heightAt, count, rand) {
   const out = [];
   for (let i = 0; i < count * 6 && out.length < count; i++) {
     const a = rand() * Math.PI * 2;
     // walk outwards to the coast along this bearing, then jitter around it
     let r = 150;
-    while (r < 700 && islandHeight(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 4;
+    while (r < 700 && heightAt(Math.cos(a) * r, Math.sin(a) * r) > 0) r += 4;
     r += (rand() - 0.6) * 40;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    const h = islandHeight(x, z);
+    const h = heightAt(x, z);
     if (h < -5 || h > 6) continue;
     const s = 1.5 + Math.pow(rand(), 2.2) * 9;
     out.push({ x, z, y: h - s * 0.15, s });
@@ -293,7 +283,7 @@ function placeRocks(count, rand) {
     for (let k = 0; k < 3 && out.length < count; k++) {
       const ox = x + (rand() - 0.5) * s * 4, oz = z + (rand() - 0.5) * s * 4;
       const ss = s * (0.25 + rand() * 0.35);
-      out.push({ x: ox, z: oz, y: islandHeight(ox, oz) - ss * 0.2, s: ss });
+      out.push({ x: ox, z: oz, y: heightAt(ox, oz) - ss * 0.2, s: ss });
     }
   }
   return out;
@@ -331,7 +321,9 @@ function rockMaps(rocks, extent, size = 512) {
   };
 }
 
-export function createTerrain({ env, caustics, floatShadow, water, absorption, reflectionLayer = 1 }) {
+/** @param {{ map: import('./maps.js').MapProfile, env: any, caustics: any, floatShadow: any, water: any, absorption: any, reflectionLayer?: number }} options */
+export function createTerrain({ map, env, caustics, floatShadow, water, absorption, reflectionLayer = 1 }) {
+  const heightAt = map.heightAt, heroRock = map.heroRock();
   const uniforms = {
     ...floatShadow,
     // shore maps + wave settings for the swash (same objects as the water's)
@@ -345,7 +337,7 @@ export function createTerrain({ env, caustics, floatShadow, water, absorption, r
     uFogDensity: { value: 1 / 18000 },
   };
 
-  const { geometry } = buildTerrain(384);
+  const { geometry } = buildTerrain(heightAt, 384);
   const groundMat = new THREE.MeshStandardMaterial({ roughness: 0.92, metalness: 0, envMapIntensity: 0.9 });
   patch(groundMat, uniforms, 'terrain');
   const ground = new THREE.Mesh(geometry, groundMat);
@@ -353,8 +345,8 @@ export function createTerrain({ env, caustics, floatShadow, water, absorption, r
 
   let seed = 7;
   const rand = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const spots = placeRocks(90, rand);
-  spots.push({ ...heroRock, y: islandHeight(heroRock.x, heroRock.z) - 1.6, s: 0, hero: true });
+  const spots = placeRocks(heightAt, 90, rand);
+  spots.push({ ...heroRock, y: heightAt(heroRock.x, heroRock.z) - 1.6, s: 0, hero: true });
   const rockMat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, envMapIntensity: 0.9, vertexColors: true });
   patch(rockMat, uniforms, 'rock');
   const rocks = new THREE.InstancedMesh(rockGeometry(), rockMat, spots.length);
@@ -369,7 +361,7 @@ export function createTerrain({ env, caustics, floatShadow, water, absorption, r
     s.r = 0.95 * (sc.x + sc.z) / 2;
   });
   // rocks the waves and swash run into (the surf rock has its own treatment in the water)
-  const shoreRocks = spots.filter((s) => !s.hero && islandHeight(s.x, s.z) > -3 && islandHeight(s.x, s.z) < 2.5);
+  const shoreRocks = spots.filter((s) => !s.hero && heightAt(s.x, s.z) > -3 && heightAt(s.x, s.z) < 2.5);
   Object.assign(uniforms, rockMaps(shoreRocks, water.uShoreExtent.value));
   rocks.computeBoundingSphere();
   rocks.castShadow = rocks.receiveShadow = true;

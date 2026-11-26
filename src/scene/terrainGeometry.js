@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { halfTexture } from '../engine/halfTexture.js';
-import { islandHeight, ISLAND_SIZE } from './islandHeight.js';
+import { ISLAND_SIZE } from './islandHeight.js';
 
-// Grid mesh of the island plus a half-float heightmap of the same footprint,
-// which the water uses for shore depth (wave damping, shallow colour, foam).
-export function buildTerrain(segments = 384, mapSize = 256) {
+// Grid mesh of the map's relief (heightAt — the map profile's, src/scene/maps.js) plus a half-float
+// heightmap of the same footprint, which the water uses for shore depth (wave damping, shallow
+// colour, foam).
+export function buildTerrain(heightAt, segments = 384, mapSize = 256) {
   const geo = new THREE.PlaneGeometry(ISLAND_SIZE, ISLAND_SIZE, segments, segments);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) pos.setY(i, islandHeight(pos.getX(i), pos.getZ(i)));
+  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
   // drop the deep seabed: below ~34 m the view through the water keeps <5% of it, so it
   // was shading most of the screen in wide shots for nothing
   const idx = geo.index.array, keep = [];
@@ -24,7 +25,7 @@ export function buildTerrain(segments = 384, mapSize = 256) {
     for (let i = 0; i < mapSize; i++) {
       const x = ((i + 0.5) / mapSize - 0.5) * ISLAND_SIZE;
       const z = ((j + 0.5) / mapSize - 0.5) * ISLAND_SIZE;
-      data[j * mapSize + i] = islandHeight(x, z);
+      data[j * mapSize + i] = heightAt(x, z);
     }
   }
   const heightMap = halfTexture(data, mapSize, mapSize, THREE.RedFormat);
