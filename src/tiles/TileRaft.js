@@ -33,6 +33,9 @@ export const KITE = Object.freeze({
   follow: 0.6,   // s: the kite swings round to a new course
   barAhead: 0.45, // m: the control bar (cKite.js) this far in front of the body, towards the kite…
   barHeight: 1.0, // …at the waist, this high over the feet
+  // Q9 (§4.2 v1.6): on the board the kite sits lower and farther ahead on the water, higher
+  // over the head in the air (the walker's `flight.phase`: rise / air / fall)
+  board: Object.freeze({ water: Object.freeze({ ahead: 32, height: 6 }), air: Object.freeze({ ahead: 18, height: 12 }) }),
 });
 
 /**
@@ -245,7 +248,9 @@ export class TileRaft extends EventTarget {
     const along = this.kite.heading ?? (motion && Math.hypot(motion.vx, motion.vz) > 0.1
       ? { x: motion.vx, z: motion.vz } : { x: Math.sin(walker.yaw ?? 0), z: Math.cos(walker.yaw ?? 0) });
     const l = Math.hypot(along.x, along.z) || 1;
-    const target = new THREE.Vector3(along.x / l * KITE.ahead, KITE.height, along.z / l * KITE.ahead);
+    const phase = walker.flight?.phase;
+    const at = !phase ? KITE : phase === 'sit' || phase === 'plane' ? KITE.board.water : KITE.board.air;
+    const target = new THREE.Vector3(along.x / l * at.ahead, at.height, along.z / l * at.ahead);
     if (!this.kiteAt) this.kiteAt = target.clone();
     this.kiteAt.lerp(target, 1 - Math.exp(-Math.max(0, dt) / KITE.follow));
     const kite = new THREE.Vector3(walker.x, walker.y, walker.z).add(this.kiteAt);

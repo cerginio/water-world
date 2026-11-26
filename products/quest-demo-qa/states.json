@@ -321,8 +321,8 @@
       "id": "flight-deep",
       "group": "flight",
       "title": {
-        "uk": "Політ над глибиною",
-        "en": "In the air over deep water"
+        "uk": "На дошці над глибиною",
+        "en": "On the board over deep water"
       },
       "covers": [
         "QA-Q4b-2",
@@ -382,8 +382,8 @@
       "id": "flight-to-island",
       "group": "flight",
       "title": {
-        "uk": "Політ до острова",
-        "en": "In the air, heading for the island"
+        "uk": "На дошці до острова",
+        "en": "On the board, heading for the island"
       },
       "covers": [
         "QA-Q4b-5",

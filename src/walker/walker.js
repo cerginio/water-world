@@ -25,9 +25,13 @@
 // Q8 (the owner's phone): a step from the shore into the sea past the wading line goes into
 // the water — the walker swims from there (WADE_IN); `takeOff()` also from the water at the
 // surface: the kite lifts the walker onto the board straight out of the sea.
+//
+// Q9 (§4.2 v1.6): `takeOff()` («Onto the board») puts the board on the water — planing at the
+// raft's speed off a deck, sitting out of the sea; speed gets it airborne (flight.js phases).
+// `state.flight` is non-null all the while the walker is on the board, on the water or not.
 import { WALK, clearOfWater, isWater, walkOnGround } from './groundWalk.js';
 import { clampToDeck, deckAt, fromDeck, nearestOnDeck, onDeck, toDeck } from './deck.js';
-import { landing, stepFlight } from './flight.js';
+import { FLIGHT, boardOn, boardState, landing, stepFlight } from './flight.js';
 import { SWIM, eyeLevel, stepSwim } from './swim.js';
 
 const SETTLE = 0.06;   // s: the feet follow a deck's height (it bobs, and is read 1–3 frames late)
@@ -54,7 +58,8 @@ export const PACE = Object.freeze({
 
 /**
  * @param {{ moveOnSheet: Function, ground: (x: number, z: number) => any,
- *   decks?: () => import('./deck.js').Deck[], water?: (x: number, z: number) => number }} world
+ *   decks?: () => import('./deck.js').Deck[], water?: (x: number, z: number) => number,
+ *   calm?: () => boolean }} world  calm — prefers-reduced-motion: the board planes, never lifts off (Q9)
  * @param {{ bodyScale?: number, eye?: number, wade?: number }} [options]
  */
 export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye, wade = WALK.wade } = {}) {
@@ -62,7 +67,7 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
   const state = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, normal: null, moving: false, walked: 0,
     /** @type {{ id: any, u: number, v: number } | null} */ deck: null,
     /** the eyes' offset from the feet's place after a jump (eyes() adds it) */ jump: { x: 0, y: 0, z: 0 },
-    /** @type {{ vx: number, vz: number, t: number } | null} on the board in the air */ flight: null,
+    /** @type {Omit<import('./flight.js').BoardState, 'x' | 'y' | 'z'> | null} on the board (Q9: on the water or in the air) */ flight: null,
     /** @type {{ depth: number, target: number } | null} in the water (Q5b) */ swim: null };
   const move = { moveOnSheet: world.moveOnSheet, ground: world.ground, bodyScale, wade };
   const radius = 0.15 * bodyScale;   // Tilecraft avatarBodyOf, as walkOnGround
@@ -235,15 +240,21 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
      */
     takeOff(velocity = { x: 0, z: 0 }) {
       if (state.flight) return false;
-      if (state.swim) {
+      const fromWater = !!state.swim;
+      if (fromWater) {
         if (state.swim.depth > SWIM.under || state.swim.target > SWIM.under) return false;
         state.swim = null;
-        jumpTo(state.x, water(state.x, state.z), state.z);
       } else if (!state.deck) return false;
+      // Q9: onto the board on the water — planing at the raft's speed, or sitting out of the sea
+      jumpTo(state.x, water(state.x, state.z) - (fromWater ? FLIGHT.sink : 0), state.z);
       state.deck = null;
-      state.flight = { vx: velocity.x, vz: velocity.z, t: 0 };
+      state.flight = boardOn(fromWater ? { x: 0, z: 0 } : velocity, state.yaw, fromWater ? 'sit' : 'plane');
       state.normal = UP;
       return true;
+    },
+    /** On the board: 'sit', 'plane' or 'air' (§4.2 v1.6), or null. */
+    get boardPhase() {
+      return state.flight ? boardState(state.flight.phase) : null;
     },
     /**
      * Where the board would come down now: 'ground', 'deck', 'water' (deep: the kite let go,
@@ -333,10 +344,11 @@ export function createWalker(world, { bodyScale = WALK.bodyScale, eye = WALK.eye
       state.pitch = Math.max(-PACE.maxPitch, Math.min(PACE.maxPitch,
         state.pitch + pitch * PACE.pitch * dt + (look?.pitch ?? 0)));
       const f = state.flight;
-      const next = stepFlight({ x: state.x, y: state.y, z: state.z, vx: f.vx, vz: f.vz, t: f.t }, dt, course);
+      const next = stepFlight({ ...f, x: state.x, y: state.y, z: state.z }, dt, course, { water, calm: !!world.calm?.() });
       const moved = Math.hypot(next.x - state.x, next.z - state.z);
-      Object.assign(state, { x: next.x, y: next.y, z: next.z, moving: false });
-      Object.assign(f, { vx: next.vx, vz: next.vz, t: next.t });
+      const { x, y, z, ...board } = next;
+      Object.assign(state, { x, y, z, moving: false });
+      Object.assign(f, board);
       state.walked += moved;
       if (walker.landing() !== 'ground') return null;
       walker.land();

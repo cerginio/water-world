@@ -91,10 +91,15 @@ describe('the walker in the water', () => {
     expect(w.takeOff({ x: 0, z: 0 })).toBe(true);
     expect(w.state.swim).toBe(null);
     expect(w.state.flight).not.toBe(null);
-    expect(w.state.y).toBeCloseTo(0, 6);   // the feet at the (still) water
+    // Q9 (§4.2 v1.6): out of the sea the board sits, the feet ankle-deep in the (still) water
+    expect(w.boardPhase).toBe('sit');
+    expect(w.state.y).toBeCloseTo(-0.15, 6);
     expect(w.landing()).toBe('water');
-    for (let i = 0; i < 180; i++) w.fly(dt, { x: 1, z: 0 });
-    expect(w.state.y).toBeGreaterThan(2);   // up in the band
+    for (let i = 0; i < 120; i++) w.fly(dt, { x: 1, z: 0 });
+    expect(w.boardPhase).toBe('plane');   // «forward» 2 s: planing on the surface, not yet off it
+    expect(Math.abs(w.state.y)).toBeLessThan(0.05);   // up out of the ankle-deep sit (FLIGHT.lift 0.4 s)
+    for (let i = 0; i < 360; i++) w.fly(dt, { x: 1, z: 0 });
+    expect(w.boardPhase).toBe('air');
     expect(w.state.flight).not.toBe(null);
   });
 

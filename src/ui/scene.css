@@ -166,6 +166,12 @@ canvas { display: block; width: 100%; height: 100%; }
   color: #071018; background: rgba(214, 232, 226, 0.95); touch-action: manipulation;
 }
 #walkerControls .walker-fate[data-undo="true"] { background: rgba(232, 244, 255, 0.75); font-weight: 600; }
+/* Q9 (STORY-QUEST-SPEC §4.2a): the icon of the button's subject, left of the word (walker/icons.js) */
+#walkerControls button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+#walkerControls .cmd-icon { display: inline-flex; width: 20px; height: 20px; flex: none; }
+#walkerControls .cmd-icon svg { width: 100%; height: 100%; }
+#walkerControls .walker-knob { display: flex; align-items: center; justify-content: center; color: rgba(7, 16, 24, 0.7); }
+#walkerControls .walker-knob .cmd-icon { width: 26px; height: 26px; }
 #walkerControls .walker-note {
   margin: 0; padding: 4px 8px; border-radius: 8px; font: 13px system-ui, sans-serif;
   color: rgba(232, 244, 255, 0.92); background: rgba(6, 10, 14, 0.4); text-align: right;

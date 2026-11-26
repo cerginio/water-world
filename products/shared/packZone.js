@@ -2,6 +2,7 @@
 // hands, the others in the backpack. The scene keeps them (state.read: `carried`, `pack`); the
 // zone words them and moves one between the hands and the backpack through the contract
 // (minis.stow / minis.unpack). It redraws on the scene's miniature events.
+import { sayWithIcon } from './icons.js';
 
 const TEXT = {
   uk: { hands: 'У руках', free: 'Руки вільні', pack: 'У рюкзаку', empty: 'Рюкзак порожній',
@@ -44,7 +45,8 @@ export function packZone({ host }) {
     body.dataset.pack = v.pack.join(' ');
     if (!v.minis) { body.replaceChildren(el('p', { className: 'zone-empty', textContent: w.none })); return; }
     const move = (text, cmd, args) => {
-      const b = el('button', { type: 'button', textContent: text });
+      const b = el('button', { type: 'button' });
+      sayWithIcon(b, cmd === 'minis.stow' ? 'stow' : 'unpack', text);
       b.dataset.cmd = cmd;
       b.addEventListener('click', () => { b.disabled = true; host.call(cmd, args).then(draw); });
       return b;

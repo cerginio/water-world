@@ -1,7 +1,7 @@
 // story-quest Q8 (the owner's phone, 2026-11-26): through the real frame loop on a phone viewport
 // with the stick. 1) From the beach the stick walks the walker straight into the sea: past the
 // wading line it swims (before Q8 the line held it on the shore). 2) In the water at the surface
-// the action button reads «Take off»; a tap lifts the walker out of the sea onto the board with
+// the action button reads «Onto the board» (Q9; «Take off» before); a tap lifts the walker out of the sea onto the board with
 // the kite up. 3) The board flies at seven times the raft (56 m/s). 4) The board is a twin-tip
 // kiteboard (deck, pads, straps, handle, fins), seen looking down — a screenshot to look at.
 // Run against npm run dev (http://localhost:5199/).
@@ -25,7 +25,7 @@ const errors = [];
 const where = (page) => page.evaluate(() => {
   const s = app.walker.state;
   return { mode: app.walker.mode, swim: s.swim && { depth: +s.swim.depth.toFixed(3) }, flight: s.flight && {
-    speed: +Math.hypot(s.flight.vx, s.flight.vz).toFixed(2) }, kite: app.raft.kite.up, kiteShown: app.raft.kiteGroup.visible,
+    speed: +Math.hypot(s.flight.vx, s.flight.vz).toFixed(2), phase: s.flight.phase }, kite: app.raft.kite.up, kiteShown: app.raft.kiteGroup.visible,
     board: app.walker.board.visible, x: +s.x.toFixed(2), y: +s.y.toFixed(2), z: +s.z.toFixed(2),
     ground: app.ground(s.x, s.z)?.height ?? null,
     button: (() => { const b = document.querySelector('.walker-action'); return b.hidden ? null : { text: b.textContent, action: b.dataset.action }; })() };
@@ -68,25 +68,26 @@ try {
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(out, '1-in-the-water.png') });
 
-  // 2. at the surface the action button: «Take off»; a tap — on the board, the kite up
+  // 2. at the surface the action button: «Onto the board» (Q9); a tap — on the board sitting in the water, the kite up
   const surface = await where(page);
   report.surface = surface;
-  assert.deepEqual(surface.button, { text: 'Take off', action: 'fly' }, `the action button in the water (${JSON.stringify(surface)})`);
+  assert.deepEqual(surface.button, { text: 'Onto the board', action: 'fly' }, `the action button in the water (${JSON.stringify(surface)})`);
   await page.tap('.walker-action');
   await page.waitForTimeout(1500);
   const air = await where(page);
   report.air = air;
-  assert.ok(air.flight && !air.swim, `in the air off the water (${JSON.stringify(air)})`);
+  assert.ok(air.flight && !air.swim, `on the board off the water (${JSON.stringify(air)})`);
   assert.ok(air.kite && air.kiteShown && air.board, 'the kite up and shown, the board under the feet');
-  assert.ok(air.y > 1, `the board rising off the water: ${air.y} m`);
+  assert.ok(air.flight.phase === 'sit' && air.y < 0.8, `out of the sea the board sits in the water (Q9): ${air.flight.phase}, ${air.y} m`);
 
-  // 3. the stick: 56 m/s, seven times the raft
+  // 3. the stick: planing, then off the water onto the plateau at 56 m/s, seven times the raft
   await page.evaluate(() => app.walker.setStick({ x: 0, y: 0.8 }));
-  await page.waitForTimeout(6000);
+  await page.waitForFunction(() => app.walker.state.flight?.phase === 'air', {}, { timeout: 15000 });
+  await page.waitForTimeout(1000);
   const fast = await where(page);
   report.fast = fast;
   assert.ok(fast.flight && fast.flight.speed > 50 && fast.flight.speed <= 56.01, `flight speed ${fast.flight?.speed} m/s`);
-  assert.ok(fast.y >= 2 && fast.y <= 4, `the board in the band 2–4 m: ${fast.y}`);
+  assert.ok(fast.y >= 2.8 && fast.y <= 3.2, `the board on the plateau ~3 m: ${fast.y}`);
 
   // 4. the board: a kiteboard; look down at it
   const board = await page.evaluate(() => {

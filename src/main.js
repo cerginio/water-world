@@ -314,7 +314,8 @@ function walkerSpawn() {
 async function walkerReady() {
   walkerLoading ??= createWalkerHost({ scene, rig, ground: walkGround, canvas: renderer.domElement, isEditing,
     decks: () => raft?.decks() ?? [],
-    pull: { active: () => !!raft?.kite.up, course: (dir) => raft?.course(dir) }, water: () => walkerWater });
+    pull: { active: () => !!raft?.kite.up, course: (dir) => raft?.course(dir) }, water: () => walkerWater,
+    calm: () => reducedMotion.matches });
   walkerHost = await walkerLoading;
   if (walkerHost.mode === 'off') {
     const spawn = walkerSpawn();
@@ -324,7 +325,7 @@ async function walkerReady() {
   const stickArg = args.get('stick');
   if (!walkerStick && (args.has('stick') ? stickArg !== '0' : mobile)) {
     walkerStick = createWalkerStick({ host: walkerHost, onToggle: () => walk().catch((e) => console.error('[walker]', e)),
-      // in the water the kite comes first: «Take off» out of the sea (Q8), G still puts a miniature down
+      // in the water the kite comes first: «Onto the board» out of the sea (Q8, Q9), G still puts a miniature down
       action: { hint: () => (walkerHost?.state.swim ? kiteHint() ?? miniHint() : miniHint() ?? kiteHint()),
         run: () => (walkerHost?.state.swim ? kiteAction() ?? miniAction() : miniAction() ?? kiteAction()) },
       flight: { hint: flyHint, run: flyAction },
@@ -419,7 +420,7 @@ function kiteHint() {
   return raft.kite.up ? 'unkite' : 'kite';
 }
 /**
- * Q8 (the owner's phone): in the water at the surface K (the touch button «Take off») lifts the
+ * Q8 (the owner's phone): in the water at the surface K (the touch button «Onto the board») lifts the
  * walker out of the sea onto the board, the kite up at once. 'fly' or null.
  */
 function kiteFromWater() {
@@ -429,7 +430,7 @@ function kiteFromWater() {
   return 'fly';
 }
 // Q4b (STORY-QUEST-SPEC §2 п.6, §4.2 v1.5): on a raft with the kite up, Space (or the touch
-// button «Take off») lifts the walker on the board; in the air Space lands — on a deck under
+// button «Onto the board», Q9: onto the water planing) lifts the walker on the board; in the air Space lands — on a deck under
 // it, or by itself over wadeable ground.
 // Q5b (§2 п.6 «Плавання й пірнання»): over deep water Space (K, «Into the water») lets the kite
 // go and the walker is in the water; on a deck with the kite down Space jumps off the rim
@@ -581,7 +582,7 @@ gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk
 gui.add({ miniAction }, 'miniAction').name('take · put (G)');
 gui.add({ packAction }, 'packAction').name('backpack (B)');
 gui.add({ kiteAction }, 'kiteAction').name('kite · let go (K)');
-gui.add({ flyAction }, 'flyAction').name('take off · land (Space)');
+gui.add({ flyAction }, 'flyAction').name('onto the board · land (Space)');
 gui.add({ release: () => fateAction('release') }, 'release').name('let it go (Z)');
 gui.add({ sink: () => fateAction('sink') }, 'sink').name('sink it (X)');
 gui.add({ break: () => fateAction('break') }, 'break').name('let it come apart (C)');

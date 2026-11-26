@@ -17,6 +17,7 @@
   min-height: 44px; padding: 6px 12px; border-radius: 12px; border: 1px solid #ffffff60;
   font: 600 14px/1.2 system-ui, sans-serif; color: #f6f8fa; background: rgba(24, 35, 45, .78);
 }
+#calmBar button { display: inline-flex; align-items: center; }
 #calmBar button:active { background: rgba(3, 105, 161, .9); }
 
 .pack-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

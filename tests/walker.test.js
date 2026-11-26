@@ -7,7 +7,8 @@ import { createWalker, PACE, WADE_IN } from '../src/walker/walker.js';
 import { SWIM } from '../src/walker/swim.js';
 import { axis, keyIntent } from '../src/walker/keyboard.js';
 import { CameraRig } from '../src/scene/cameraRig.js';
-import { stickVector, STICK } from '../src/walker/stick.js';
+import { stickVector, STICK, LABELS } from '../src/walker/stick.js';
+import { ICONS, NO_SUBJECT, SUBJECTS, iconOf } from '../src/walker/icons.js';
 
 // story-quest Q2a (STORY-QUEST-SPEC §4.1 «Персонаж»): the wrapper over Tilecraft's own
 // moveOnSheet — the real function from TILECRAFT_ROOT, not a stand-in, so the calling
@@ -391,5 +392,28 @@ describe('stickVector', () => {
     const at = (share) => Math.hypot(...Object.values(stickVector(STICK.radius * share, 0)));
     expect(at(STICK.dead + 1e-6)).toBeLessThan(1e-4);
     expect(at(0.56)).toBeCloseTo((0.56 - STICK.dead) / (1 - STICK.dead), 12);
+  });
+});
+
+// story-quest Q9 (STORY-QUEST-SPEC §4.2a): every command button of the scene says what it acts on
+describe('subject icons of the scene buttons', () => {
+  test('every button of LABELS has a subject of the closed list, in both languages', () => {
+    for (const locale of Object.keys(LABELS)) {
+      for (const name of Object.keys(LABELS[locale])) {
+        if (NO_SUBJECT.has(name)) continue;
+        expect([name, SUBJECTS[name]]).toEqual([name, expect.stringMatching(/^(frame|raft|walker|kite)$/)]);
+      }
+    }
+    expect(Object.keys(ICONS).sort()).toEqual(['frame', 'kite', 'raft', 'walker']);
+  });
+  test('the §4.2a table: the raft lands, the walker goes onto the board, the kite is the kite', () => {
+    expect([SUBJECTS.land, SUBJECTS.fly, SUBJECTS.water, SUBJECTS.kite, SUBJECTS.unkite, SUBJECTS.take, SUBJECTS.keep])
+      .toEqual(['raft', 'walker', 'walker', 'kite', 'kite', 'frame', 'frame']);
+    expect(LABELS.uk.fly).toBe('На дошку');
+    for (const svg of Object.values(ICONS)) {
+      expect(svg).toMatch(/^<svg [^>]*stroke="currentColor"[^>]*aria-hidden="true"/);
+      expect(svg).not.toMatch(/#[0-9a-f]{3,6}/i);   // one colour: the button's
+    }
+    expect(iconOf('keepNote')).toBe(null);
   });
 });

@@ -86,3 +86,7 @@ body[data-panel-open="true"] .panel-open { visibility: hidden; }
 .note-head { font-weight: 600; }
 .note-text { margin: 2px 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .quest-title input[data-auto="true"] { cursor: default; }
+
+/* story-quest Q9 (STORY-QUEST-SPEC §4.2a): the icon of a button's subject, left of its word (icons.js) */
+.cmd-icon { display: inline-flex; width: 20px; height: 20px; flex: none; vertical-align: middle; margin-right: 6px; }
+.cmd-icon svg { width: 100%; height: 100%; }

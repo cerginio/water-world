@@ -184,7 +184,8 @@ export function createCommands(world, { wait = {} } = {}) {
 
     /**
      * Off the raft on the board (Space with the kite up); the kite goes up first if it is down.
-     * From the water at the surface the same (K, Q8): out of the sea onto the board.
+     * From the water at the surface the same (K, Q8): out of the sea onto the board. Q9: the
+     * board is put on the water — planing off a raft, sitting out of the sea (`walker.board`).
      */
     'fly.takeOff': async () => {
       await ready();
@@ -200,11 +201,11 @@ export function createCommands(world, { wait = {} } = {}) {
       if (!host.walker.takeOff(raft.velocity())) throw new EmbedError('not-possible', 'did not take off');
       return readState(world);
     },
-    /** In the air, straight over an anchor (the board keeps its height band). */
+    /** On the board, straight over an anchor (the board keeps its phase and height). */
     'fly.to': async (args) => {
       await ready();
       const host = await eyes();
-      if (!host.state.flight) throw new EmbedError('not-possible', 'not in the air');
+      if (!host.state.flight) throw new EmbedError('not-possible', 'not on the board');
       const p = resolveAnchor(args.at, world);
       Object.assign(host.state, { x: p.x, z: p.z });
       if (p.yaw !== undefined) host.state.yaw = p.yaw;

@@ -8,6 +8,7 @@ import { createSceneHost } from '../shared/sceneHost.js';
 import { renderZones } from '../shared/zones.js';
 import { storyMeta, storyZone, weatherZone } from '../shared/storyZones.js';
 import { packZone } from '../shared/packZone.js';
+import { sayWithIcon } from '../shared/icons.js';
 import { createQuestLayer } from '../shared/questZones.js';
 import { openQuestStore } from '../shared/questStore.js';
 import questData from '../shared/quests.json';
@@ -143,7 +144,7 @@ document.body.append(calm);
 function calmWords() {
   const w = TEXT[shell.locale];
   calm.setAttribute('aria-label', w.calm);
-  shore.textContent = w.shore;
+  sayWithIcon(shore, 'toShore', w.shore);
   quiet.textContent = w.quiet;
 }
 calmWords();

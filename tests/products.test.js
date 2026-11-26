@@ -5,6 +5,9 @@ import { CHANNEL, createSceneClient, sceneUrl } from '../products/shared/contrac
 import { pickLocale, t, zonesOf } from '../products/shared/zones.js';
 import { byFolder, storyMeta, WEATHER } from '../products/shared/storyZones.js';
 import { packView } from '../products/shared/packZone.js';
+import * as productIcons from '../products/shared/icons.js';
+import * as sceneIcons from '../src/walker/icons.js';
+import { readFileSync } from 'node:fs';
 import { checkCards, mismatches, planOf, readPath, runCard } from '../products/quest-demo-qa/cards.js';
 import { CHANNEL as SCENE_CHANNEL } from '../src/embed/protocol.js';
 import { createCommands } from '../src/embed/commands.js';
@@ -224,5 +227,20 @@ describe('state cards', () => {
     };
     const r = await runCard(card, io, { sleep: async () => {} });
     expect(r.plan[0]).toMatchObject({ status: 'failed', reason: 'story-failed', message: 'not-found' });
+  });
+});
+
+// story-quest Q9 (STORY-QUEST-SPEC §4.2a): the product's buttons carry the same four drawings as the scene's
+describe('subject icons of the product buttons', () => {
+  it('the drawings are the same as the scene ones (the copy cannot import src/, BOUNDARY-5)', () => {
+    expect(productIcons.ICONS).toEqual(sceneIcons.ICONS);
+  });
+  it('every button the product makes over the scene has a subject, or is named as without one', () => {
+    const src = readFileSync(new URL('../products/story-quest/main.js', import.meta.url), 'utf8');
+    const ids = [...src.matchAll(/createElement\('button'\), \{[^}]*id: '([^']+)'/g)].map((m) => m[1]);
+    expect(ids.length).toBeGreaterThan(1);
+    for (const id of ids) expect([id, id in productIcons.SUBJECTS || productIcons.NO_SUBJECT.has(id)]).toEqual([id, true]);
+    expect(productIcons.SUBJECTS.toShore).toBe('walker');
+    expect([productIcons.SUBJECTS.stow, productIcons.SUBJECTS.unpack]).toEqual(['frame', 'frame']);
   });
 });

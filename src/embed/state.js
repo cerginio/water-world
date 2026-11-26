@@ -26,6 +26,7 @@ export function readState(world) {
     walker: s && { x: cm(s.x), y: cm(s.y), z: cm(s.z), yaw: cm(s.yaw), pitch: cm(s.pitch),
       deck: deckId === null ? null : frames.find((f) => f.id === String(deckId))?.index ?? null,
       flight: !!s.flight, landing: s.flight ? host.walker.landing() : null,
+      board: host.walker.boardPhase ?? null,
       swim: s.swim && { depth: cm(s.swim.depth), target: cm(s.swim.target) } },
     kite: !!raft?.kite.up,
     openSea: !!raft?.inSea,

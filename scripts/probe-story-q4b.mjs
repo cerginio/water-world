@@ -2,12 +2,13 @@
 // п.9): the board under the kite through the real frame loop and real keys. A miniature
 // unfolds by the beach and becomes the raft (as probe-story-q4); K, then Space: the walker
 // takes off on the board, the kite stays up, the raft left behind coasts to the drift; the
-// board flies 56 m/s (Q8) at 2–4 m over the mean water, the camera in the eyes (CameraRig.ride);
+// board (Q9, §4.2 v1.6) is put on the water planing, gets airborne with speed onto the plateau
+// ~3 m over the mean water at 56 m/s (Q8), the camera in the eyes (CameraRig.ride);
 // over deep water nothing lands by itself (Space there is the water, Q5b); on a course to the island it lands by itself on the
 // shallows, on the feet. A second miniature, carried onto the raft and put down, unfolds
 // beside it, clear of it, and the walker jumps across; from there a flight back over the
 // first frame and Space lands on it, and it is the raft under the kite. On a phone the flight
-// button words «Take off» / «Land».
+// button words «Onto the board» / «Land».
 // Run against npm run dev (http://localhost:5199/).
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
@@ -36,7 +37,8 @@ const state = (page) => page.evaluate(() => {
   return { x: s.x, y: s.y, z: s.z, deck: s.deck && String(s.deck.id), flying: !!s.flight,
     speed: s.flight ? Math.hypot(s.flight.vx, s.flight.vz) : 0, kite: r.kite.up, raft: r.deckId === null ? null : String(r.deckId),
     ground: app.ground(s.x, s.z)?.height ?? null, hint: app.flyHint(), mode: app.walker.mode,
-    camToEyes: Math.hypot(c.x - e.x, c.y - e.y, c.z - e.z), board: app.walker.board.visible };
+    camToEyes: Math.hypot(c.x - e.x, c.y - e.y, c.z - e.z), board: app.walker.board.visible,
+    phase: s.flight?.phase ?? null };
 });
 const motionOf = (page, id) => page.evaluate((id) => {
   for (const [k, m] of app.raft.motion) if (String(k) === id) return { speed: Math.hypot(m.vx, m.vz), x: m.x, z: m.z };
@@ -95,19 +97,24 @@ try {
   await page.keyboard.up('KeyW');
   const onRaft = await state(page);
   assert.equal(onRaft.deck, raftId);
-  assert.equal(onRaft.hint, 'fly', 'on the raft with the kite up: «Take off»');
+  assert.equal(onRaft.hint, 'fly', 'on the raft with the kite up: «Onto the board»');
   const raftBefore = await motionOf(page, raftId);
   await key(page, 'Space');
   const up = await state(page);
-  assert.ok(up.flying && up.deck === null && up.kite, `in the air on the board, the kite up (${JSON.stringify(up)})`);
+  assert.ok(up.flying && up.deck === null && up.kite, `on the board, the kite up (${JSON.stringify(up)})`);
+  // Q9: the board is put on the water planing, not into the air
+  assert.ok(up.phase === 'plane' && Math.abs(up.y) < 1.5, `on the water, planing (${up.phase}, y ${up.y.toFixed(2)})`);
 
-  // 3. out to sea: 56 m/s (Q8; 24 before), 2–4 m over the mean water, the camera in the eyes; Space does not land
+  // 3. out to sea: speed gets it airborne; on the plateau ~3 m over the mean water at 56 m/s (Q8),
+  // the camera in the eyes; Space does not land
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(3000);
+  await page.waitForFunction(() => app.walker.state.flight?.phase === 'air', {}, { timeout: 15000 });
+  await page.waitForTimeout(1500);
   const band = [];
   for (let i = 0; i < 20; i++) { band.push(await state(page)); await page.waitForTimeout(150); }
   const ys = band.map((s) => s.y), speeds = band.map((s) => s.speed);
-  assert.ok(Math.min(...ys) >= 2 && Math.max(...ys) <= 4, `board 2–4 m over the mean water (${Math.min(...ys).toFixed(2)}..${Math.max(...ys).toFixed(2)})`);
+  assert.ok(band.every((s) => s.phase === 'air'), `held «forward»: the plateau holds (${band.map((s) => s.phase)})`);
+  assert.ok(Math.min(...ys) >= 2.8 && Math.max(...ys) <= 3.2, `plateau ~3 m over the mean water (${Math.min(...ys).toFixed(2)}..${Math.max(...ys).toFixed(2)})`);
   assert.ok(Math.min(...speeds.slice(-10)) > 0.9 * 56, `board speed (${speeds.slice(-5).map((v) => v.toFixed(1))} m/s)`);
   assert.ok(band.every((s) => s.camToEyes < 0.05), `camera in the eyes (${Math.max(...band.map((s) => s.camToEyes)).toFixed(3)} m)`);
   assert.ok(band.every((s) => s.board && s.mode === 'eyes'));
@@ -198,26 +205,55 @@ try {
   // 6. from the other frame: up, away, back over the first frame — Space lands on it, the raft
   await key(page, 'KeyK');
   await key(page, 'Space');
-  assert.ok((await state(page)).flying);
-  const target = await page.evaluate((id) => { const d = app.raft.decks().find((d) => String(d.id) === id); return { x: d.x, z: d.z }; }, raftId);
-  await page.evaluate((t) => { const s = app.walker.state; app.walker.state.yaw = Math.atan2(s.x - t.x, s.z - t.z); }, target);
+  const lift = await state(page);
+  report.lift = { phase: lift.phase, speed: +lift.speed.toFixed(1), deck: lift.deck, hint: lift.hint };
+  assert.ok(lift.flying);
+  // away out to sea (Q9: the board turns in an arc; away from the raft is towards the beach here,
+  // and the arc back came down on the shallows — on the feet, as it should)
+  await page.evaluate(() => { const s = app.walker.state; s.yaw = Math.atan2(s.x, s.z); });
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(2500);
+  const away = await state(page);
+  report.away = { phase: away.phase, speed: +away.speed.toFixed(1), flying: away.flying, ground: away.ground, deck: away.deck };
   await page.keyboard.up('KeyW');
-  await face(page, target.x, target.z);
+  // Q9: the board turns smoothly, so the eyes keep facing the frame every frame, as a person steers
+  await page.evaluate((id) => {
+    const home = () => {
+      const d = app.raft.decks().find((d) => String(d.id) === id), s = app.walker.state;
+      if (!d || !s.flight) return;
+      s.yaw = Math.atan2(d.x - s.x, d.z - s.z);
+      requestAnimationFrame(home);
+    };
+    home();
+  }, raftId);
+  // the last 40 m coasting, «forward» let go: the heading holds (no course, no turn), the board slows
   await page.keyboard.down('KeyW');
   await page.waitForFunction((id) => {
     const d = app.raft.decks().find((d) => String(d.id) === id), s = app.walker.state;
-    return Math.abs((s.x - d.x) * d.ux + (s.z - d.z) * d.uz) < d.hu * 0.6 && Math.abs((s.x - d.x) * d.vx + (s.z - d.z) * d.vz) < d.hv * 0.6;
+    return Math.hypot(s.x - d.x, s.z - d.z) < 40;
   }, raftId, { timeout: 30000, polling: 'raf' });
   await page.keyboard.up('KeyW');
-  assert.equal((await state(page)).hint, 'land', 'over a frame: «Land»');
-  await key(page, 'Space');
+  // over it, the hint and Space in the same frame (at up to 56 m/s the board is past it ~0.1 s later)
+  const over = await page.waitForFunction((id) => {
+    const d = app.raft.decks().find((d) => String(d.id) === id), s = app.walker.state;
+    const inside = Math.abs((s.x - d.x) * d.ux + (s.z - d.z) * d.uz) < d.hu * 0.6 && Math.abs((s.x - d.x) * d.vx + (s.z - d.z) * d.vz) < d.hv * 0.6;
+    if (!inside) return false;
+    const hint = app.flyHint();
+    const info = { flight: s.flight?.phase ?? null, swim: !!s.swim, deck: s.deck && String(s.deck.id), landing: app.walker.walker.landing(),
+      ground: app.ground(s.x, s.z)?.height ?? null, raft: app.raft.boarded };
+    return { hint, info, events: __events.slice(-6), landed: app.flyAction() };
+  }, raftId, { timeout: 30000, polling: 'raf' }).then((h) => h.jsonValue());
+  report.over = over;
+  assert.equal(over.hint, 'land', `over a frame: «Land» (${JSON.stringify(over)})`);
+  assert.equal(over.landed, 'deck');
+  await page.waitForTimeout(100);
   const back = await state(page);
   assert.equal(back.deck, raftId, 'landed on the first frame');
   assert.ok(!back.flying && back.kite, 'the kite still up');
   await page.waitForTimeout(500);
   assert.equal((await state(page)).raft, raftId, 'it is the raft');
+  // came in from the sea facing the beach: out to sea again for the pull (the shallows stop a raft)
+  await page.evaluate(() => { const s = app.walker.state; s.yaw = Math.atan2(s.x, s.z); });
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(3000);
   await page.keyboard.up('KeyW');
@@ -227,7 +263,7 @@ try {
   assert.deepEqual(landed, ['ground', 'deck']);
   report.deckLanding = { raft: raftId, pull: +pulled.speed.toFixed(2), events: await page.evaluate(() => __events.map((e) => e.type)) };
 
-  // 7. the touch buttons: «Take off», then «Land» over the deck it rose from
+  // 7. the touch buttons: «Onto the board», then «Land» over the deck it rose from
   const phone = await browser.newPage({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
   watch(phone, 'phone');
   await phone.goto(`${base}?story=${STORY}&walk&stick`);
@@ -238,12 +274,18 @@ try {
   await phone.waitForFunction(() => document.querySelector('.walker-fly')?.dataset.action === 'fly', {}, { timeout: 3000 });
   const flyWord = await phone.evaluate(() => document.querySelector('.walker-fly').textContent);
   await phone.tap('.walker-fly');
-  await phone.waitForFunction(() => !!app.walker.state.flight && document.querySelector('.walker-fly').dataset.action === 'land', {}, { timeout: 3000 });
-  const landWord = await phone.evaluate(() => document.querySelector('.walker-fly').textContent);
+  // Q9: the board goes onto the water planing at 2× and is off the deck it rose from within ~0.5 s:
+  // the word «Land» is read the frame it shows, then the button is «Into the water» over the deep
+  const landWord = await phone.waitForFunction(() => {
+    const b = document.querySelector('.walker-fly');
+    return !!app.walker.state.flight && b.dataset.action === 'land' && b.textContent;
+  }, {}, { timeout: 3000, polling: 'raf' }).then((h) => h.jsonValue());
   await phone.screenshot({ path: join(out, 'phone-flight.png') });
+  await phone.waitForFunction(() => document.querySelector('.walker-fly').dataset.action !== 'land', {}, { timeout: 5000 });
   await phone.tap('.walker-fly');
-  await phone.waitForFunction(() => !app.walker.state.flight && app.walker.state.deck !== null, {}, { timeout: 3000 });
+  await phone.waitForFunction(() => !app.walker.state.flight && (app.walker.state.deck !== null || !!app.walker.state.swim), {}, { timeout: 3000 });
   report.phone = { fly: flyWord, land: landWord };
+  assert.deepEqual([flyWord, landWord], ['Onto the board', 'Land']);
   await phone.close();
 
   assert.deepEqual(errors, []);

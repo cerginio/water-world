@@ -9,15 +9,20 @@
 // Q3: an optional second button for the miniatures — «take» / «put down», shown only while
 // `action.hint()` names one (the host of the miniatures decides, the button only words it).
 // Q4: the same button puts the kite up / lets it go on a raft ('kite' / 'unkite').
-// Q4b: an optional third button, `flight` — «take off» on the board / «land» ('fly' / 'land').
+// Q4b: an optional third button, `flight` — «take off» on the board / «land» ('fly' / 'land';
+// Q9: «onto the board»).
 // Q5b: the same button — «into the water» ('water'), «dive» / «surface» in it ('dive' / 'rise').
 // Q5: an optional column of the frame's fates, `fates` — `hints()` names the buttons now
 // (release / sink / break for the frame at hand, call / raise / gather and keep for the open
 // fate), `run(name)` does one. Under «Leave it so» a quiet line says what it means (Edge §4.4).
 //
+// Q9 (§4.2a): every button carries the icon of its subject left of its word (icons.js); the
+// knob carries the walker's. «Take off» is «Onto the board»: the board goes onto the water.
+//
 // The stick: x to the right, y forward (screen up), both -1..1, length ≤ 1. Inside the
 // dead zone it is 0; past it the length starts at 0 again, so there is no jump at the
 // rim of the dead zone. The head turns by a drag on the scene (keyboard.js), not here.
+import { iconOf } from './icons.js';
 
 export const STICK = Object.freeze({
   radius: 56,    // CSS px from the centre to the rim, where the deflection is 1
@@ -52,6 +57,7 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   zone.setAttribute('aria-label', labels.stick);
   const knob = document.createElement('div');
   knob.className = 'walker-knob';
+  knob.append(iconNode('stick'));
   zone.append(knob);
   const toggle = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-toggle' });
   const act = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-action', hidden: true });
@@ -65,7 +71,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   const fateButton = (name) => {
     let b = fateButtons.get(name);
     if (!b) {
-      b = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-fate', textContent: labels[name] ?? name });
+      b = Object.assign(document.createElement('button'), { type: 'button', className: 'walker-fate' });
+      say(b, name, labels[name] ?? name);
       b.dataset.action = name;
       b.dataset.undo = String(UNDOING.has(name));
       b.addEventListener('click', () => fates?.run(name));
@@ -110,18 +117,16 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   function update() {
     const mode = host.mode;
     root.hidden = mode === 'off';
-    const text = mode === 'standing' ? labels.enter : labels.leave;
-    if (toggle.textContent !== text) toggle.textContent = text;
+    const turn = mode === 'standing' ? 'enter' : 'leave';
+    say(toggle, turn, labels[turn]);
     zone.dataset.mode = mode;
     const hint = action?.hint() ?? null;
     act.hidden = !hint;
-    const word = hint ? labels[hint] : '';
-    if (act.textContent !== word) act.textContent = word;
+    say(act, hint, hint ? labels[hint] : '');
     act.dataset.action = hint ?? '';
     const hop = flight?.hint() ?? null;
     fly.hidden = !hop;
-    const flyWord = hop ? labels[hop] : '';
-    if (fly.textContent !== flyWord) fly.textContent = flyWord;
+    say(fly, hop, hop ? labels[hop] : '');
     fly.dataset.action = hop ?? '';
     const names = mode === 'off' ? [] : fates?.hints() ?? [];
     const key = names.join(' ');
@@ -144,9 +149,8 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
     setLabels(next) {
       labels = next;
       zone.setAttribute('aria-label', labels.stick);
-      for (const [name, b] of fateButtons) b.textContent = labels[name] ?? name;
+      for (const [name, b] of fateButtons) say(b, name, labels[name] ?? name);
       note.textContent = labels.keepNote;
-      toggle.textContent = act.textContent = fly.textContent = '';
       update();
     },
     dispose() {
@@ -160,18 +164,38 @@ export function createWalkerStick({ parent = document.body, host, onToggle, labe
   };
 }
 
+/** The icon of a button's subject (icons.js), aria-hidden; an empty node without one. */
+function iconNode(name) {
+  const svg = iconOf(name);
+  const span = Object.assign(document.createElement('span'), { className: 'cmd-icon' });
+  span.setAttribute('aria-hidden', 'true');
+  if (svg) span.innerHTML = svg;
+  return span;
+}
+/**
+ * A button says `text` with the icon of `name`'s subject before it; nothing is rebuilt while
+ * the two stay the same (update() runs every frame). The button's textContent is the word.
+ */
+function say(button, name, text) {
+  const key = `${name ?? ''}|${text}`;
+  if (button.dataset.say === key) return;
+  button.dataset.say = key;
+  const icon = name && iconOf(name);
+  button.replaceChildren(...(icon ? [iconNode(name)] : []), ...(text ? [document.createTextNode(text)] : []));
+}
+
 /** The fates' ways back and «keep»: drawn softer than the fates themselves. */
 const UNDOING = new Set(['call', 'raise', 'gather', 'keep']);
 
 export const LABELS = Object.freeze({
   en: { stick: 'Walk', leave: 'Out of the body', enter: 'Eyes', take: 'Take', put: 'Put down',
-    kite: 'Kite', unkite: 'Let go of the kite', fly: 'Take off', land: 'Land',
+    kite: 'Kite', unkite: 'Let go of the kite', fly: 'Onto the board', land: 'Land',
     water: 'Into the water', dive: 'Dive', rise: 'Surface',
     release: 'Let it go', sink: 'Sink it', break: 'Let it come apart',
     call: 'Call it back', raise: 'Raise it', gather: 'Gather it', keep: 'Leave it so',
     keepNote: 'The world will remember this.' },
   uk: { stick: 'Іти', leave: 'Вийти з тіла', enter: 'Очима', take: 'Взяти', put: 'Покласти',
-    kite: 'Кайт', unkite: 'Відпустити кайт', fly: 'Злетіти', land: 'Сісти',
+    kite: 'Кайт', unkite: 'Відпустити кайт', fly: 'На дошку', land: 'Сісти',
     water: 'У воду', dive: 'Пірнути', rise: 'Випливти',
     release: 'Відпустити', sink: 'Втопити', break: 'Дати розпастися',
     call: 'Покликати', raise: 'Підняти', gather: 'Зібрати', keep: 'Залишити так',

@@ -14,7 +14,8 @@
 //
 // Q4b: in the air (walker.state.flight) the same input is the board's course (flight.js),
 // and the kite's; the board is a mesh of its own under the feet, shown only in the air (Q8: a
-// twin-tip kiteboard, kiteboard.js).
+// twin-tip kiteboard, kiteboard.js). Q9: the board rides the water and lifts off with speed
+// (flight.js); it is shown all the while the walker is on it.
 //
 // Q5b: in the water (walker.state.swim, swim.js) the same input strokes; `water(x, z)` — the
 // water's height there (main.js: the one read at the camera). The camera stays the eyes, so
@@ -26,7 +27,7 @@ import { loadWalkerModules } from './tilecraftWalker.js';
 import { KITEBOARD, createKiteboard, disposeKiteboard } from './kiteboard.js';
 
 export { WALK, PACE, isWater, walkOnGround, keyIntent };
-export { FLIGHT, stepFlight, landing } from './flight.js';
+export { FLIGHT, stepFlight, landing, boardState } from './flight.js';
 export { SWIM, stepSwim, eyeLevel } from './swim.js';
 
 const HIDE_NEAR = 1.5;   // m from the eyes: closer, a boarding camera would see the inside of the head
@@ -38,11 +39,12 @@ export const BOARD = KITEBOARD;
  *   canvas: HTMLElement, isEditing: (target: EventTarget | null) => boolean,
  *   character?: string, decks?: () => import('./deck.js').Deck[],
  *   pull?: { active: () => boolean, course: (dir: { x: number, z: number } | null) => void },
- *   water?: (x: number, z: number) => number }} options
+ *   water?: (x: number, z: number) => number, calm?: () => boolean }} options
+ *   calm — prefers-reduced-motion: the board only planes (Q9)
  */
-export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, character = 'explorer', decks, pull, water }) {
+export async function createWalkerHost({ scene, rig, ground, canvas, isEditing, character = 'explorer', decks, pull, water, calm }) {
   const { moveOnSheet, createGamifierAvatar } = await loadWalkerModules();
-  const walker = createWalker({ moveOnSheet, ground, decks, water });
+  const walker = createWalker({ moveOnSheet, ground, decks, water, calm });
   const avatar = createGamifierAvatar();
   avatar.setCharacter(character);
   avatar.group.name = 'walker';
