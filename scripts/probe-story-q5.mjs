@@ -239,11 +239,19 @@ try {
   }, RATE);
   await phone.waitForTimeout(1500);
   await phone.evaluate(() => app.walker.walker.board(app.raft.decks()[0]));
+  // Q10: the fates are under the picture's menu; a fate done folds it
+  const openMenu = async () => {
+    await phone.waitForFunction(() => !document.querySelector('.walker-menu-toggle')?.hidden, {}, { timeout: 5000 });
+    if (await phone.evaluate(() => document.querySelector('.walker-menu-toggle').dataset.open !== 'true')) await phone.tap('.walker-menu-toggle');
+  };
+  await openMenu();
   await phone.waitForFunction(() => document.querySelectorAll('.walker-fates .walker-fate').length === 3, {}, { timeout: 5000 });
   const words = await phone.evaluate(() => [...document.querySelectorAll('.walker-fates .walker-fate')].map((b) => b.textContent));
   assert.deepEqual(words, ['Відпустити', 'Втопити', 'Дати розпастися']);
   await phone.tap('.walker-fate[data-action="sink"]');
-  await phone.waitForFunction(() => !!app.walker.state.flight && !!document.querySelector('.walker-fate[data-action="raise"]'), {}, { timeout: 3000 });
+  await phone.waitForFunction(() => !!app.walker.state.flight && document.querySelector('.walker-menu').hidden, {}, { timeout: 3000 });
+  await openMenu();
+  await phone.waitForFunction(() => !!document.querySelector('.walker-fate[data-action="raise"]')?.checkVisibility(), {}, { timeout: 3000 });
   const back = await phone.evaluate(() => ({ words: [...document.querySelectorAll('.walker-fates .walker-fate')].map((b) => b.textContent),
     note: document.querySelector('.walker-note')?.hidden === false ? document.querySelector('.walker-note').textContent : null }));
   await phone.screenshot({ path: join(out, 'phone-fates.png') });

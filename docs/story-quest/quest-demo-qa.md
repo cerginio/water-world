@@ -109,6 +109,8 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 | `walker.look` | `yaw`, `pitch`, `at` | погляд |
 | `minis.take` | `frame` | мініатюра в руки |
 | `minis.hydrate` | `frame` | узяти, покласти на `shallow`, дочекатися палуби на воді |
+| `minis.put` | `settle` | мініатюру з рук — туди, де персонаж: на ґрунт, або (над морем, у воді, з дошки) розгорнути на воді; `settle` чекає палуби (Q10) |
+| `minis.lift` | `frame` | кадр з води знову мініатюрою в руки (та, що в руках, — у рюкзак); не палуба під ногами й не кадр під долею (Q10) |
 | `raft.board` | `frame`, `u`, `v`, `yaw` | на палубу кадру |
 | `raft.moveTo` | `frame`, `at` | палуба (з персонажем, якщо це пліт) у якір |
 | `kite.set` | `up` | кайт |
@@ -122,7 +124,7 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 
 Відмови: `unknown-command`, `bad-args`, `unknown-anchor`, `unknown-frame`,
 `not-on-water`, `no-miniature`, `not-possible`, `story-failed`, `catalog-failed`, `timeout`.
-Події: `scene.ready` / `scene.failed`, `minis.take|put|unfold|hydrate`,
+Події: `scene.ready` / `scene.failed`, `minis.take|put|unfold|hydrate|pack|unpack|lift`,
 `raft.board|leave|kite|sea|takeoff|land`, `fate.change`, `catalog.change` (одразу, без
 сцени: `{ state, story, error }`).
 - `window.app` лишається налагоджувальною поверхнею для проб. Продукт його не

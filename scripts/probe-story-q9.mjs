@@ -184,8 +184,11 @@ try {
   // the fates column too: on a raft (a frame unfolded), the fate buttons
   await page.evaluate(() => app.embed['minis.hydrate']({ frame: 0 }));
   await page.evaluate(() => app.embed['raft.board']({ frame: 0 }));
+  // Q10: the fates are under the picture's menu
+  await page.waitForFunction(() => !document.querySelector('.walker-menu-toggle')?.hidden, {}, { timeout: 15000 });
+  await page.tap('.walker-menu-toggle');
   await page.waitForFunction(() => document.querySelectorAll('.walker-fates .walker-fate').length >= 3, {}, { timeout: 15000 });
-  const fates = await page.evaluate(() => [...document.querySelectorAll('#walkerControls button')]
+  const fates = await page.evaluate(() => [...document.querySelectorAll('#walkerControls button:not(.walker-slot)')]
     .filter((b) => !b.hidden && b.getClientRects().length > 0).map((b) => ({ text: b.textContent, icon: !!b.querySelector('.cmd-icon svg') })));
   report.fateButtons = fates;
   assert.ok(fates.every((b) => b.icon), `fate buttons with icons (${JSON.stringify(fates)})`);

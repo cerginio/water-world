@@ -5,7 +5,7 @@ import { worldFromApp } from './world.js';
 import { acceptsParent, parentOrigin } from '../../shared/embed-origin.js';
 
 const RAFT_EVENTS = ['board', 'leave', 'kite', 'sea', 'takeoff', 'land'];
-const MINI_EVENTS = ['take', 'put', 'unfold', 'hydrate', 'pack', 'unpack'];
+const MINI_EVENTS = ['take', 'put', 'unfold', 'hydrate', 'pack', 'unpack', 'lift'];
 
 /** Ids in event details as strings: a product keys its facts by them. */
 const plain = (detail) => {

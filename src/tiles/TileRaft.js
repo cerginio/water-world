@@ -84,6 +84,9 @@ export class TileRaft extends EventTarget {
   /** Is the walker on a deck now. */
   get boarded() { return this.deckId !== null; }
 
+  /** Q10: the frame left the water (folded back into its miniature): no motion of it is kept. */
+  forget(frameId) { this.motion.delete(frameId); }
+
   /** Kite up / let go; only on a deck (or in the air, where it holds the board). @returns {boolean} up */
   setKite(up, airborne = false) {
     // airborne: the walker has just taken off out of the water (Q8), update() has not seen it yet

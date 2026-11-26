@@ -172,6 +172,58 @@ describe('miniatures', () => {
     expect(events).toEqual([['take', 'a'], ['pack', 'a'], ['take', 'b'], ['pack', 'b'], ['unpack', 'a']]);
   });
 
+  test('Q10: a frame on the water folds back into the hands — the way back of hydration', () => {
+    const { field, minis } = setup();
+    const events = [];
+    for (const type of ['lift', 'pack']) minis.addEventListener(type, (e) => events.push([type, e.detail.frameId]));
+    const holder = { x: 100, y: 0, z: 0, yaw: Math.PI / 2, pitch: 0 };
+    minis.take('b', holder);
+    minis.put(holder);
+    for (let t = 0; t < MINI.unfold + 0.1; t += 1 / 30) minis.update(1 / 30, holder);
+    expect(minis.lift('a', holder)).toBe(null);   // not on the water
+    minis.take('a', holder);
+    const item = minis.get('b'), at = field.frameRegistry.get('b').world.clone();
+    expect(minis.lift('b', holder)).toBe(item);
+    expect([item.state, minis.packed.map((i) => i.frameId)]).toEqual(['carried', ['a']]);   // the one held → backpack
+    expect(field.boundsEntries[1].mesh.visible).toBe(false);   // the frame of the field hidden at once
+    expect(item.root.scale.x).toBe(1);                          // it starts at the frame's size, on its place
+    expect(item.root.position.x).toBeCloseTo(at.x);
+    minis.update(MINI.unfold / 2, holder);
+    expect(item.root.scale.x).toBeLessThan(1);
+    expect(item.root.scale.x).toBeGreaterThan(MINI.scale);
+    for (let t = 0; t < MINI.unfold; t += 1 / 30) minis.update(1 / 30, holder);
+    expect(item.root.scale.x).toBeCloseTo(MINI.scale);          // in the hands
+    expect(item.fold).toBe(null);
+    expect(minis.counts()).toEqual({ total: 2, found: 2, water: 0 });
+    expect(events).toEqual([['pack', 'a'], ['lift', 'b']]);
+  });
+
+  test('Q10: put down in the water, the frame unfolds ahead, not over the walker', () => {
+    const { field, minis } = setup();
+    // a swimmer 30 m out to sea (the bed at −6 m), facing along +z: the sea is deep all round
+    const holder = { x: 130, y: -0.4, z: 0, yaw: 0, pitch: 0, swim: {} };
+    minis.take('b', holder);
+    expect(minis.put(holder)).toBe('unfolding');
+    const [move] = field.moves, r = minis.get('b').fullRadius;
+    expect(Math.hypot(move.x - holder.x, move.z - holder.z)).toBeGreaterThanOrEqual(r + MINI.clear - 1e-9);
+    expect(move.z).toBeGreaterThan(holder.z);   // ahead
+  });
+
+  test('Q10: put down from the board, the frame unfolds behind it', () => {
+    const { field, minis } = setup();
+    const holder = { x: 130, y: 0.3, z: 0, yaw: 0, pitch: 0, flight: { phase: 'plane' } };
+    minis.take('b', holder);
+    expect(minis.put(holder)).toBe('unfolding');
+    const [move] = field.moves;
+    expect(move.z).toBeLessThan(holder.z - minis.get('b').fullRadius);   // behind, clear of the board
+  });
+
+  test('Q10: the slot drawing is null without a renderer or meshes', () => {
+    const { minis } = setup();
+    expect(minis.thumbnail('a', null)).toBe(null);
+    expect(minis.thumbnail('zz', {})).toBe(null);
+  });
+
   test('clear gives every frame back to the field', () => {
     const { field, minis } = setup();
     minis.clear();

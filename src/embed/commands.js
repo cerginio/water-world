@@ -142,6 +142,36 @@ export function createCommands(world, { wait = {} } = {}) {
       if (!world.minis.unpack(item.frameId)) throw new EmbedError('not-possible', `miniature ${f.index} is not in the backpack`);
       return readState(world);
     },
+    /**
+     * Q10 (spec §4.2a «Меню малюнку»): frame n on the water folds back into its miniature in the
+     * hands, the one held goes into the backpack; never the deck underfoot, never a frame under a fate.
+     */
+    'minis.lift': async (args) => {
+      await ready();
+      const host = await eyes(), f = frame(args), item = miniOf(f);
+      if (item.state === 'carried') return readState(world);
+      if (item.state !== 'water') throw new EmbedError('not-possible', `miniature ${f.index} is ${item.state}`);
+      deckOf(f);   // a frame under a fate is no deck: not-on-water
+      if (host.state.deck?.id === f.id) throw new EmbedError('not-possible', `the walker stands on frame ${f.index}`);
+      if (!world.minis.lift(item.frameId, host.state)) throw new EmbedError('not-possible', `frame ${f.index} not lifted`);
+      world.raft?.forget?.(item.frameId);
+      return readState(world);
+    },
+    /**
+     * Q10: the miniature in the hands down where the walker is — on the ground, or (over the sea,
+     * in the water, on the board) unfolded on the water ahead; `settle` waits for the deck.
+     */
+    'minis.put': async (args) => {
+      await ready();
+      const host = await eyes(), minis = world.minis;
+      if (!minis?.active) throw new EmbedError('no-miniature', 'no miniatures in this scene (&minis)');
+      const item = minis.carried;
+      if (!item) throw new EmbedError('not-possible', 'nothing in the hands');
+      if (minis.put(host.state) === 'unfolding' && args.settle !== false) {
+        await until(() => item.state === 'water' && world.decks().some((d) => d.id === item.frameId), W.step, 'the frame a deck on the water');
+      }
+      return readState(world);
+    },
 
     /**
      * «На берег» (Edge §7, always in sight): the kite let go, the walker on the beach in the

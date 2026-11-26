@@ -16,7 +16,10 @@ import { layoutMiniatures } from './miniatureLayout.js';
 // States of an item: 'ground' → 'carried' → 'ground' | 'unfolding' → 'water'; 'carried' ⇄
 // 'packed' (Q7, spec §4.1 «Персонаж»: one in the hands, the rest in the backpack — taking
 // another with full hands stows the one held; only the one in the hands is put down).
-// Events (EventTarget): 'take', 'put', 'unfold', 'hydrate', 'pack', 'unpack' — detail { frameId, x, z }.
+// Q10 (spec §4.2a «Меню малюнку»): 'water' → 'carried' — `lift` folds the frame on the water
+// back into the miniature in the hands, the way back of hydration; `thumbnail` draws a
+// miniature from above for the menu's slots.
+// Events (EventTarget): 'take', 'put', 'unfold', 'hydrate', 'pack', 'unpack', 'lift' — detail { frameId, x, z }.
 
 export const MINI = Object.freeze({
   scale: 1 / 8,      // of the rest size; the starting value, tuned on the owner's phone
@@ -27,7 +30,11 @@ export const MINI = Object.freeze({
   rimDepth: 0.3,     // …and under 8 points of its rim
   tilt: 0.45,        // rad: a carried miniature leans its far edge up, towards the eyes
   below: 0.35,       // rad under the line of sight where it is carried
+  clear: 0.5,        // m: a frame unfolds at least its radius + this from the holder (not over the walker, Q10)
 });
+
+/** The menu's slot drawings (Q10): CSS px of the image, rendered once per miniature. */
+export const THUMB = Object.freeze({ width: 128, height: 96, margin: 0.08 });
 
 const UP = new THREE.Vector3(0, 1, 0);
 const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
@@ -56,6 +63,9 @@ export class TileMiniatures extends EventTarget {
     this.storyId = null;
     this.rest = null;   // the field rest the meshes were built from
     this.packSeq = 0;
+    /** @type {Map<any, string>} frame key → the slot drawing (a data URL), until the meshes change */
+    this.thumbs = new Map();
+    this.thumbScene = null;
   }
 
   get active() { return this.items.length > 0; }
@@ -75,7 +85,7 @@ export class TileMiniatures extends EventTarget {
       if (!p) return;
       const item = { frameId: frame.id, state: 'ground', found: false, home: p, yaw: p.yaw, relYaw: 0, packedAt: 0,
         root: new THREE.Group(), body: new THREE.Group(), radius: 0, fullRadius: 0, half: new THREE.Vector2(),
-        unfold: null, contactGap: 0 };
+        unfold: null, fold: null, contactGap: 0 };
       item.root.name = `miniature-f${String(frame.id)}`;
       item.root.add(item.body);
       this.group.add(item.root);
@@ -162,19 +172,49 @@ export class TileMiniatures extends EventTarget {
   put(holder) {
     const item = this.carried;
     if (!item) return null;
-    const f = { x: Math.sin(holder.yaw), z: Math.cos(holder.yaw) };
+    // Q10: from the board it goes down behind — ahead, the board would run onto it while it unfolds
+    const back = holder.flight ? -1 : 1;
+    const f = { x: back * Math.sin(holder.yaw), z: back * Math.cos(holder.yaw) };
     const d = item.radius + 0.5;
     const x = holder.x + f.x * d, z = holder.z + f.z * d;
     const g = this.ground(x, z);
     const yaw = holder.yaw + item.relYaw;
     if (g && g.height >= MINI.sea) {
       item.state = 'ground';
+      item.fold = null;
       this.lay(item, x, z, yaw);
       this.emit('put', item);
       return 'ground';
     }
-    this.unfold(item, x, z, f);
+    this.unfold(item, x, z, f, holder);
     return 'unfolding';
+  }
+
+  /**
+   * Q10: the frame on the water folds back into its miniature in the hands (the one held goes
+   * into the backpack) — the way back of hydration. The frame of the field is hidden at once
+   * (syncFrames), its tiles float on where they were, as before the first hydration; the
+   * miniature shrinks from the frame's place into the hands over MINI.unfold s.
+   * @returns {any} the item, or null when the frame is not on the water
+   */
+  lift(frameId, holder) {
+    const item = this.get(frameId);
+    if (!item || item.state !== 'water') return null;
+    const frame = this.field.frameRegistry.get(item.frameId);
+    if (!frame) return null;
+    this.stow();
+    const q = this.field.group.getWorldQuaternion(new THREE.Quaternion());
+    const fieldYaw = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
+    item.state = 'carried';
+    item.relYaw = fieldYaw - (holder?.yaw ?? 0);
+    item.fold = { t: 0, from: { p: new THREE.Vector3(frame.world.x, MINI.sea, frame.world.z), q, s: 1 } };
+    item.root.position.copy(item.fold.from.p);
+    item.root.quaternion.copy(q);
+    item.root.scale.setScalar(1);
+    item.root.visible = true;
+    this.syncFrames();
+    this.emit('lift', item, item.fold.from.p);
+    return item;
   }
 
   /**
@@ -182,12 +222,15 @@ export class TileMiniatures extends EventTarget {
    * its centre is deeper than MINI.depth and under 8 rim points deeper than MINI.rimDepth;
    * none within 4 radii — (x, z) moved out by one radius. Clear of the frames already on the
    * water (`freeAt`): put down from a raft, it unfolds beside it (Q4b), within the same 4 radii.
+   * Q10: clear of the holder too (`away`, its radius + MINI.clear) — put down by a walker in the
+   * water or on the board, the frame does not unfold over it.
    */
-  unfoldCenter(item, x, z, dir) {
+  unfoldCenter(item, x, z, dir, away = null) {
     const r = item.fullRadius;
     const deep = (px, pz, depth) => { const g = this.ground(px, pz); return !g || g.height < -depth; };
     for (let s = 0; s <= 4 * r; s += 0.5) {
       const cx = x + dir.x * s, cz = z + dir.z * s;
+      if (away && Math.hypot(cx - away.x, cz - away.z) < r + MINI.clear) continue;
       let ok = deep(cx, cz, MINI.depth) && this.freeAt(cx, cz, r);
       for (let k = 0; ok && k < 8; k++) {
         const a = (k / 8) * Math.PI * 2;
@@ -195,14 +238,19 @@ export class TileMiniatures extends EventTarget {
       }
       if (ok) return { x: cx, z: cz, open: true };
     }
+    if (away) {
+      const out = Math.max(r, r + MINI.clear - ((x - away.x) * dir.x + (z - away.z) * dir.z));
+      return { x: x + dir.x * out, z: z + dir.z * out, open: false };
+    }
     return { x: x + dir.x * r, z: z + dir.z * r, open: false };
   }
 
-  unfold(item, x, z, dir) {
-    const c = this.unfoldCenter(item, x, z, dir);
+  unfold(item, x, z, dir, away = null) {
+    const c = this.unfoldCenter(item, x, z, dir, away);
     this.field.moveFrame(item.frameId, c.x, c.z);
     const fieldQuat = this.field.group.getWorldQuaternion(new THREE.Quaternion());
     item.state = 'unfolding';
+    item.fold = null;
     item.unfold = { t: 0, open: c.open,
       from: { p: item.root.position.clone(), q: item.root.quaternion.clone(), s: item.root.scale.x },
       to: { p: new THREE.Vector3(c.x, MINI.sea, c.z), q: fieldQuat, s: 1 } };
@@ -247,6 +295,78 @@ export class TileMiniatures extends EventTarget {
       .multiply(new THREE.Quaternion().setFromAxisAngle(UP, item.relYaw));
     item.root.scale.setScalar(this.scale);
     item.yaw = holder.yaw + item.relYaw;
+    // Q10: lifted off the water, it shrinks from the frame's place into the hands
+    const fold = item.fold;
+    if (fold) {
+      const k = smoother(fold.t);
+      item.root.position.lerpVectors(fold.from.p, item.root.position, k);
+      item.root.quaternion.slerpQuaternions(fold.from.q, item.root.quaternion.clone(), k);
+      item.root.scale.setScalar(fold.from.s + (this.scale - fold.from.s) * k);
+    }
+  }
+
+  /**
+   * The miniature of `frameId` drawn from above for the menu's slots (Q10), as a data URL; null
+   * before its meshes are built. Rendered once into a small target (the frame's meshes are
+   * borrowed for the one draw), kept until the field's rest changes.
+   * @param {any} frameId @param {any} renderer a THREE.WebGLRenderer
+   */
+  thumbnail(frameId, renderer) {
+    const item = this.get(frameId);
+    if (!item || !renderer || !item.body.children.length || renderer.getContext().isContextLost()) return null;
+    const key = frameKey(item.frameId);
+    const kept = this.thumbs.get(key);
+    if (kept) return kept;
+    const { width: w, height: h, margin } = THUMB;
+    if (!this.thumbScene) {
+      const s = new THREE.Scene();
+      s.add(new THREE.HemisphereLight(0xffffff, 0x556677, 2.4));
+      const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+      sun.position.set(0.4, 1, 0.3);
+      s.add(sun);
+      this.thumbScene = s;
+    }
+    const scene = this.thumbScene, body = item.body, parent = body.parent;
+    scene.add(body);
+    scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(body);
+    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    // the drawing as the author drew it: field x to the right, field z (the source's y) down
+    const half = Math.max(size.x / 2, (size.z / 2) * (w / h), 0.01) * (1 + margin);
+    const cam = new THREE.OrthographicCamera(-half, half, half * h / w, -half * h / w, 0.01, size.y + 20);
+    cam.position.set(c.x, box.max.y + 10, c.z);
+    cam.up.set(0, 0, -1);
+    cam.lookAt(c.x, c.y, c.z);
+    cam.updateMatrixWorld(true);
+    const target = new THREE.WebGLRenderTarget(w, h);
+    target.texture.colorSpace = THREE.SRGBColorSpace;
+    const pixels = new Uint8Array(w * h * 4);
+    const previous = renderer.getRenderTarget(), autoClear = renderer.autoClear;
+    const color = renderer.getClearColor(new THREE.Color()), alpha = renderer.getClearAlpha();
+    try {
+      renderer.autoClear = true;
+      renderer.setClearColor(0, 0);
+      renderer.setRenderTarget(target);
+      renderer.clear();
+      renderer.render(scene, cam);
+      renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels);
+    } finally {
+      renderer.setRenderTarget(previous);
+      renderer.setClearColor(color, alpha);
+      renderer.autoClear = autoClear;
+      parent?.add(body);
+      target.dispose();
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const image = ctx.createImageData(w, h);
+    for (let y = 0; y < h; y++) image.data.set(pixels.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);   // GL rows bottom up
+    ctx.putImageData(image, 0, 0);
+    const url = canvas.toDataURL('image/png');
+    this.thumbs.set(key, url);
+    return url;
   }
 
   /** Builds (again) the miniature meshes when the field's rest changed: load, rebuild, restore. */
@@ -254,6 +374,7 @@ export class TileMiniatures extends EventTarget {
     const rest = this.field.rest;
     if (rest === this.rest) return;
     this.rest = rest;
+    this.thumbs.clear();
     for (const item of this.items) {
       for (const mesh of [...item.body.children]) { mesh.material.dispose(); item.body.remove(mesh); }
       item.root.visible = false;
@@ -316,7 +437,12 @@ export class TileMiniatures extends EventTarget {
     if (!this.items.length) return;
     this.ensureMeshes();
     for (const item of this.items) {
+      if (item.fold) {
+        item.fold.t = Math.min(1, item.fold.t + dt / MINI.unfold);
+        if (item.state !== 'carried') item.fold = null;
+      }
       if (item.state === 'carried' && holder) this.hold(item, holder);
+      if (item.fold?.t >= 1) item.fold = null;
       // in the backpack it goes where the walker goes (the contract reads where a frame is)
       if (item.state === 'packed' && holder) item.root.position.set(holder.x, holder.y, holder.z);
       if (item.state !== 'unfolding') continue;
@@ -347,6 +473,7 @@ export class TileMiniatures extends EventTarget {
     }
     this.items = [];
     this.byId.clear();
+    this.thumbs.clear();
     this.rest = null;
     this.storyId = null;
     this.syncFrames();

@@ -35,7 +35,7 @@ import { createTechPanels, isEditing } from './ui/techPanels.js';
 import { CameraRig } from './scene/cameraRig.js';
 import { TerrainContact } from './scene/TerrainContact.js';
 import { createWalkerHost } from './walker/index.js';
-import { deckAtHand, deckClear } from './walker/deck.js';
+import { deckAtHand, deckClear, liftAtHand } from './walker/deck.js';
 import { createWalkerStick, LABELS as STICK_LABELS } from './walker/stick.js';
 import { islandRadius, islandPose, shorePose, storyPose } from './scene/stationPoses.js';
 import { createFrameFocus } from './scene/frameFocus.js';
@@ -329,7 +329,9 @@ async function walkerReady() {
       action: { hint: () => (walkerHost?.state.swim ? kiteHint() ?? miniHint() : miniHint() ?? kiteHint()),
         run: () => (walkerHost?.state.swim ? kiteAction() ?? miniAction() : miniAction() ?? kiteAction()) },
       flight: { hint: flyHint, run: flyAction },
-      fates: { hints: fateHints, run: runFate },
+      // Q10: the picture's menu — slots, put down / take off the water, the fates
+      menu: { slots: menuSlots, thumb: (id) => minis?.thumbnail(id, renderer) ?? null,
+        unpack: (id) => minis?.unpack(id) ?? null, actions: menuActions, fates: fateHints, run: runMenu },
       labels: STICK_LABELS[sceneLocale] });
     document.body.classList.add('walker-controls');
   }
@@ -394,6 +396,50 @@ function packAction() {
   const next = minis.packed[0];
   if (next) return minis.unpack(next.frameId) && 'unpack';
   return minis.stow() && 'pack';
+}
+// Q10 (STORY-QUEST-SPEC §4.2a «Меню малюнку»): from the water, the board, a deck or the shore —
+// the frame on the water within reach folds back into the miniature in the hands (U, the menu);
+// the one in the hands is put down wherever the walker is (on the water it unfolds ahead).
+const LIFT_REACH = 3;   // m from the walker to the frame's rim
+/** The frame «Take into the hands» would lift now, or null. */
+function liftTarget() {
+  if (!minis?.active || !raft || walkerHost?.mode !== 'eyes') return null;
+  const s = walkerHost.state;
+  const id = liftAtHand(raft.decks(), { deckId: raft.deckId, x: s.x, z: s.z }, LIFT_REACH);
+  return id !== null && minis.get(id)?.state === 'water' ? id : null;
+}
+/** U and the menu: 'lift' or null. */
+function liftAction() {
+  const id = liftTarget();
+  if (id === null || !minis.lift(id, walkerHost.state)) return null;
+  raft.forget(id);
+  return 'lift';
+}
+/** The menu: the carried one down where the walker is — 'ground', 'unfolding' or null. */
+function putAction() {
+  if (!minis?.carried || walkerHost?.mode !== 'eyes') return null;
+  return minis.put(walkerHost.state);
+}
+/** The menu's slots: the miniature in the hands, then the backpack in the order they went in. */
+function menuSlots() {
+  if (!minis?.active || !walkerHost || walkerHost.mode === 'off') return [];
+  const slot = (item, where) => ({ id: item.frameId, index: tiles.frameRegistry.get(item.frameId)?.index ?? 0, where });
+  const held = minis.carried;
+  return [...(held ? [slot(held, 'hands')] : []), ...minis.packed.map((i) => slot(i, 'pack'))];
+}
+/** The menu's deeds now: 'put' with a miniature in the hands, 'lift' with a frame within reach. */
+function menuActions() {
+  if (!walkerHost || walkerHost.mode !== 'eyes') return [];
+  /** @type {string[]} */
+  const names = [];
+  if (minis?.carried) names.push('put');
+  if (liftTarget() !== null) names.push('lift');
+  return names;
+}
+function runMenu(name) {
+  if (name === 'put') return putAction();
+  if (name === 'lift') return liftAction();
+  return runFate(name);
 }
 // --- raft and kite (story-quest Q4) --------------------------------------------------
 // Every frame drawn on the water is a deck: a step onto it boards it. On a deck K (or the
@@ -471,7 +517,7 @@ function fatesUpdate(dt) {
 function fateTarget() {
   if (!fates || !raft || walkerHost?.mode !== 'eyes') return null;
   const s = walkerHost.state;
-  return deckAtHand(raft.decks(), { deckId: raft.deckId, flying: !!s.flight, x: s.x, z: s.z }, FATE.near);
+  return deckAtHand(raft.decks(), { deckId: raft.deckId, flying: !!s.flight, swimming: !!s.swim, x: s.x, z: s.z }, FATE.near);
 }
 /** Z / X / C and the touch buttons: 'release', 'sink' or 'break' for the frame at hand. */
 function fateAction(kind) {
@@ -531,6 +577,10 @@ addEventListener('keydown', (e) => {
   if (packAction()) e.preventDefault();
 });
 addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyU' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
+  if (liftAction()) e.preventDefault();
+});
+addEventListener('keydown', (e) => {
   if (e.code !== 'KeyV' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isEditing(e.target)) return;
   walk().catch((err) => console.error('[walker]', err));
 });
@@ -581,6 +631,7 @@ const viewController = gui.add(ui, 'view', Object.keys(views)).name('camera').on
 gui.add({ walk: () => walk().catch((e) => console.error('[walker]', e)) }, 'walk').name('walk · eyes (V)');
 gui.add({ miniAction }, 'miniAction').name('take · put (G)');
 gui.add({ packAction }, 'packAction').name('backpack (B)');
+gui.add({ liftAction }, 'liftAction').name('frame off the water into the hands (U)');
 gui.add({ kiteAction }, 'kiteAction').name('kite · let go (K)');
 gui.add({ flyAction }, 'flyAction').name('onto the board · land (Space)');
 gui.add({ release: () => fateAction('release') }, 'release').name('let it go (Z)');
@@ -1180,6 +1231,7 @@ window.app = {
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   get minis() { return minis; }, layoutMinis, miniAction, miniHint, packAction,
+  liftTarget, liftAction, putAction, menuSlots, menuActions,
   get locale() { return sceneLocale; }, setLocale,
   get raft() { return raft; }, kiteAction, kiteHint, flyAction, flyHint,
   get fates() { return fates; }, fateAction, fateTarget, fateHints, undoFate, keepFate,

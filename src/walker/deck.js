@@ -86,12 +86,13 @@ export function deckGap(a, b) {
  * The frame a fate would go to now (STORY-QUEST-SPEC §2 п.6; story-quest Q5), or null. In the
  * air — the deck within `near` m of the board (the frame below). On a deck — another deck
  * within `near` m rim to rim («another frame»: the walker stays where it is), else the deck
- * underfoot (`own`: the walker takes off first). On the ground — none.
- * @param {Deck[]} decks @param {{ deckId: any, flying: boolean, x: number, z: number }} walker
+ * underfoot (`own`: the walker takes off first). In the water (Q10) — as in the air, the deck
+ * within `near` m. On the ground — none.
+ * @param {Deck[]} decks @param {{ deckId: any, flying: boolean, swimming?: boolean, x: number, z: number }} walker
  * @returns {{ id: any, own: boolean } | null}
  */
-export function deckAtHand(decks, { deckId, flying, x, z }, near) {
-  if (flying) {
+export function deckAtHand(decks, { deckId, flying, swimming = false, x, z }, near) {
+  if (flying || swimming) {
     let best = null, gap = near;
     for (const d of decks) { const g = rimDistance(d, x, z); if (g <= gap) { best = d; gap = g; } }
     return best && { id: best.id, own: false };
@@ -105,6 +106,23 @@ export function deckAtHand(decks, { deckId, flying, x, z }, near) {
     if (g <= gap) { other = d; gap = g; }
   }
   return other ? { id: other.id, own: false } : { id: own.id, own: true };
+}
+
+/**
+ * The frame on the water «Take into the hands» would fold back into a miniature (STORY-QUEST-SPEC
+ * §4.2a «Меню малюнку»; Q10): the deck nearest to (x, z) within `reach` m of its rim, never the
+ * one underfoot (`deckId`) — the walker would lose its floor. Decks under a fate are no decks.
+ * @param {Deck[]} decks @param {{ deckId: any, x: number, z: number }} walker
+ * @returns {any} the deck's id, or null
+ */
+export function liftAtHand(decks, { deckId, x, z }, reach) {
+  let best = null, gap = reach;
+  for (const d of decks) {
+    if (d.id === deckId) continue;
+    const g = rimDistance(d, x, z);
+    if (g <= gap) { best = d; gap = g; }
+  }
+  return best ? best.id : null;
 }
 
 /** The point of `deck` nearest to world (x, z), `margin` inside its rim. @param {Deck} deck */

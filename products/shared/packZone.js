@@ -12,7 +12,7 @@ const TEXT = {
     frame: (n) => `Frame ${n}`, stow: 'Into the backpack', unpack: 'Into the hands', none: 'No miniatures in this scene',
     note: 'Take another and the one in the hands goes into the backpack. Only the one in the hands is put down.' },
 };
-const REDRAW = new Set(['scene.ready', 'minis.take', 'minis.put', 'minis.unfold', 'minis.pack', 'minis.unpack']);
+const REDRAW = new Set(['scene.ready', 'minis.take', 'minis.put', 'minis.unfold', 'minis.pack', 'minis.unpack', 'minis.lift']);
 
 /**
  * What the zone shows, from state.read. DOM-free.

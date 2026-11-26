@@ -126,7 +126,7 @@ describe('embed commands', () => {
     expect(Object.keys(createCommands(world())).sort()).toEqual([
       'catalog.list', 'catalog.read',
       'fate.give', 'fate.keep', 'fate.undo', 'fly.land', 'fly.takeOff', 'fly.to', 'kite.set',
-      'minis.hydrate', 'minis.stow', 'minis.take', 'minis.unpack', 'mood.quiet', 'mood.set', 'raft.board', 'raft.moveTo',
+      'minis.hydrate', 'minis.lift', 'minis.put', 'minis.stow', 'minis.take', 'minis.unpack', 'mood.quiet', 'mood.set', 'raft.board', 'raft.moveTo',
       'scene.locale', 'scene.tech', 'state.read',
       'swim.dive', 'swim.in', 'swim.rise', 'walker.eyes', 'walker.look', 'walker.place', 'walker.shore']);
     expect(Object.isFrozen(createCommands(world()))).toBe(true);
@@ -188,6 +188,23 @@ describe('embed commands', () => {
     await expect(c['minis.stow']({})).rejects.toMatchObject({ reason: 'not-possible' });
     await expect(c['minis.unpack']({ frame: 0 })).rejects.toMatchObject({ reason: 'not-possible' });
     await expect(createCommands(world())['minis.stow']({})).rejects.toMatchObject({ reason: 'no-miniature' });
+  });
+
+  it('minis.lift: only a frame on the water, a deck, not the one underfoot; minis.put: something in the hands', async () => {
+    const lifted = [];
+    const host = (deck) => ({ mode: 'eyes', state: { deck } });
+    const item = { frameId: 'f0', state: 'water' };
+    const frames = () => [{ index: 0, id: 'f0', x: 0, z: 0 }];
+    const minis = { active: true, get: () => item, carried: null, lift: (id) => { lifted.push(id); return item; } };
+    const base = { minis, frames };
+    const on = createCommands(world({ ...base, decks: () => [{ id: 'f0' }], ensureHost: async () => host({ id: 'f0' }) }));
+    await expect(on['minis.lift']({ frame: 0 })).rejects.toMatchObject({ reason: 'not-possible' });
+    const fated = createCommands(world({ ...base, decks: () => [], ensureHost: async () => host(null) }));
+    await expect(fated['minis.lift']({ frame: 0 })).rejects.toMatchObject({ reason: 'not-on-water' });
+    item.state = 'ground';
+    await expect(fated['minis.lift']({ frame: 0 })).rejects.toMatchObject({ reason: 'not-possible' });
+    expect(lifted).toEqual([]);
+    await expect(fated['minis.put']({})).rejects.toMatchObject({ reason: 'not-possible' });
   });
 
   it('a frame that is not a deck cannot be boarded', async () => {

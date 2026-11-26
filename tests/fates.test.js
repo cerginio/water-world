@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { FATE, UNDO, afloat, begin, fateLook, keep, settled, stepFate, undo } from '../src/tiles/frameFate.js';
 import { TileFates } from '../src/tiles/TileFates.js';
-import { deckAtHand, deckGap, rimDistance } from '../src/walker/deck.js';
+import { deckAtHand, deckGap, liftAtHand, rimDistance } from '../src/walker/deck.js';
 
 // story-quest Q5 (STORY-QUEST-SPEC §2 п.6, §4.1 «Долі кадру»; Edge §4.4): every fate has its
 // way back, «Leave it so» fixes it; the way back is the same path run back, so the frame comes
@@ -167,5 +167,22 @@ describe('deckAtHand', () => {
     expect(deckAtHand(decks, { deckId: null, flying: true, x: 30, z: 0 }, FATE.near)).toEqual({ id: 'b', own: false });
     expect(deckAtHand(decks, { deckId: null, flying: true, x: 20, z: 20 }, FATE.near)).toBeNull();
     expect(deckAtHand(decks, { deckId: null, flying: false, x: 0, z: 0 }, FATE.near)).toBeNull();
+  });
+
+  test('Q10: in the water — as in the air, the frame within reach', () => {
+    const decks = [deck('a', 0, 0), deck('b', 40, 0)];
+    expect(deckAtHand(decks, { deckId: null, flying: false, swimming: true, x: 7, z: 0 }, FATE.near)).toEqual({ id: 'a', own: false });
+    expect(deckAtHand(decks, { deckId: null, flying: false, swimming: true, x: 20, z: 20 }, FATE.near)).toBeNull();
+  });
+});
+
+describe('liftAtHand (Q10: a frame off the water into the hands)', () => {
+  test('the nearest deck within reach of its rim, never the one underfoot', () => {
+    const decks = [deck('a', 0, 0), deck('b', 12, 0)];
+    expect(liftAtHand(decks, { deckId: null, x: 5.5, z: 0 }, 3)).toBe('a');    // 0.5 m off a's rim, 1.5 m off b's
+    expect(liftAtHand(decks, { deckId: null, x: 30, z: 0 }, 3)).toBe(null);
+    expect(liftAtHand(decks, { deckId: 'a', x: 3.5, z: 0 }, 3)).toBe(null);    // on a; b's rim 3.5 m away
+    expect(liftAtHand(decks, { deckId: 'a', x: 4.5, z: 0 }, 3)).toBe('b');     // 2.5 m: b
+    expect(liftAtHand([deck('a', 0, 0)], { deckId: 'a', x: 0, z: 0 }, 3)).toBe(null);
   });
 });

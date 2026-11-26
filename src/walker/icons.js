@@ -20,15 +20,15 @@ export const ICONS = Object.freeze({
 /** The scene's buttons (stick.js LABELS) → their subject (§4.2a table). */
 /** @type {Readonly<Record<string, Subject>>} */
 export const SUBJECTS = Object.freeze({
-  take: 'frame', put: 'frame',
+  take: 'frame', put: 'frame', menu: 'frame',
   release: 'frame', sink: 'frame', break: 'frame', call: 'frame', raise: 'frame', gather: 'frame', keep: 'frame',
-  land: 'raft',
+  land: 'raft', lift: 'raft',
   stick: 'walker', leave: 'walker', enter: 'walker', fly: 'walker', water: 'walker', dive: 'walker', rise: 'walker',
   kite: 'kite', unkite: 'kite',
 });
 
 /** LABELS entries that are not buttons, or buttons without a subject of the list. */
-export const NO_SUBJECT = Object.freeze(new Set(['keepNote']));
+export const NO_SUBJECT = Object.freeze(new Set(['keepNote', 'frameN', 'inHands', 'inPack']));
 
 /** The icon's SVG for a button name, or null (no subject). */
 export function iconOf(name) {
