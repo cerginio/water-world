@@ -4,6 +4,8 @@
 «Story Quest» — змінна. Не контракт фаз: HANDOFF теми й рядок у реєстрі
 `AGENTS.md` з'являться після `spec-to-handoff`.
 
+Доповнення: [карти острова й декорації](docs/story-quest/ISLAND-MAPS-SPEC.md) — друга карта «Бухта».
+
 Рішення власника 2026-11-24:
 
 1. **Продукт — перший зріз [Edge of the Elements](EDGE-OF-THE-ELEMENTS-SPEC.md).**
