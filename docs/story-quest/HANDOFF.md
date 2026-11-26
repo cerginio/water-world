@@ -16,6 +16,17 @@ QA — [QA.md](QA.md).
 
 > **Далі:** Q10 — меню під іконкою малюнку: долі, слоти рюкзака, дії з кадром у воді (п.19).
 
+**Крос-репо explore-ux EX-6a — ЗАКРИТО, прийнято власником `handoff:next` 2026-11-26:** цей коміт містить правки
+`src/main.js`, `src/embed/index.js`, `products/shared/` (контракт, квести, lifecycle), `products/story-quest/main.js`,
+`shared/embed-origin.js`, guard і focused-тести. Q10 має зберегти ці контракти; вони не належать фазі Q10.
+Канон стану/QA — `D:/work/js-games/ua-dream/tilecraft/_docs/explore-ux/HANDOFF.md` та `QA.md`.
+Guard PASS, focused 65/65; built probe 14 с, hosted draft 20,6 с. Production викладено на новий
+`water.storytilecraft.space` (Netlify `6b083e75a0c0922800672b8e`); власник додав R2 CORS,
+production-проба `--product` PASS **17,2 с**. Перед комітом guard PASS **0,26 с**, typecheck 0;
+focused `embed/products/quests` **65/65**, 245 мс. Повторного browser launch без зміни коду не робили.
+Драфт `story-quest--edge-of-elements.netlify.app` оновлено тим самим dist (`6b083ead5d50ac0e3313b676`), зв'язка PASS.
+Поточний контракт зовнішньої оболонки й команди квестів — `quest-demo-qa.md` → «Зовнішній embed продукту».
+
 Локальний стенд: `http://localhost:5199/`; правило стенду — `AGENTS.md` →
 «Локальний стенд». Телефон — лише драфт Netlify
 `https://story-quest--edge-of-elements.netlify.app/`; кожна фаза деплоїть його перед

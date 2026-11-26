@@ -1285,28 +1285,34 @@ function tick(now) {
   stations.update();
   renderFrame(dt);
   frames++;
+  for (const resolve of activationWaiters) resolve(lifecycleState());
+  activationWaiters.clear();
   if (now - lastHud > 500) updateHud(now);
 }
 
 function loop(now) {
+  frameRequest = 0;
+  if (!rendering()) return;
   if (uncapped) { spin(); return; }
-  if (auto.cap30 && (auto.odd = !auto.odd)) { requestAnimationFrame(loop); return; }
+  if (auto.cap30 && (auto.odd = !auto.odd)) { frameRequest = requestAnimationFrame(loop); return; }
   if (benchmarking) last = now;
   else {
     if (quality.autoResolution) autoResolution(now - last);
     tick(now);
   }
-  requestAnimationFrame(loop);
+  frameRequest = requestAnimationFrame(loop);
 }
 
 // uncapped: frames back-to-back off the display's clock (it still shows the latest one at
 // each refresh), at most three in flight so the counter reads frames the GPU finished
 const fences = [], chan = new MessageChannel();
-chan.port1.onmessage = spin;
+let spinQueued = false;
+chan.port1.onmessage = () => { spinQueued = false; spin(); };
 function spin() {
+  if (!rendering()) return;
   if (!uncapped || document.hidden || gl.isContextLost()) {   // back to rAF until rendering can resume
     fences.splice(0).forEach((s) => gl.deleteSync(s));
-    requestAnimationFrame(loop);
+    frameRequest = requestAnimationFrame(loop);
     return;
   }
   while (fences.length && gl.clientWaitSync(fences[0], 0, 0) !== gl.TIMEOUT_EXPIRED) gl.deleteSync(fences.shift());
@@ -1315,8 +1321,50 @@ function spin() {
     fences.push(gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0));
     gl.flush();
   }
-  chan.port2.postMessage(0);
+  if (!spinQueued) { spinQueued = true; chan.port2.postMessage(0); }
 }
+
+let frameRequest = 0, active = true, disposed = false;
+const activationWaiters = new Set();
+const rendering = () => active && !disposed && !document.hidden;
+const lifecycleState = () => ({ active: rendering(), disposed, frames });
+function stopRendering() {
+  cancelAnimationFrame(frameRequest);
+  frameRequest = 0;
+  fences.splice(0).forEach((s) => gl.deleteSync(s));
+  for (const resolve of activationWaiters) resolve(lifecycleState());
+  activationWaiters.clear();
+}
+function resumeRendering() {
+  last = performance.now();
+  auto.n = -60;
+  if (rendering() && !stillMode && !frameRequest && !spinQueued) frameRequest = requestAnimationFrame(loop);
+}
+function onVisibility() { if (document.hidden) stopRendering(); else resumeRendering(); }
+document.addEventListener('visibilitychange', onVisibility);
+window.app.lifecycle = {
+  activate() {
+    if (disposed) throw new Error('disposed');
+    active = true;
+    resumeRendering();
+    return rendering() && !stillMode ? new Promise((resolve) => activationWaiters.add(resolve)) : lifecycleState();
+  },
+  deactivate() { active = false; stopRendering(); return lifecycleState(); },
+  dispose() {
+    if (!disposed) {
+      active = false;
+      disposed = true;
+      stopRendering();
+      document.removeEventListener('visibilitychange', onVisibility);
+      chan.port1.close(); chan.port2.close();
+      controls.dispose();
+      renderer.dispose();
+      renderer.forceContextLoss();
+    }
+    return lifecycleState();
+  },
+  read: lifecycleState,
+};
 
 resize();
 applySun();
@@ -1338,4 +1386,4 @@ if (args.has('embed')) {
   import('./embed/index.js').then(({ startEmbed }) => { window.app.embed = startEmbed({ app: window.app, spawn: walkerSpawn }).commands; })
     .catch((e) => console.error('[embed]', e));
 }
-if (!stillMode) requestAnimationFrame(loop);
+resumeRendering();

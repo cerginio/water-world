@@ -69,14 +69,20 @@ export function createSceneClient({ post, helloEvery = 150, callTimeout = 120000
      */
     async call(cmd, args = {}, { timeout = callTimeout } = {}) {
       // a call before the scene answered hello waits for it: a message sent earlier would be lost
-      if (!info && !closed) await Promise.race([ready, gone]);
+      const started = Date.now();
+      if (!info && !closed) {
+        let waiting;
+        await Promise.race([ready, gone, new Promise((resolve) => { waiting = timers.setTimeout(resolve, timeout); })]);
+        timers.clearTimeout(waiting);
+        if (!info && !closed) return { ok: false, reason: 'timeout', message: `scene not ready for ${cmd}` };
+      }
       if (closed) return { ok: false, reason: 'closed', message: 'the scene was reloaded' };
       const id = ++seq;
       return new Promise((resolve) => {
         const timer = timers.setTimeout(() => {
           pending.delete(id);
           resolve({ ok: false, reason: 'timeout', message: `no answer to ${cmd} in ${timeout} ms` });
-        }, timeout);
+        }, Math.max(0, timeout - (Date.now() - started)));
         pending.set(id, { resolve, timer });
         post({ channel: CHANNEL, type: 'call', id, cmd, args });
       });

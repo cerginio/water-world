@@ -25,6 +25,7 @@
 | [BOUNDARY-3](#boundary-3--tilecraft-лише-через-завантажувач) | `@tilecraft` імпортують лише входи платформи: `src/tiles/tilecraftLoader.js`, `src/catalog/tilecraftCatalog.js`, `src/walker/tilecraftWalker.js` | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-4](#boundary-4--продукти-залежать-від-платформи) | `src/**` не імпортує `products/**` | guard-static, baseline 0 | ✓ |
 | [BOUNDARY-5](#boundary-5--продукт-говорить-зі-сценою-лише-через-контракт) | `products/**` не імпортує `src/**` і не читає `contentWindow.app` сцени | guard-static, baseline 0 | ✓ |
+| [SECURITY-1](#security-1--embed-чує-лише-дозволеного-parent) | embed сцени й продукту перевіряє точні parent/source та origin; URL не розширює allowlist | guard: policy checks + два вхідні gates; focused + probe | ✓ |
 | [OWNER-1](#owner-1--один-цикл-кадру) | `requestAnimationFrame` — лише в `src/main.js` | guard-static, baseline 0 | ✓ |
 | [OWNER-2](#owner-2--один-renderer-і-один-gui) | рівно 1 `new WebGLRenderer` і 1 `new GUI`, обидва в `src/main.js` | guard-static | ✓ |
 | [OWNER-3](#owner-3--камеру-пише-лише-її-власник) | камеру/`controls` пише лише `src/scene/cameraRig.js` | guard-static, baseline 0 | ✓ |
@@ -170,6 +171,29 @@
 
 **Де живе.** [scripts/audit/guard.mjs](scripts/audit/guard.mjs) → `ruleProductsOffSrc`.
 Проби (`scripts/probe-*.mjs`) — не продукт: вони можуть дивитись у `app` iframe.
+
+## SECURITY-1 — embed чує лише дозволеного parent
+
+**Формулювання.** `embed-origin` лише обирає origin із allowlist, не додає довільну адресу.
+Production: поточний origin і `https://explore.storytilecraft.space`; dev-дозвіл `http://127.0.0.1:8184`
+передається лише з гілки `import.meta.env.DEV` і відсутній у dist. Обидва входи — сцена та оболонка —
+слухають лише безпосередній parent з точним origin; у самостійній вкладці зовнішній канал неактивний.
+
+**Походження.** EX-6a explore-ux: нова cross-origin межа без попереднього інциденту;
+вимога EXU §6.1 / X25. Попередня same-origin межа не приймала explore взагалі.
+
+**Механізм.** Guard `ruleEmbedParent`: викликає справжню політику `shared/embed-origin.js`
+на дозволеному origin, чужому домені, домені-двійнику, production loopback та хибному source;
+перевіряє наявність вхідного gate у двох модулях. Це не доказ довільної еквівалентної форми gate:
+focused `tests/embed.test.js`, `tests/products.test.js` і `probe-story-embed.mjs --product`
+перевіряють відмови та реальний cross-origin канал.
+
+**Перевірюване твердження.** `SECURITY-1 embed-parent` PASS; чужий origin не отримує ready.
+Мутація `return requested` замість перевірки allowlist у `shared/embed-origin.js` → guard FAIL,
+3 порушення з іменем файла (чужий домен, двійник, loopback); мутацію прибрано.
+
+**Де живе.** `shared/embed-origin.js`, `src/embed/index.js`, `products/shared/productEmbed.js`,
+`scripts/audit/guard.mjs` → `ruleEmbedParent`.
 
 ## OWNER-1 — один цикл кадру
 

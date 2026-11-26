@@ -13,10 +13,11 @@ export function createSceneHost({ iframe, base = new URL('../../', location.href
   let address = null;
   const listeners = new Set();
 
-  addEventListener('message', (e) => {
+  const receive = (e) => {
     if (e.source !== iframe.contentWindow || e.origin !== location.origin) return;
     client?.receive(e.data);
-  });
+  };
+  addEventListener('message', receive);
 
   return {
     get client() { return client; },
@@ -42,5 +43,6 @@ export function createSceneHost({ iframe, base = new URL('../../', location.href
     },
     /** every event of every load: (name, detail) */
     on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    dispose() { client?.close(); client = null; listeners.clear(); removeEventListener('message', receive); },
   };
 }

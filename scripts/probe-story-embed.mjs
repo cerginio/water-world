@@ -19,9 +19,10 @@ mkdirSync(out, { recursive: true });
 const STORY = 'test-2025/my-day-3-moments';
 const SET = ['test-2025/my-day-3-moments', 'public-test/frog-fairy-full', 'local/story-8-frames-hibrid'];
 const report = { base, steps: [] };
+const productMode = process.argv.includes('--product');
 const t0 = performance.now();
 
-const browser = await chromium.launch({ headless: true, args: ['--use-angle=d3d11'] });
+const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL, args: ['--use-angle=d3d11'] });
 const errors = [];
 
 // the host: the protocol from the outside, as a product speaks it (no import of src/)
@@ -49,14 +50,17 @@ const HOST = `<!doctype html><meta charset="utf-8"><style>html,body,iframe{margi
   window.call = (cmd, args) => new Promise((resolve) => {
     const id = ++seq;
     pending.set(id, resolve);
+    setTimeout(() => { if (pending.delete(id)) resolve({ ok: false, reason: 'timeout', message: cmd }); }, 25000);
     frame.contentWindow.postMessage({ channel: CHANNEL, type: 'call', id, cmd, args }, location.origin);
   });
 </script>`;
 
 const step = async (page, cmd, args = {}) => {
   const t = performance.now();
+  console.log(`embed: ${cmd}`);
   const r = await page.evaluate(([c, a]) => window.call(c, a), [cmd, args]);
   report.steps.push({ cmd, args, ok: r.ok, reason: r.reason, ms: Math.round(performance.now() - t) });
+  writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
   return r;
 };
 const must = async (page, cmd, args) => {
@@ -66,13 +70,75 @@ const must = async (page, cmd, args) => {
 };
 const events = (page) => page.evaluate(() => __ev.map((e) => e.name));
 // the iframe's GPU side: the camera against the water there (the probe may look; a product may not)
-const scene = (page) => page.frame({ name: 'scene' }) ?? page.frames()[1];
+const scene = (page) => productMode ? page.frames().find((f) => new URL(f.url()).pathname === '/' && f.parentFrame()?.parentFrame())
+  : page.frame({ name: 'scene' }) ?? page.frames()[1];
 const camera = (page) => scene(page).evaluate(() => ({ y: app.camera.position.y, water: app.camWater() }));
 
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  if (productMode) {
+    await page.context().grantPermissions(['local-network-access']);
+    const hostOrigin = process.env.EMBED_HOST_ORIGIN ?? 'http://127.0.0.1:8184';
+    const productUrl = new URL('products/story-quest/', base);
+    productUrl.search = `?story=${STORY}&embed&embed-origin=${encodeURIComponent(hostOrigin)}`;
+    const html = HOST.replaceAll('location.origin);', `${JSON.stringify(new URL(base).origin)});`);
+    await page.route(`${hostOrigin}/**`, (route) => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.goto(hostOrigin);
+    await page.evaluate((url) => Promise.race([window.load(url), new Promise((_, reject) => setTimeout(() => reject(new Error('product hello timeout')), 12000))]), productUrl.href);
+    assert.ok(await page.evaluate(() => __ready.commands.includes('quest.start')));
+    await page.waitForFunction(() => __ev.some((e) => e.name === 'scene.ready'), {}, { timeout: 30000 });
+    const product = page.frames().find((f) => f.url().includes('/products/story-quest/'));
+    await product.waitForFunction(() => !!window.storyQuest?.quests.log, {}, { timeout: 10000 });
+    assert.equal((await step(page, 'quest.start', { id: 'unknown' })).reason, 'unknown-quest');
+    for (const id of ['find', 'note']) {
+      const result = await must(page, 'quest.start', { id });
+      assert.deepEqual(result, { id, status: 'started' });
+    }
+    assert.equal(await product.getByTestId('quest-note-text').isVisible(), true);
+    await page.screenshot({ path: join(out, 'product-quests.png') });
+    const paused = await must(page, 'deactivate');
+    await page.waitForTimeout(400);
+    assert.deepEqual(await scene(page).evaluate(() => app.lifecycle.read()), paused, 'RAF really stopped');
+    const before = await scene(page).evaluate(() => app.walker.state.x);
+    const activated = await must(page, 'activate');
+    assert.ok(activated.active && activated.frames > paused.frames, `activation ack ${JSON.stringify(activated)}`);
+    await scene(page).waitForFunction((frames) => app.lifecycle.read().frames > frames, activated.frames, { timeout: 3000 });
+    const resumed = await scene(page).evaluate(() => app.lifecycle.read());
+    report.lifecycle = { paused, activated, resumed };
+    assert.ok(resumed.active && resumed.frames > paused.frames, `resumed ${JSON.stringify(resumed)}`);
+    assert.ok(Math.abs(await scene(page).evaluate(() => app.walker.state.x) - before) < 0.1, 'no time jump');
+
+    // Headless Chrome не приховує вкладку при bringToFront: перевірка DOM visibility handler.
+    await scene(page).evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')); });
+    const hidden = await scene(page).evaluate(() => app.lifecycle.read());
+    await page.waitForTimeout(200);
+    assert.deepEqual(await scene(page).evaluate(() => app.lifecycle.read()), hidden);
+    assert.equal(hidden.active, false);
+    await scene(page).evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
+    await scene(page).waitForFunction((frames) => app.lifecycle.read().frames > frames, hidden.frames, { timeout: 3000 });
+    report.visibilityHandler = 'PASS (simulated document.hidden, not physical tab switching)';
+    const disposed = await must(page, 'dispose');
+    assert.equal(disposed.disposed, true);
+    assert.equal(await product.getByTestId('product-scene').count(), 0);
+    // Той самий дозволений origin у URL не дозволяє чужому parent викликати API.
+    const evil = 'http://127.0.0.1:8185';
+    await page.route(`${evil}/**`, (route) => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.goto(evil);
+    await page.evaluate((url) => {
+      document.getElementById('scene').src = url;
+      window._hello = setInterval(() => document.getElementById('scene').contentWindow.postMessage({ channel: 'ultra-water/scene', type: 'hello' }, new URL(url).origin), 100);
+    }, productUrl.href);
+    await page.waitForTimeout(1800);
+    assert.equal(await page.evaluate(() => __ready), null, 'foreign parent receives no ready');
+    await page.evaluate(() => clearInterval(window._hello));
+    report.foreignOriginRejected = true;
+    assert.deepEqual(errors.filter((e) => !/favicon|404/.test(e)), []);
+    report.seconds = +((performance.now() - t0) / 1000).toFixed(1);
+    writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
+    console.log(`PASS probe-story-embed --product ${report.seconds} s → ${out}`);
+  } else {
   await page.goto(`${base}src/embed/protocol.js`);   // any document of the origin, replaced by the host
   await page.setContent(HOST);
   await page.evaluate(() => { document.getElementById('scene').name = 'scene'; });
@@ -175,6 +241,7 @@ try {
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   console.log(`PASS probe-story-embed ${report.seconds} s → ${out}`);
+  }
 } catch (e) {
   report.errors = errors;
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));

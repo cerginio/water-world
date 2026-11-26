@@ -4,6 +4,26 @@ import { describe, expect, it } from 'vitest';
 import { CHANNEL, createEmbedServer, EmbedError, until, VERSION } from '../src/embed/protocol.js';
 import { ANCHOR, resolveAnchor, shallowPoint } from '../src/embed/anchors.js';
 import { createCommands } from '../src/embed/commands.js';
+import { acceptsParent, parentOrigin } from '../shared/embed-origin.js';
+
+describe('embed parent boundary', () => {
+  const location = (origin) => ({ origin: 'https://water.storytilecraft.space', href: 'https://water.storytilecraft.space/?embed&embed-origin=' + encodeURIComponent(origin) });
+  it('allows explore, but neither an arbitrary URL origin nor a production loopback', () => {
+    expect(parentOrigin(location('https://explore.storytilecraft.space'))).toBe('https://explore.storytilecraft.space');
+    expect(parentOrigin(location('https://evil.example'))).toBe(null);
+    expect(parentOrigin(location('http://127.0.0.1:8184'))).toBe(null);
+    expect(parentOrigin(location('http://127.0.0.1:8184'), { devOrigin: 'http://127.0.0.1:8184' })).toBe('http://127.0.0.1:8184');
+    expect(parentOrigin(location('https://explore.storytilecraft.space.evil.example'))).toBe(null);
+  });
+  it('requires the exact parent and origin, and is inactive in a standalone tab', () => {
+    const parent = {}, target = { parent };
+    expect(acceptsParent({ source: parent, origin: 'allowed' }, target, 'allowed')).toBe(true);
+    expect(acceptsParent({ source: {}, origin: 'allowed' }, target, 'allowed')).toBe(false);
+    expect(acceptsParent({ source: parent, origin: 'evil' }, target, 'allowed')).toBe(false);
+    expect(acceptsParent({ source: parent, origin: 'allowed' }, target, null)).toBe(false);
+    expect(acceptsParent({ source: parent, origin: 'allowed' }, parent, 'allowed')).toBe(false);
+  });
+});
 
 const serverWith = (commands) => {
   const sent = [];

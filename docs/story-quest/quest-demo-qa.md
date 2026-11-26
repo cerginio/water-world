@@ -84,7 +84,9 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 ## Контракт сцени (`src/embed/`)
 
 - Вмикається параметром `&embed`: сцена ховає технічні панелі й слухає
-  `postMessage` лише від `parent` того самого origin.
+  `postMessage` лише від безпосереднього `parent` з точним дозволеним origin.
+  Без `embed-origin` — поточний origin; EX-6a додає `https://explore.storytilecraft.space`,
+  `http://127.0.0.1:8184` — лише в dev. Значення URL не розширює allowlist (SECURITY-1).
 - Протокол — за зразком Tilecraft `lib/message-api.js`: hello/ready з повтором,
   RPC `call(cmd, args) → { ok, state } | { ok: false, reason }`, події.
 - Команди — закритий перелік. Невідома команда дає відмову
@@ -127,6 +129,32 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
   читає.
 
 ## Межі
+
+### Зовнішній embed продукту (explore-ux EX-6a)
+
+`/products/story-quest/?story=<folder/slug>&embed&embed-origin=https://explore.storytilecraft.space`
+вбудовує **оболонку**, а не голу сцену. Корінь `/` лишається платформою; внутрішній iframe сцени —
+та сама межа BOUNDARY-5. Один зовнішній iframe продукту, один вкладений iframe сцени, один WebGL-контекст.
+У самостійній вкладці продукт працює звичайно, зовнішній канал неактивний.
+
+Оболонка відповідає тим самим `ultra-water/scene` v1 (hello/ready, RPC), не імпортуючи `src/**`.
+Перелік команд повертає ready: лише allowlist passthrough для станів/погоди, lifecycle та `quest.start`.
+Немає API читання/запису приватних карток думок; їхні тексти не виходять у зовнішній хост.
+
+- `activate` — ack після фактично намальованого кадру (у прихованому документі повертає `active:false`).
+- `deactivate` — ack після скасування RAF і зупинки симуляції; час скидається перед resume.
+- `dispose` — зупинка, від'єднання embed listeners, renderer dispose/context loss, видалення внутрішнього iframe;
+  оболонка віддає останнє підтвердження й відключає зовнішній listener. Повторне використання — новий продукт.
+- `quest.start { id: 'find' }` — відкрити задачу «Знайти частини», персонаж на пляжі; пошук робить користувач.
+- `quest.start { id: 'note' }` — відкрити редактор із підказкою «Що я відчуваю зараз?».
+- Успіх: `{ ok:true, value:{ id, status:'started' } }`; невідомий id — `unknown-quest`, журнал ще не готовий —
+  `not-ready`, паралельний запуск квесту — `busy`. Старт **не** позначає задачу виконаною.
+
+Клієнтський timeout включає очікування ready: після його спливу пізній handshake не запускає стару команду.
+Перевірка: `scripts/probe-story-embed.mjs --product`; dev або production artifact / hosted draft;
+`PLAYWRIGHT_CHANNEL=chrome` використовує встановлений браузер. Результати EX-6a — у канонічному
+`D:/work/js-games/ua-dream/tilecraft/_docs/explore-ux/HANDOFF.md`. Власник додав R2 CORS для water;
+production-проба оболонки `--product` PASS **17,2 с**, код і deploy не змінювали.
 
 - `products/**` не імпортує `src/**` і не звертається до
   `iframe.contentWindow.app`. Це новий рядок guard, його валить мутація

@@ -1,9 +1,8 @@
-// The scene in a product's <iframe ?…&embed> (STORY-QUEST-SPEC §4.4): binds the contract to
-// postMessage. Only the parent window of the same origin is heard and answered; the route's
-// facts (raft, miniatures, fates) go to it as events once the story's scene is up.
+// Контракт сцени: лише безпосередній parent з дозволеним origin (EXU §6.1).
 import { createEmbedServer, until } from './protocol.js';
 import { catalogState, createCommands, WAIT } from './commands.js';
 import { worldFromApp } from './world.js';
+import { acceptsParent, parentOrigin } from '../../shared/embed-origin.js';
 
 const RAFT_EVENTS = ['board', 'leave', 'kite', 'sea', 'takeoff', 'land'];
 const MINI_EVENTS = ['take', 'put', 'unfold', 'hydrate', 'pack', 'unpack'];
@@ -22,23 +21,31 @@ const plain = (detail) => {
  */
 export function startEmbed({ app, spawn, target = window }) {
   const world = worldFromApp({ app, spawn });
+  const controller = new AbortController();
+  const options = { signal: controller.signal };
   const parent = target.parent;
-  const send = (message) => { if (parent && parent !== target) parent.postMessage(message, target.location.origin); };
-  const commands = createCommands(world);
+  const origin = parentOrigin(target.location, { devOrigin: import.meta.env.DEV ? 'http://127.0.0.1:8184' : null });
+  const send = (message) => { if (origin && parent && parent !== target) parent.postMessage(message, origin); };
+  const commands = Object.freeze({ ...createCommands(world),
+    activate: () => app.lifecycle.activate(),
+    deactivate: () => app.lifecycle.deactivate(),
+    dispose: () => { controller.abort(); return app.lifecycle.dispose(); },
+  });
   const server = createEmbedServer({ commands, send });
   target.addEventListener('message', (e) => {
-    if (e.source !== parent || e.origin !== target.location.origin) return;
+    if (!acceptsParent(e, target, origin)) return;
     server.receive(e.data).catch((err) => console.error('[embed]', err));
-  });
+  }, options);
   // the catalog at once: a product words «loading» / «failed» and offers the list without a scene
-  world.catalog.addEventListener('change', () => server.emit('catalog.change', catalogState(world.catalog)));
+  world.catalog.addEventListener('change', () => server.emit('catalog.change', catalogState(world.catalog)), options);
   // the facts of the route, once there is a scene to have them
   until(() => world.ready() || world.failed(), WAIT.ready, 'the story').then(() => {
+    if (controller.signal.aborted) return;
     const failed = world.failed();
     if (failed) { server.emit('scene.failed', { reason: failed }); return; }
-    for (const type of RAFT_EVENTS) world.raft.addEventListener(type, (e) => server.emit(`raft.${type}`, plain(e.detail)));
-    for (const type of MINI_EVENTS) world.minis?.addEventListener(type, (e) => server.emit(`minis.${type}`, plain(e.detail)));
-    world.fates.addEventListener('change', (e) => server.emit('fate.change', plain(e.detail)));
+    for (const type of RAFT_EVENTS) world.raft.addEventListener(type, (e) => server.emit(`raft.${type}`, plain(e.detail)), options);
+    for (const type of MINI_EVENTS) world.minis?.addEventListener(type, (e) => server.emit(`minis.${type}`, plain(e.detail)), options);
+    world.fates.addEventListener('change', (e) => server.emit('fate.change', plain(e.detail)), options);
     server.emit('scene.ready', { story: world.story(), fingerprint: world.fingerprint() });
   }).catch((err) => server.emit('scene.failed', { reason: err.reason ?? 'failed', message: String(err.message) }));
   return { server, commands };

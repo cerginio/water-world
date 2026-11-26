@@ -27,6 +27,7 @@ export function mountShell({ key, title, onLocale }) {
   let locale = pickLocale([...navigator.languages, navigator.language], store.get('locale'));
 
   const iframe = el('iframe', { id: 'scene', title });
+  iframe.dataset.testid = 'product-scene';
   iframe.setAttribute('allow', 'fullscreen');
   const status = el('div', { id: 'sceneStatus', role: 'status', hidden: true });
   status.setAttribute('aria-live', 'polite');

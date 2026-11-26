@@ -11,6 +11,7 @@ import { packZone } from '../shared/packZone.js';
 import { sayWithIcon } from '../shared/icons.js';
 import { createQuestLayer } from '../shared/questZones.js';
 import { openQuestStore } from '../shared/questStore.js';
+import { mountProductEmbed } from '../shared/productEmbed.js';
 import questData from '../shared/quests.json';
 import uiMap from './ui-map.json';
 
@@ -158,3 +159,4 @@ document.body.dataset.product = 'story-quest';
 host.load({ story, flags: flags(), lang: shell.locale });
 draw();
 words();
+if (params.has('embed')) mountProductEmbed({ host, iframe: shell.iframe, quests, shell, devOrigin: import.meta.env.DEV ? 'http://127.0.0.1:8184' : null });

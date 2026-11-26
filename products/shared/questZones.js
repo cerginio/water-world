@@ -119,6 +119,7 @@ export function createQuestLayer({ host, store, data, locale }) {
       if (how) label.title = how;
       const li = el('li', { className: 'quest' }, label);
       li.dataset.task = t.id;
+      li.dataset.testid = `quest-${t.id}`;
       li.dataset.done = String(t.done);
       if (t.fact) li.append(el('div', { className: 'quest-fact', textContent: t.fact }));
       const acts = el('div', { className: 'quest-actions' });
@@ -172,6 +173,7 @@ export function createQuestLayer({ host, store, data, locale }) {
     promptSel.value = editing.prompt ?? '';
     promptSel.addEventListener('change', () => { editing.prompt = promptSel.value || null; });
     const text = el('textarea', { id: 'cardText', rows: 4, value: editing.text });
+    text.dataset.testid = 'quest-note-text';
     text.placeholder = promptText(editing.prompt, data, loc);
     text.addEventListener('input', () => { editing.text = text.value; });
     promptSel.addEventListener('change', () => { text.placeholder = promptText(editing.prompt, data, loc); });
@@ -264,6 +266,18 @@ export function createQuestLayer({ host, store, data, locale }) {
     get log() { return log; },
     get key() { return key; },
     get scene() { return scene; },
+    async start(id) {
+      if (!['find', 'note'].includes(id)) return { ok: false, reason: 'unknown-quest' };
+      if (!log) return { ok: false, reason: 'not-ready' };
+      if (id === 'find') {
+        const result = await host.call('walker.place', { at: 'beach' }, { timeout: 20000 });
+        if (!result.ok) return result;
+      }
+      change(setStatus(log, id, 'open'));
+      if (id === 'note') await openEditor({ prompt: 'feel' });
+      bodies.quests?.closest('details')?.setAttribute('open', '');
+      return { ok: true, value: { id, status: 'started' } };
+    },
     /** @param {(log: any) => void} fn */
     on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     /** zone renderers for renderZones */

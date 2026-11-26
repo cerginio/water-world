@@ -405,6 +405,26 @@ function ruleFloatFilter(files) {
 
 /* ── main ─────────────────────────────────────────────────────────────────── */
 
+async function ruleEmbedParent(files) {
+  const failures = [];
+  const { parentOrigin, acceptsParent } = await import('../../shared/embed-origin.js');
+  const origin = 'https://water.storytilecraft.space';
+  const location = (requested) => ({ origin, href: `${origin}/?embed-origin=${encodeURIComponent(requested)}` });
+  for (const denied of ['https://evil.example', 'https://explore.storytilecraft.space.evil.example', 'http://127.0.0.1:8184']) {
+    if (parentOrigin(location(denied)) !== null) failures.push(`shared/embed-origin.js: production дозволяє ${denied}`);
+  }
+  if (parentOrigin(location('https://explore.storytilecraft.space')) !== 'https://explore.storytilecraft.space') failures.push('shared/embed-origin.js: explore не дозволений');
+  const parent = {}, target = { parent };
+  if (!acceptsParent({ source: parent, origin }, target, origin)
+    || acceptsParent({ source: {}, origin }, target, origin)
+    || acceptsParent({ source: parent, origin: 'null' }, target, origin)
+    || acceptsParent({ source: parent, origin }, target, null)) failures.push('shared/embed-origin.js: source/origin не ізольовані');
+  for (const rel of ['src/embed/index.js', 'products/shared/productEmbed.js']) {
+    if (!files.find((f) => f.rel === rel)?.text.includes('if (!acceptsParent(')) failures.push(`${rel}: немає вхідного parent/origin gate`);
+  }
+  return { id: 'SECURITY-1 embed-parent', failures, note: '2 входи, production allowlist + source gate' };
+}
+
 async function main() {
   const t0 = performance.now();
   const reportOnly = process.argv.includes('--report');
@@ -420,7 +440,7 @@ async function main() {
   const results = [ruleEngineLeaf(files), ruleEnvironmentPortable(files), ruleTilecraftEntry([...files, ...products]),
     ruleProductsOnSrc(files), ruleProductsOffSrc(products),
     ruleOneLoop(files), ruleOneRendererGui(files), camera, sun, ruleGlobals(files),
-    ruleFloatFilter(files), await ruleWaterSamplers()];
+    ruleFloatFilter(files), await ruleWaterSamplers(), await ruleEmbedParent([...files, ...products])];
 
   if (process.argv.includes('--baseline')) {
     const print = (name, found) => console.log(`Підставте у ${name}:\n{\n${[...found]

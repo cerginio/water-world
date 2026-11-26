@@ -15,6 +15,46 @@ import { MOOD_MAP_V1 } from '../src/environment/mood.js';
 import states from '../products/quest-demo-qa/states.json';
 import standMap from '../products/quest-demo-qa/ui-map.json';
 import productMap from '../products/story-quest/ui-map.json';
+import { mountProductEmbed } from '../products/shared/productEmbed.js';
+
+describe('explore product bridge', () => {
+  const fixture = () => {
+    const sent = [], calls = [], listeners = new Set();
+    const parent = { postMessage: (m, origin) => sent.push({ m, origin }) };
+    const target = { parent, location: { origin: 'https://water.storytilecraft.space', href: 'https://water.storytilecraft.space/products/story-quest/?embed-origin=https://explore.storytilecraft.space' },
+      addEventListener: (_, fn) => listeners.add(fn), removeEventListener: (_, fn) => listeners.delete(fn) };
+    let removed = false, closed = false;
+    mountProductEmbed({ target,
+      host: { on: () => () => {}, call: async (cmd) => { calls.push(cmd); return { ok: true, value: { active: false, disposed: cmd === 'dispose' } }; }, dispose: () => { closed = true; } },
+      quests: { start: async (id) => { calls.push(id); return id === 'find' || id === 'note' ? { ok: true, value: { id, status: 'started' } } : { ok: false, reason: 'unknown-quest' }; } },
+      shell: { setOpen() {}, zones: { querySelector: () => null } }, iframe: { remove: () => { removed = true; } } });
+    return { sent, calls, listeners, gone: () => removed && closed,
+      receive: async (data, overrides = {}) => { for (const fn of listeners) await fn({ source: parent, origin: 'https://explore.storytilecraft.space', data: { channel: CHANNEL, ...data }, ...overrides }); } };
+  };
+  it('rejects the wrong origin or window before dispatch; replies to the exact allowed origin', async () => {
+    const f = fixture();
+    await f.receive({ type: 'hello' }, { origin: 'https://evil.example' });
+    await f.receive({ type: 'call', cmd: 'quest.start', args: { id: 'find' } }, { source: {} });
+    expect(f.sent).toEqual([]); expect(f.calls).toEqual([]);
+    await f.receive({ type: 'hello' });
+    expect(f.sent[0]).toMatchObject({ origin: 'https://explore.storytilecraft.space', m: { type: 'ready', commands: expect.arrayContaining(['quest.start', 'deactivate']) } });
+  });
+  it('forwards only the closed commands, acknowledges both quests, removes the scene on disposal', async () => {
+    const f = fixture();
+    await f.receive({ type: 'call', id: 1, cmd: 'eval' });
+    expect(f.sent.at(-1).m).toMatchObject({ ok: false, reason: 'unknown-command' });
+    for (const id of ['find', 'note']) {
+      await f.receive({ type: 'call', cmd: 'quest.start', args: { id } });
+      expect(f.sent.at(-1).m).toMatchObject({ ok: true, value: { id, status: 'started' } });
+    }
+    await f.receive({ type: 'call', cmd: 'quest.start', args: { id: 'other' } });
+    expect(f.sent.at(-1).m.reason).toBe('unknown-quest');
+    await f.receive({ type: 'call', cmd: 'deactivate' });
+    await f.receive({ type: 'call', cmd: 'dispose' });
+    expect(f.calls).toEqual(['find', 'note', 'other', 'deactivate', 'dispose']);
+    expect(f.gone()).toBe(true); expect(f.listeners.size).toBe(0);
+  });
+});
 
 // timers the test drives: nothing fires unless asked
 const manualTimers = () => {
@@ -32,6 +72,17 @@ const manualTimers = () => {
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe('contract client', () => {
+  it('a missing ready times out without dispatching a stale command after a late handshake', async () => {
+    const sent = [], timers = manualTimers();
+    const c = createSceneClient({ post: (m) => sent.push(m), timers });
+    const early = c.call('deactivate', {}, { timeout: 10 });
+    timers.fire();
+    await expect(early).resolves.toMatchObject({ ok: false, reason: 'timeout' });
+    c.receive({ channel: CHANNEL, type: 'ready', version: 1, commands: [] });
+    await tick();
+    expect(sent).toEqual([]);
+    c.close();
+  });
   it('speaks the scene\'s channel', () => {
     expect(CHANNEL).toBe(SCENE_CHANNEL);
   });
