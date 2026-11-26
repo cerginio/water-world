@@ -101,7 +101,7 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 
 | команда | аргументи | що робить |
 |---|---|---|
-| `state.read` | — | режим, персонаж (`deck`, `flight`, `landing`, `swim`), кайт, `openSea`, `carried`, підказки кнопок, кадри (`mini`, `deck`, `fate`) |
+| `state.read` | — | режим, персонаж (`deck`, `flight`, `landing`, `board` — `sit`/`plane`/`air` з Q9, `swim`), кайт, `openSea`, `carried`, підказки кнопок, кадри (`mini`, `deck`, `fate`) |
 | `walker.place` | `at`, `yaw` | ноги на ґрунті в якорі, «очі» |
 | `walker.eyes` | `on` | у тіло / «поза тілом» |
 | `walker.look` | `yaw`, `pitch`, `at` | погляд |
@@ -110,7 +110,7 @@ QA-сценарії Q1–Q5b щоразу починаються з довгог
 | `raft.board` | `frame`, `u`, `v`, `yaw` | на палубу кадру |
 | `raft.moveTo` | `frame`, `at` | палуба (з персонажем, якщо це пліт) у якір |
 | `kite.set` | `up` | кайт |
-| `fly.takeOff` · `fly.to` · `fly.land` | `at` для `fly.to` | дошка: зліт з плоту, над якорем, посадка |
+| `fly.takeOff` · `fly.to` · `fly.land` | `at` для `fly.to` | дошка: на воду з плоту чи з води (Q9), над якорем, посадка |
 | `fate.give` · `fate.undo` · `fate.keep` | `frame`, `kind`, `settle` | доля; `settle` чекає кінця на годиннику ×10 |
 | `swim.in` · `swim.dive` · `swim.rise` | `at`, `depth` | у воду (з якоря, з плоту, з дошки), глибина одразу |
 | `mood.set` | `v`, `a`, `t` | погода |
