@@ -10,6 +10,7 @@ import { bindSunLight } from './environment-bindings/hostBinding.js';
 import { bindSea, WATER_PRESETS } from './environment-bindings/seaBinding.js';
 import { bindPanelCopy } from './ui/perfCopy.js';
 import { createTerrain } from './scene/terrain.js';
+import { createDecor } from './scene/decor.js';
 import { pickMap } from './scene/maps.js';
 import { PlanarReflection } from './engine/PlanarReflection.js';
 import { PostFX } from './engine/PostFX.js';
@@ -106,6 +107,9 @@ const terrain = createTerrain({
   absorption: surface.uniforms.uAbsorption.value, reflectionLayer: REFLECT_LAYER,
 });
 scene.add(terrain.group);
+// the map's palms and hut (ISLAND-MAPS-SPEC §3), built with the relief: none on 'island'
+const decor = createDecor({ map, patchProp: terrain.patchProp, reflectionLayer: REFLECT_LAYER });
+scene.add(decor.group);
 surface.uniforms.uRock.value.set(heroRock.x, heroRock.z, 8.5, 0);
 
 const sunLight = new THREE.DirectionalLight(0xffffff, Math.PI);
@@ -373,7 +377,7 @@ function layoutMinis() {
   if (!tiles.loaded) { minis?.clear(); return null; }
   minis ??= new TileMiniatures(tiles, { ground: walkGround, scene, freeAt: (x, z, r) => deckClear(raft?.decks() ?? [], x, z, r) });
   const spawn = walkerSpawn();
-  minis.layout(String(tiles.source), { x: spawn.x, z: spawn.z });
+  minis.layout(String(tiles.source), { x: spawn.x, z: spawn.z }, { blocked: map.blocked });
   return minis;
 }
 /**
@@ -1231,7 +1235,7 @@ async function still({ shot, frames = 60, dt = 1 / 60 } = {}) {
   return { width: size.x, height: size.y, rgba: btoa(bin), shot: ui.view };
 }
 window.app = {
-  still, map: map.id, openSea: map.openSea,
+  still, map: map.id, openSea: map.openSea, decor,
   camera, controls, scene, env, post, surface, ocean, terrain, timer, views, quality, renderer, floaters, query, underwater, spray, snow, caustics, floatShadow, tiles, catalog, loadStory,
   walk, startWalk, get walker() { return walkerHost; }, get walkerStick() { return walkerStick; }, ground: walkGround,
   get minis() { return minis; }, layoutMinis, miniAction, miniHint, packAction,

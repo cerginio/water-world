@@ -4,6 +4,7 @@
 // The scene picks one before it builds anything; only the 'island' profile reads islandHeight.
 import { islandHeight } from './islandHeight.js';
 import { inBay, LAGOON, lagoonHeight } from './lagoonHeight.js';
+import { decorBlocked, lagoonDecor } from './lagoonDecor.js';
 
 /**
  * @typedef {{ x: number, z: number }} XZ
@@ -15,6 +16,8 @@ import { inBay, LAGOON, lagoonHeight } from './lagoonHeight.js';
  *   openSea: { x: number, z: number, yaw: number } | null,
  *   viewRadius?: number,
  *   rocks?: (x: number, z: number) => boolean,
+ *   decor?: () => import('./lagoonDecor.js').LagoonDecor,
+ *   blocked?: (x: number, z: number) => boolean,
  * }} MapProfile
  */
 
@@ -49,6 +52,10 @@ export function rayIn(heightAt, bearing, { from = 900, to = 100, step = 1, below
   return { x: c * r, z: s * r };
 }
 
+const lagoonDecorOnce = once(() => lagoonDecor(lagoonHeight));
+/** @type {((x: number, z: number) => boolean) | undefined} */
+let lagoonBlocked;
+
 /** @type {MapProfile} */
 const lagoon = Object.freeze({
   id: 'lagoon',
@@ -64,6 +71,10 @@ const lagoon = Object.freeze({
   viewRadius: 540,
   // no rocks in the bay, its mouth and 25 m round them
   rocks: (x, z) => !inBay(x, z, 25),
+  // palms behind the beach and on the capes, the hut on piles by the cape (spec §3)
+  decor: lagoonDecorOnce,
+  // closed to miniatures: the vegetation band, the cape groups, the hut and its boardwalk
+  blocked: (x, z) => (lagoonBlocked ??= decorBlocked(lagoonDecorOnce()))(x, z),
 });
 
 export const MAPS = Object.freeze({ island, lagoon });

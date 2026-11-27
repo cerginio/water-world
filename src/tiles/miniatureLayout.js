@@ -50,15 +50,17 @@ export function isDryLand(ground, x, z, { minHeight = LAYOUT.minHeight, minNorma
  * of `tries` candidates cannot fit them all, minDistance shrinks by 0.8 and the search
  * goes on from where it was (the points found so far stay); at most 8 passes, then the
  * points found are returned (fewer than `count` only on an island with no such land).
+ * `blocked(x, z)` — the map's zones closed to miniatures (ISLAND-MAPS-SPEC §3: vegetation, the
+ * hut); checked after the candidate is drawn, so a map without zones lies as it always did.
  * @param {string} id the story id (seed)
  * @param {number} count
  * @param {{ ground: (x: number, z: number) => any, center: { x: number, z: number },
  *   radius?: number, clear?: number, minDistance?: number, minHeight?: number,
- *   minNormalY?: number, tries?: number }} options
+ *   minNormalY?: number, tries?: number, blocked?: (x: number, z: number) => boolean }} options
  * @returns {{ x: number, z: number, yaw: number }[]}
  */
 export function layoutMiniatures(id, count, options) {
-  const { ground, center, radius = LAYOUT.radius, clear = LAYOUT.clear, tries = LAYOUT.tries } = options;
+  const { ground, center, radius = LAYOUT.radius, clear = LAYOUT.clear, tries = LAYOUT.tries, blocked } = options;
   let minDistance = options.minDistance ?? LAYOUT.minDistance;
   const land = { minHeight: options.minHeight ?? LAYOUT.minHeight, minNormalY: options.minNormalY ?? LAYOUT.minNormalY };
   const next = random(seedOf(String(id)));
@@ -68,7 +70,7 @@ export function layoutMiniatures(id, count, options) {
       // uniform over the disc: r = R·√u
       const r = radius * Math.sqrt(next()), a = next() * Math.PI * 2, yaw = next() * Math.PI * 2;
       const x = center.x + Math.cos(a) * r, z = center.z + Math.sin(a) * r;
-      if (r < clear || !isDryLand(ground, x, z, land)) continue;
+      if (r < clear || !isDryLand(ground, x, z, land) || blocked?.(x, z)) continue;
       if (points.some((p) => Math.hypot(p.x - x, p.z - z) < minDistance)) continue;
       points.push({ x, z, yaw });
     }
