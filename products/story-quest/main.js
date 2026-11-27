@@ -5,7 +5,7 @@
 // through the contract — nothing of src/** is imported, window.app is not read (guard BOUNDARY-5).
 import { mountShell } from '../shared/shell.js';
 import { createSceneHost } from '../shared/sceneHost.js';
-import { knownMap } from '../shared/contract.js';
+import { DEFAULT_SCENE_MAP, knownMap } from '../shared/contract.js';
 import { renderZones } from '../shared/zones.js';
 import { storyMeta, storyZone, weatherZone } from '../shared/storyZones.js';
 import { packZone } from '../shared/packZone.js';
@@ -15,6 +15,7 @@ import { openQuestStore } from '../shared/questStore.js';
 import { mountProductEmbed } from '../shared/productEmbed.js';
 import questData from '../shared/quests.json';
 import uiMap from './ui-map.json';
+import { placeChoice, placeSearch } from './place.js';
 
 const TEXT = {
   uk: {
@@ -58,6 +59,8 @@ let story = params.get('story');
 // the map (ISLAND-MAPS-SPEC §2): stays in the product's URL as given; only a known id reaches the
 // iframe, an unknown one opens the default island there
 const map = () => knownMap(new URLSearchParams(location.search).get('map'));
+// the map the choice «Місце» shows: the scene's own word in scene.ready, until then what was asked
+let shownMap = map() ?? DEFAULT_SCENE_MAP;
 const passed = PASS.filter((f) => params.has(f));
 // without a story the scene is only the island behind the choice: no walker, no stick yet
 const flags = () => [...(story ? ROUTE : []), ...passed];
@@ -77,6 +80,20 @@ function open(id) {
   q.set('story', id);
   history.replaceState(null, '', `${location.pathname}?${q.toString().replace(/%2F/gi, '/')}`);
   catalogState = { state: 'pending', story: id, error: null };
+  host.load({ story, flags: flags(), lang: shell.locale, map: map() });
+  shell.yieldToScene();
+  draw();
+  words();
+}
+
+// «Місце» (ISLAND-MAPS-SPEC §2): the id into the product's URL, the scene reloaded with the same
+// story and language — the route starts over; the cards and quests are the story's, not the map's
+function place(id) {
+  if (!knownMap(id)) return;
+  history.replaceState(null, '', `${location.pathname}${placeSearch(location.search, id)}`);
+  shownMap = id;
+  if (story) catalogState = { state: 'pending', story, error: null };
+  document.body.dataset.storyState = catalogState.state;
   host.load({ story, flags: flags(), lang: shell.locale, map: map() });
   shell.yieldToScene();
   draw();
@@ -120,7 +137,10 @@ async function words() {
 host.on((name, detail) => {
   // the catalog's «ready» is the file fetched; the field still compiles — «loading» until scene.ready
   if (name === 'catalog.change') catalogState = detail.state === 'ready' ? { ...detail, state: 'pending' } : detail;
-  else if (name === 'scene.ready') catalogState = { ...catalogState, state: 'ready' };
+  else if (name === 'scene.ready') {
+    catalogState = { ...catalogState, state: 'ready' };
+    if (detail?.map && detail.map !== shownMap) { shownMap = detail.map; draw(); }
+  }
   else if (name === 'scene.failed' && catalogState.state !== 'failed') catalogState = { ...catalogState, state: 'failed', error: { code: detail?.reason ?? 'unknown' } };
   else return;
   document.body.dataset.storyState = catalogState.state;
@@ -128,8 +148,17 @@ host.on((name, detail) => {
 });
 
 const weather = weatherZone({ host });
+// the story zone of the product: «Місце» above the stories (the stand's story zone has no map, §4.5)
+const placeData = uiMap.zones.find((z) => z.id === 'story').place;
+function storyAndPlace(stories) {
+  return (body, locale) => {
+    const list = document.createElement('div');
+    body.replaceChildren(placeChoice({ place: placeData, locale, current: shownMap, pick: place }), list);
+    stories(list, locale);
+  };
+}
 const zoneRender = {
-  story: storyZone({ host, current: () => story, pick: open }),
+  story: storyAndPlace(storyZone({ host, current: () => story, pick: open })),
   pack: packZone({ host }),
   weather,
   quests: quests.quests,

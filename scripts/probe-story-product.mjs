@@ -145,6 +145,76 @@ try {
   assert.ok(report.reducedEyesMs < 1000, `no overview flight with reduced motion (${report.reducedEyesMs} ms)`);
   await quiet.close();
 
+  // 10. «Місце» by taps (ISLAND-MAPS-SPEC §2, §5 п.1, п.2; terra T4): island → lagoon → island;
+  //     the product's URL, the iframe and state.read() say the map; a reload keeps the choice; a card
+  //     saved on one map is on the other; the route starts over (the walker back at the start)
+  const placeCtx = await browser.newContext(PHONE);
+  const pg = await placeCtx.newPage();
+  watch(pg);
+  const picked = () => pg.$eval('.place-pick[aria-pressed="true"]', (b) => b.dataset.map);
+  const onMap = async (id) => {
+    await timeToEyes(pg);
+    const st = await call(pg, 'state.read');
+    const frame = await inScene(pg, () => new URLSearchParams(location.search).get('map'));
+    const w = await inScene(pg, () => { const s = window.app.walker.state; return { x: s.x, z: s.z, ground: window.app.ground(s.x, s.z).height }; });
+    return { map: st.map, product: new URL(pg.url()).searchParams.get('map'), frame, carried: st.carried, pack: st.pack,
+      walker: { x: Math.round(w.x * 10) / 10, z: Math.round(w.z * 10) / 10, ground: Math.round(w.ground * 100) / 100 } };
+  };
+  const openStoryZone = async () => {
+    if (await pg.$eval('body', (b) => b.dataset.panelOpen) !== 'true') await pg.tap('.panel-open');
+    if (!await pg.$eval('details[data-zone="story"]', (d) => d.open)) await pg.tap('details[data-zone="story"] > summary');
+    await pg.waitForSelector('.place-pick[data-map="lagoon"]');
+  };
+  const tapPlace = async (id) => {
+    await openStoryZone();
+    await pg.tap(`.place-pick[data-map="${id}"]`);
+    await pg.waitForFunction((m) => new URL(location.href).searchParams.get('map') === m, id, { timeout: 5000 });
+  };
+  const cards = () => pg.$$eval('#cardList li .note-text', (ps) => ps.map((p) => p.textContent));
+  await pg.goto(`${base}products/story-quest/?story=${STORY}`);
+  const place = { island: await onMap('island') };
+  assert.equal(place.island.map, 'island');
+  assert.equal(place.island.frame, null, 'island: no map in the iframe');
+  await openStoryZone();
+  assert.equal(await picked(), 'island');
+  place.note = await pg.$eval('.place-note', (p) => p.textContent);
+  assert.match(place.note, /спочатку/);
+  await call(pg, 'minis.take', { frame: 0 });
+  await pg.tap('details[data-zone="cards"] button[data-act="add"]');
+  await pg.waitForSelector('#cardEditor:not([hidden]) textarea');
+  await pg.fill('#cardText', 'T4: картка з острова.');
+  await pg.tap('#cardEditor button[data-act="save"]');
+  await pg.waitForFunction(() => document.querySelectorAll('#cardList li').length === 1, {}, { timeout: 5000 });
+  await pg.screenshot({ path: join(out, '4-place-island.png') });
+
+  await tapPlace('lagoon');
+  place.lagoon = await onMap('lagoon');
+  assert.deepEqual([place.lagoon.map, place.lagoon.product, place.lagoon.frame], ['lagoon', 'lagoon', 'lagoon']);
+  assert.deepEqual([place.lagoon.carried, place.lagoon.pack], [null, []], 'the route starts over: nothing in the hands or the backpack');
+  assert.ok(place.lagoon.walker.ground >= 1, 'the start on dry sand of the bay');
+  assert.ok(Math.hypot(place.lagoon.walker.x - place.island.walker.x, place.lagoon.walker.z - place.island.walker.z) > 5, 'another start');
+  await openStoryZone();
+  assert.equal(await picked(), 'lagoon');
+  await pg.waitForFunction(() => document.querySelectorAll('#cardList li').length === 1, {}, { timeout: 15000 });
+  assert.deepEqual(await cards(), ['T4: картка з острова.'], 'the card is the story\'s, not the map\'s');
+  await pg.screenshot({ path: join(out, '5-place-lagoon.png') });
+
+  await pg.reload();
+  place.reload = await onMap('lagoon');
+  assert.equal(place.reload.map, 'lagoon', 'a reload keeps the map');
+  await openStoryZone();
+  assert.equal(await picked(), 'lagoon');
+
+  await tapPlace('island');
+  place.back = await onMap('island');
+  assert.deepEqual([place.back.map, place.back.product, place.back.frame], ['island', 'island', null], 'island: the product says map=island, the iframe leaves the default out');
+  assert.deepEqual(place.back.walker, place.island.walker, 'the island\'s start again');
+  await openStoryZone();
+  await pg.waitForFunction(() => document.querySelectorAll('#cardList li').length === 1, {}, { timeout: 15000 });
+  assert.deepEqual(await cards(), ['T4: картка з острова.']);
+  report.place = place;
+  await placeCtx.close();
+
   const bad = errors.filter((e) => !/favicon|404/.test(e));
   assert.deepEqual(bad, [], 'no page errors');
   report.seconds = Math.round((performance.now() - t0) / 100) / 10;

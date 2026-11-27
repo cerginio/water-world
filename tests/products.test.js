@@ -1,7 +1,8 @@
 // story-quest QDb: the shared shell's DOM-free parts (the contract client, the scene address, the
 // zones of a ui-map) and the QA stand's cards (the expectation, the cards file, a run that refuses).
 import { describe, expect, it } from 'vitest';
-import { CHANNEL, createSceneClient, sceneUrl } from '../products/shared/contract.js';
+import { CHANNEL, createSceneClient, SCENE_MAPS, sceneUrl } from '../products/shared/contract.js';
+import { placeOf, placeSearch } from '../products/story-quest/place.js';
 import { pickLocale, t, zonesOf } from '../products/shared/zones.js';
 import { byFolder, storyMeta, WEATHER } from '../products/shared/storyZones.js';
 import { packView } from '../products/shared/packZone.js';
@@ -161,6 +162,22 @@ describe('panel zones', () => {
     expect(product).not.toContain('states');
     expect(product).not.toContain('tech');
     for (const ids of [stand, product]) expect(ids).toEqual(expect.arrayContaining(['story', 'quests', 'cards', 'weather']));
+  });
+
+  // ISLAND-MAPS-SPEC §2: the choice «Місце» offers exactly the contract's maps, in both languages
+  it('«Місце» in the product\'s story zone offers SCENE_MAPS, uk and en; the stand has none', () => {
+    const place = productMap.zones.find((z) => z.id === 'story').place;
+    for (const locale of ['uk', 'en']) {
+      const p = placeOf(place, locale);
+      expect(p.maps.map((m) => m.id).sort()).toEqual([...SCENE_MAPS].sort());
+      expect(p.title && p.note && p.maps.every((m) => m.title && m.title !== m.id)).toBeTruthy();
+    }
+    expect(standMap.zones.find((z) => z.id === 'story').place).toBeUndefined();
+  });
+
+  it('placeSearch sets map and keeps the story, its slash and the flags', () => {
+    expect(placeSearch('?story=test-2025/my-day-3-moments&map=foo&stick', 'lagoon')).toBe('?story=test-2025/my-day-3-moments&map=lagoon&stick=');
+    expect(placeSearch('', 'island')).toBe('?map=island');
   });
 
   it('a map with a zone twice or without an id is refused', () => {

@@ -1,6 +1,15 @@
 {
   "zones": [
-    { "id": "story", "title": { "uk": "Історія", "en": "Story" }, "open": false },
+    { "id": "story", "title": { "uk": "Історія", "en": "Story" }, "open": false,
+      "place": {
+        "title": { "uk": "Місце", "en": "Place" },
+        "note": { "uk": "Зміна місця почне маршрут спочатку: огляд, спуск, мініатюри на березі. Картки й квести лишаються.",
+                  "en": "Changing the place starts the route over: the overview, the descent, the miniatures on the shore. Cards and quests stay." },
+        "maps": [
+          { "id": "island", "title": { "uk": "Острів", "en": "Island" } },
+          { "id": "lagoon", "title": { "uk": "Бухта", "en": "Lagoon" } }
+        ]
+      } },
     { "id": "pack", "title": { "uk": "Рюкзак", "en": "Backpack" } },
     { "id": "quests", "title": { "uk": "Квести", "en": "Quests" } },
     { "id": "cards", "title": { "uk": "Картки", "en": "Cards" } },

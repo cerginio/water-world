@@ -34,3 +34,10 @@
   }
   body[data-panel-open="true"] .product-panel-scroll { padding-bottom: 72px; }
 }
+
+/* «Місце» (ISLAND-MAPS-SPEC §2): two maps side by side over the stories, a touch-sized row */
+.place-choice { border: 1px solid #68758055; border-radius: 8px; margin: 0 0 10px; padding: 6px 8px 8px; }
+.place-choice legend { font-weight: 600; padding: 0 4px; }
+.place-maps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.zone .place-pick { min-height: 44px; text-align: center; }
+.place-note { font-size: 12px; margin-top: 6px; }
