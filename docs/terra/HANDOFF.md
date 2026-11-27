@@ -2,11 +2,12 @@
 
 Стан на 2026-11-27. Фази з [ISLAND-MAPS-SPEC.md](../story-quest/ISLAND-MAPS-SPEC.md)
 редакції 0.2 (далі — «спека»), доповнення до [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md).
-T1 закрита й закомічена: профілі карт (`src/scene/maps.js`) і `map` у контракті; бухти ще немає.
+T1–T2 закриті й закомічені: профілі карт (`src/scene/maps.js`), `map` у контракті, рельєф бухти
+(`src/scene/lagoonHeight.js`, профіль `lagoon`); декорацій ще немає.
 QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її факти в
 [docs/story-quest/HANDOFF.md](../story-quest/HANDOFF.md) діють і тут.
 
-> **Далі:** T2 — рельєф бухти (п.2).
+> **Далі:** T3 — декорації бухти (п.3).
 
 Локальний стенд: `http://localhost:5199/`; правило — `AGENTS.md` → «Локальний стенд».
 Телефон — лише драфт Netlify `https://story-quest--edge-of-elements.netlify.app/`
@@ -34,7 +35,7 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
      `qa:inspect:` URL сторінки, сцена · `qa:expected:` нинішній острів, той самий берег
      старту, що й без `map`; у URL лишається `map=foo`.~~ — ЗАКРИТО
 
-2. **T2. Рельєф бухти.** Спека §2 (таблиця), §3 (пороги, прохід у море), §4.1, §4.2,
+~~2. **T2. Рельєф бухти.** Спека §2 (таблиця), §3 (пороги, прохід у море), §4.1, §4.2,
    §5 п.3 (без закритих зон).
    - Профіль `lagoon` у `MAPS` (`src/scene/maps.js`) з тими самими полями, що `island`
      (`heightAt`, `storyBearing`, `heroRock`, `openSea`); правило каміння зараз одне —
@@ -52,7 +53,7 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
    - **Чернетка QA.** `qa:open:` `https://story-quest--edge-of-elements.netlify.app/products/story-quest/?story=test-2025/my-day-3-moments&map=lagoon` ·
      `qa:action:` дочекатися огляду й спуску; стіком до води, «На пліт», кайт, курс у вихід із бухти ·
      `qa:inspect:` огляд з висоти, берег, пліт · `qa:expected:` з висоти видно два миси й вихід;
-     пліт проходить вихід без зупинки на мілині, хвилі й піна йдуть уздовж нового берега.
+     пліт проходить вихід без зупинки на мілині, хвилі й піна йдуть уздовж нового берега.~~ — ЗАКРИТО
 
 3. **T3. Декорації бухти.** Спека §3 (пальми, будиночок, закриті зони, моделі),
    §4.4, §5 п.3 (закриті зони), §5 п.4.
@@ -88,29 +89,30 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
 
 ### Відкриті питання
 
-5. **Числа, вибрані в ревʼю без власника** (спека 0.2): суша `lagoon` ≤ 600 м, запас
-   каналу +10 м за діаметром палуби, бюджет декорацій 120 тис. трикутників і 8 draw
-   calls. Підтвердити власником до закриття T2 і T3; зміна — правкою спеки.
+5. **Числа, вибрані в ревʼю без власника** (спека 0.2): бюджет декорацій 120 тис.
+   трикутників і 8 draw calls — підтвердити власником до закриття T3; зміна — правкою
+   спеки. Суша `lagoon` ≤ 600 м і запас каналу прийняті разом із T2.
 ~~6. **Де живе модуль профілів** — `src/scene/` поряд з `islandHeight.js` чи власна тека.
    Вирішує T1; рядок реєстру `AGENTS.md` і мапа нижче оновлюються тим самим комітом.~~ — ЗАКРИТО:
    `src/scene/maps.js` (T1).
-7. **`?map` на сторінці сцени без продукту** (GUI, стенд `quest-demo-qa`): спека §4.5
+~~7. **`?map` на сторінці сцени без продукту** (GUI, стенд `quest-demo-qa`): спека §4.5
    лишає стенд на `island`, але сцена читає `?map` і сама. Чи потрібен вибір карти в
-   GUI сцени для налаштування рельєфу в T2 — вирішує T2.
+   GUI сцени для налаштування рельєфу в T2 — вирішує T2.~~ — ЗАКРИТО: вибору в GUI немає,
+   налаштування — `/?map=lagoon` в адресі сцени (QA-T2-4) (T2).
 
 ## Що зроблено і працює
 
-Baseline (T1, 2026-11-27): guard зелений; `npm test` 382/382; `test-terrain-contact` pass; `probe-terra-t1`, `probe-story-embed`, `probe-story-states`, `probe-story-product`, `probe-scene-shore` — PASS.
+Baseline (T2, 2026-11-27): guard зелений; `npm test` 390/390; `test-terrain-contact` pass; `probe-terra-t2` (локально й драфт), `probe-terra-t1`, `probe-story-embed`, `probe-scene-shore` — PASS.
 
 | Підсистема | Де (файли, символи) | Контракт | Перевірка |
 | --- | --- | --- | --- |
-| Профіль карти | `src/scene/maps.js` (`MAPS`, `pickMap` → `island` для відсутнього/невідомого, `rayTo`); `main.js` `map = pickMap(args.get('map'))` до побудови сцени, `heightAt`, `heroRock`; `window.app.map`/`openSea` | спека §4.1 | `tests/maps.test.js`, `probe-terra-t1` |
-| Рельєф і контакт | `src/scene/islandHeight.js` (`islandHeight`, `ISLAND_SIZE` 2400; читає лише профіль `island`), `terrainGeometry.js` (`buildTerrain(heightAt, …)`), `TerrainContact.js` | спека §4.1 | `scripts/test-terrain-contact.mjs`, `tests/shoreTextures.test.js` |
-| Каміння й скеля прибою | `src/scene/terrain.js` (`createTerrain({ map })`, `placeRocks(heightAt, …)` від r=150, `rockMaps`); скеля — `map.heroRock()` (на `island` пеленг −15°, дно −2,5 м) | спека §4.1 | `probe-scene-shore` |
+| Профіль карти | `src/scene/maps.js` (`MAPS` = `island`, `lagoon`; `pickMap` → `island` для відсутнього/невідомого, `rayTo`, `rayIn`; необов'язкові `viewRadius`, `rocks`); `main.js` `map = pickMap(args.get('map'))` до побудови сцени, `radius = map.viewRadius ?? islandRadius`; `window.app.map`/`openSea` | спека §4.1 | `tests/maps.test.js`, `probe-terra-t1` |
+| Рельєф і контакт | `src/scene/islandHeight.js` (`islandHeight`, `ISLAND_SIZE` 2400; лише `island`), `lagoonHeight.js` (`LAGOON`, `lagoonLand`, `lagoonHeight`, `inBay`; бухта на пеленгу −46,25°, миси, гирло), `terrainGeometry.js` (`buildTerrain(heightAt, …)`), `TerrainContact.js` | спека §3, §4.1 | `scripts/test-terrain-contact.mjs`, `tests/shoreTextures.test.js`, `tests/terraRelief.test.js` |
+| Каміння й скеля прибою | `src/scene/terrain.js` (`createTerrain({ map })`, `placeRocks(heightAt, …, map.rocks)` від r=150, `rockMaps`; на `lagoon` без каміння в бухті й гирлі +25 м); скеля — `map.heroRock()` (пеленг −15°, дно −2,5 м; на `lagoon` — `rayIn` з моря) | спека §4.1 | `probe-scene-shore`, `tests/terraRelief.test.js` |
 | Берег історії й старт | `src/main.js` (`coast`, `storyAnchor` = `map.storyBearing(SET_BEARING)`, на `island` +1,2; `walkerSpawn`, `stationPoses`), `src/scene/stationPoses.js` (`islandRadius`) | STORY-QUEST §2 п.2 | `tests/cameraFlight.test.js`, `probe-story-q2b` |
 | Карта берега | `src/water/shoreMap.js` (`bakeShoreMap`), `main.js` `SHORE_EXTENT` 1800 | STORY-QUEST §4.3 | `tests/shoreTextures.test.js` |
 | Якорі | `src/embed/anchors.js` (`resolveAnchor`: `open-sea` — `world.openSea()` профілю, інакше промінь `ANCHOR.openSea` 1300; `shallowPoint`) | STORY-QUEST §4.4, спека §4.2 | `probe-story-embed`, `probe-story-states` |
-| Пліт і відкрите море | `src/tiles/raftMotion.js` (`RAFT.depth` 0,6, `rimDepth` 0,1, `seaEdge` 900, `openWater`, `stepRaft`), `TileRaft.js` | STORY-QUEST §4.3 | `probe-story-q4`, `probe-story-q5` |
+| Пліт і відкрите море | `src/tiles/raftMotion.js` (`RAFT.depth` 0,6, `rimDepth` 0,1, `seaEdge` 900, `openWater`, `stepRaft`), `TileRaft.js`; на `lagoon` `openSea: null` — промінь поля виходить через гирло | STORY-QUEST §4.3, спека §3 | `probe-story-q4`, `probe-story-q5`, `probe-terra-t2` |
 | Розкладка мініатюр | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `isDryLand`, `LAYOUT.radius` 70) | спека §2, §3 | `probe-story-q3` |
 | Контракт продукту | `products/shared/contract.js` (`SCENE_MAPS`, `knownMap`, `sceneUrl({ map })`: `island` без параметра, невідома — помилка), `sceneHost.js` (`load`), `products/story-quest/main.js` (`map()` з URL продукту), `src/embed/index.js` (`scene.ready` + `map`), `state.js` (`readState` + `map`), `world.js` (`map`, `openSea`) | STORY-QUEST §4.4, спека §4.3 | `tests/products.test.js`, `probe-story-product` |
 
@@ -124,10 +126,14 @@ Baseline (T1, 2026-11-27): guard зелений; `npm test` 382/382; `test-terra
 
 - [`islandHeight`, промені з кроком 0,5° і сітка 5 м у квадраті 1800 м] суша до 510 м від центру, дно вище −14 м до 756 м, найменша глибина на межі 900 м — 28 м, площа суші ≈ 0,40 км² → той самий вимір у focused-тесті T2 для обох карт. (ревʼю спеки)
 - [`coast()`, `placeRocks`, `heroRock`, кадри камер] шукають берег променем від (0, 0) до першої точки h ≤ 0 → на `lagoon` така точка може лежати за мисом; брати точки з профілю, не з променя. (ревʼю спеки)
+- [`heroRock` на `lagoon`] промінь від центру на пеленгу −15° закінчується на пляжі бухти → скелю шукає `rayIn` з 900 м у бік берега до дна −2,5 м. (T2)
+- [`islandRadius` на `lagoon`] промені від центру впираються в пляж бухти, огляд не бачить мисів → профіль дає `viewRadius` 540 м (≥ суші). (T2)
+- [dev-кадри «Golden hour», «Breakers», «Lagoon», «Underwater»] шукають берег променем із центру → на `lagoon` можуть дивитися в сушу; не маршрут, не правити без потреби. (T2)
 
 ### Пліт і відкрите море
 
 - [`raft.moveTo`] переносить палубу одразу в точку без перевірки глибини → вихід із бухти доводить лише рух під кайтом через `stepRaft` + `openWater`. (ревʼю спеки)
+- [`probe-terra-t2`, пліт під кайтом з бухти] 139 с до межі 900 м, 0 зупинок, мін. швидкість 6,9 м/с; уся проба на історію 178–190 с → таймаут проби не менше 4 хв. (T2)
 - [карта берега] за |x| або |z| > 900 м `shoreSample` дає глибину 60 м і відстань 1e4 → шельф `lagoon` тримати в межах порогів §3, інакше хвилі ламаються на межі. (story-quest)
 
 ### Контракт продукту
