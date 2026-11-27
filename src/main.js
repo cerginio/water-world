@@ -590,7 +590,8 @@ addEventListener('keydown', (e) => {
 
 // --- station rail (SCENE-UI-SPEC §4) -------------------------------------------------
 // Stations never call setSun: the sun and the weather are not the camera's business.
-const radius = islandRadius(heightAt);
+// the overview sphere: the profile's own radius where rays from the centre stop short of the capes
+const radius = map.viewRadius ?? islandRadius(heightAt);
 function storyField() {
   // the field as placed on load; tiles.place() itself would cancel a drag
   if (!tiles.loaded) return null;

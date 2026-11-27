@@ -265,8 +265,10 @@ function rockGeometry() {
   return g;
 }
 
-// coastal rocks round the map's relief: a ray from the centre to the coast, then jitter round it
-function placeRocks(heightAt, count, rand) {
+// coastal rocks round the map's relief: a ray from the centre to the coast, then jitter round it;
+// `allow` — the profile's rock zones (none in the bay or its mouth); the island allows every spot
+/** @param {(x: number, z: number) => boolean} [allow] */
+function placeRocks(heightAt, count, rand, allow = (_x, _z) => true) {
   const out = [];
   for (let i = 0; i < count * 6 && out.length < count; i++) {
     const a = rand() * Math.PI * 2;
@@ -276,14 +278,14 @@ function placeRocks(heightAt, count, rand) {
     r += (rand() - 0.6) * 40;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const h = heightAt(x, z);
-    if (h < -5 || h > 6) continue;
+    if (h < -5 || h > 6 || !allow(x, z)) continue;
     const s = 1.5 + Math.pow(rand(), 2.2) * 9;
     out.push({ x, z, y: h - s * 0.15, s });
     // small satellites
     for (let k = 0; k < 3 && out.length < count; k++) {
       const ox = x + (rand() - 0.5) * s * 4, oz = z + (rand() - 0.5) * s * 4;
       const ss = s * (0.25 + rand() * 0.35);
-      out.push({ x: ox, z: oz, y: heightAt(ox, oz) - ss * 0.2, s: ss });
+      if (allow(ox, oz)) out.push({ x: ox, z: oz, y: heightAt(ox, oz) - ss * 0.2, s: ss });
     }
   }
   return out;
@@ -345,7 +347,7 @@ export function createTerrain({ map, env, caustics, floatShadow, water, absorpti
 
   let seed = 7;
   const rand = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const spots = placeRocks(heightAt, 90, rand);
+  const spots = placeRocks(heightAt, 90, rand, map.rocks);
   spots.push({ ...heroRock, y: heightAt(heroRock.x, heroRock.z) - 1.6, s: 0, hero: true });
   const rockMat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, envMapIntensity: 0.9, vertexColors: true });
   patch(rockMat, uniforms, 'rock');
