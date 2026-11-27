@@ -2,13 +2,14 @@
 
 Стан на 2026-11-27. Фази з [ISLAND-MAPS-SPEC.md](../story-quest/ISLAND-MAPS-SPEC.md)
 редакції 0.2 (далі — «спека»), доповнення до [STORY-QUEST-SPEC.md](../../STORY-QUEST-SPEC.md).
-T1–T3 закриті й закомічені: профілі карт (`src/scene/maps.js`), `map` у контракті, рельєф бухти
+T1–T4 закриті й закомічені: профілі карт (`src/scene/maps.js`), `map` у контракті, рельєф бухти
 (`src/scene/lagoonHeight.js`, профіль `lagoon`), пальми й хатина з закритими для мініатюр зонами
-(`src/scene/lagoonDecor.js`, `src/scene/decor.js`).
+(`src/scene/lagoonDecor.js`, `src/scene/decor.js`), вибір «Місце» в продукті
+(`products/story-quest/place.js`).
 QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її факти в
 [docs/story-quest/HANDOFF.md](../story-quest/HANDOFF.md) діють і тут.
 
-> **Далі:** T4 — вибір «Місце» і телефон (п.4).
+> **Далі:** фази спеки закриті; лишилося відкрите питання п.5 (FPS телефона власника, QA-T4-6).
 
 Локальний стенд: `http://localhost:5199/`; правило — `AGENTS.md` → «Локальний стенд».
 Телефон — лише драфт Netlify `https://story-quest--edge-of-elements.netlify.app/`
@@ -72,7 +73,7 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
      `qa:inspect:` смуга за пляжем, мілина біля мису · `qa:expected:` пальми групами з
      просвітами, хатина з дахом і палями у воді; жодна мініатюра не лежить під пальмою.~~ — ЗАКРИТО
 
-4. **T4. Вибір «Місце» і телефон.** Спека §2 (вибір, пояснення, перемикання),
+~~4. **T4. Вибір «Місце» і телефон.** Спека §2 (вибір, пояснення, перемикання),
    §5 п.1, п.2, п.5.
    - Вибір «Місце» в зоні історії `ui-map.json` (uk + en), коротке пояснення, що
      маршрут почнеться спочатку; перемикання → `host.load` з тією самою історією
@@ -86,13 +87,14 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
      `qa:action:` ☰ → «Місце» → «Бухта»; пройти до мініатюри; ☰ → «Острів» ·
      `qa:inspect:` пояснення біля вибору, адресний рядок, сцена · `qa:expected:` після
      кожного дотику огляд і спуск починаються наново; в адресі `map=lagoon`, потім
-     `map=island`; картки в зоні «Картки» ті самі.
+     `map=island`; картки в зоні «Картки» ті самі.~~ — ЗАКРИТО
 
 ### Відкриті питання
 
 5. **Числа, вибрані в ревʼю без власника** (спека 0.2): бюджет декорацій 120 тис.
    трикутників і 8 draw calls. T3 закрита в цих межах (виміряно 8 і 107 тис.), явного
-   підтвердження чисел власником ще немає; FPS телефона в T4 покаже, чи вони достатні. Зміна —
+   підтвердження чисел власником ще немає; FPS телефона (QA-T4-6, ≥ 30 на обох картах) покаже,
+   чи вони достатні — числа ще не записані в журнал T4. Зміна —
    правкою спеки. Суша `lagoon` ≤ 600 м і запас каналу прийняті разом із T2.
 ~~6. **Де живе модуль профілів** — `src/scene/` поряд з `islandHeight.js` чи власна тека.
    Вирішує T1; рядок реєстру `AGENTS.md` і мапа нижче оновлюються тим самим комітом.~~ — ЗАКРИТО:
@@ -104,7 +106,7 @@ QA — [QA.md](QA.md). Тема story-quest закрита (Q0–Q10), її фа
 
 ## Що зроблено і працює
 
-Baseline (T3, 2026-11-27): guard зелений; `npm test` 402/402; `test-terrain-contact` pass; `probe-terra-t3`, `probe-terra-t2`, `probe-story-embed` — PASS.
+Baseline (T4, 2026-11-27): guard зелений; `npm test` 404/404; `probe-story-product`, `probe-story-quests`, `probe-terra-t1` — PASS.
 
 | Підсистема | Де (файли, символи) | Контракт | Перевірка |
 | --- | --- | --- | --- |
@@ -117,7 +119,7 @@ Baseline (T3, 2026-11-27): guard зелений; `npm test` 402/402; `test-terra
 | Пліт і відкрите море | `src/tiles/raftMotion.js` (`RAFT.depth` 0,6, `rimDepth` 0,1, `seaEdge` 900, `openWater`, `stepRaft`), `TileRaft.js`; на `lagoon` `openSea: null` — промінь поля виходить через гирло | STORY-QUEST §4.3, спека §3 | `probe-story-q4`, `probe-story-q5`, `probe-terra-t2` |
 | Розкладка мініатюр | `src/tiles/miniatureLayout.js` (`layoutMiniatures`, `isDryLand`, `LAYOUT.radius` 70; `blocked` перевіряється після розіграшу кандидата, тож без зон розкладка незмінна); `main.js` `layoutMinis` передає `map.blocked` | спека §2, §3 | `probe-story-q3`, `tests/terraDecor.test.js` |
 | Декорації | `src/scene/lagoonDecor.js` (`DECOR`, `lagoonDecor` — групи пальм і хатина, `decorBlocked` — смуга рослинності bd 233–320 м при \|phi\| ≥ 97°, групи мисів, хатина з настилом; `bayPoint`/`bayPolar`), `src/scene/decor.js` (`createDecor`: `InstancedMesh` на силует + злита хатина, `terrain.patchProp`, шар відображення); `window.app.decor` | спека §3, §4.4 | `tests/terraDecor.test.js`, `probe-terra-t3` |
-| Контракт продукту | `products/shared/contract.js` (`SCENE_MAPS`, `knownMap`, `sceneUrl({ map })`: `island` без параметра, невідома — помилка), `sceneHost.js` (`load`), `products/story-quest/main.js` (`map()` з URL продукту), `src/embed/index.js` (`scene.ready` + `map`), `state.js` (`readState` + `map`), `world.js` (`map`, `openSea`) | STORY-QUEST §4.4, спека §4.3 | `tests/products.test.js`, `probe-story-product` |
+| Контракт продукту | `products/shared/contract.js` (`SCENE_MAPS`, `knownMap`, `sceneUrl({ map })`: `island` без параметра, невідома — помилка), `sceneHost.js` (`load`), `products/story-quest/main.js` (`map()` з URL продукту; `place()` — вибір «Місце»: `map` в URL продукту + `host.load`, `shownMap` з `scene.ready`), `place.js` (`placeChoice`, `placeSearch`; тексти — `place` зони `story` в `ui-map.json`), `src/embed/index.js` (`scene.ready` + `map`), `state.js` (`readState` + `map`), `world.js` (`map`, `openSea`) | STORY-QUEST §4.4, спека §4.3 | `tests/products.test.js`, `probe-story-product` |
 
 ## Головні виміряні факти
 
@@ -149,5 +151,7 @@ Baseline (T3, 2026-11-27): guard зелений; `npm test` 402/402; `test-terra
 ### Контракт продукту
 
 - [iframe сцени, `writeTileUrl`] сцена переписує свою адресу (`?story=…%2F…&walk=&…&tilesMode=…`), але чужі параметри, зокрема `map`, зберігає → перевіряти `map` в iframe за наявністю параметра, не за точним рядком. (T1)
+- [перемикання на `island` у продукті] URL продукту несе `map=island`, а iframe — без `map` (`sceneUrl` опускає типову) → у пробі для острова чекати `null` в iframe, карту брати з `state.read().map`. (T4)
+- [`placeSearch`, `open()`] `URLSearchParams` перетворює голий прапорець продукту (`&stick`) на `stick=` → `params.has` працює, точний рядок адреси не порівнювати. (T4)
 
 - [`scene.ready`] зараз несе `{ story, fingerprint }`, ключ квестів — історія + fingerprint → карта до ключа не входить, картки переходять між картами без змін у `quests.js`. (ревʼю спеки)
